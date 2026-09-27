@@ -7,6 +7,7 @@ struct TransactionEditorScreen: View {
   var transaction: BudgetTransaction?
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
+  var payees: [BudgetPayee]
   var currencyCode: String
   @State private var kind: BudgetTransactionKind
   @State private var accountID: UUID?
@@ -18,16 +19,19 @@ struct TransactionEditorScreen: View {
   @State private var date: Date
   @State private var errorMessage: String?
   @State private var showingDeleteConfirmation = false
+  @State private var autoAssignedEnvelopeID: UUID?
 
   init(
     transaction: BudgetTransaction?,
     accounts: [BudgetAccount],
     envelopes: [BudgetEnvelope],
+    payees: [BudgetPayee],
     currencyCode: String
   ) {
     self.transaction = transaction
     self.accounts = accounts
     self.envelopes = envelopes
+    self.payees = payees
     self.currencyCode = currencyCode
     _kind = State(initialValue: transaction?.kind ?? .expense)
     _accountID = State(initialValue: transaction?.accountID ?? accounts.first?.id)
@@ -142,6 +146,26 @@ struct TransactionEditorScreen: View {
       } message: {
         Text(errorMessage ?? "")
       }
+      .onChange(of: payee) { _, _ in applyPayeeRule() }
+      .onChange(of: kind) { _, _ in applyPayeeRule() }
+    }
+  }
+
+  private func applyPayeeRule() {
+    let nextEnvelopeID: UUID?
+    if kind == .expense {
+      let rules = payees.compactMap { rule -> PayeeRuleItem? in
+        guard let id = rule.defaultEnvelopeID,
+              envelopes.contains(where: { $0.id == id }) else { return nil }
+        return PayeeRuleItem(matchText: rule.exactMatchText, envelopeID: id)
+      }
+      nextEnvelopeID = PayeeRuleMatcher().envelopeID(for: payee, rules: rules)
+    } else {
+      nextEnvelopeID = nil
+    }
+    if envelopeID == nil || envelopeID == autoAssignedEnvelopeID {
+      envelopeID = nextEnvelopeID
+      autoAssignedEnvelopeID = nextEnvelopeID
     }
   }
 

@@ -6,6 +6,7 @@ struct ContentView: View {
   @Query private var accounts: [BudgetAccount]
   @Query private var groups: [BudgetGroup]
   @Query private var envelopes: [BudgetEnvelope]
+  @Query private var payees: [BudgetPayee]
   @Query private var allocations: [BudgetAllocation]
   @Query private var transactions: [BudgetTransaction]
   @AppStorage("bow.appearance") private var appearanceRaw = AppAppearance.system.rawValue
@@ -131,6 +132,7 @@ struct ContentView: View {
               transaction: nil,
               accounts: accounts,
               envelopes: envelopes,
+              payees: payees,
               currencyCode: currencyCode
             )
           case .editTransaction(let id):
@@ -138,6 +140,7 @@ struct ContentView: View {
               transaction: transactions.first { $0.id == id },
               accounts: accounts,
               envelopes: envelopes,
+              payees: payees,
               currencyCode: currencyCode
             )
           case .newAccount:

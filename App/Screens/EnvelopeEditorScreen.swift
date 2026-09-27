@@ -68,7 +68,8 @@ struct EnvelopeEditorScreen: View {
                 Image(systemName: option)
                   .font(.title3)
                   .frame(maxWidth: .infinity, minHeight: 42)
-                  .foregroundStyle(symbol == option ? Color.white : Color.accentColor)
+                  .foregroundStyle(symbol == option
+                    ? Color(uiColor: .systemBackground) : Color.accentColor)
                   .background(
                     symbol == option ? Color.accentColor : Color.accentColor.opacity(0.1),
                     in: RoundedRectangle(cornerRadius: 10)

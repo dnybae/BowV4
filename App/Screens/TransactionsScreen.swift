@@ -7,15 +7,27 @@ struct TransactionsScreen: View {
   var currencyCode: String
   var onSelect: (UUID) -> Void
   @State private var searchText = ""
+  @State private var filter = TransactionFilter()
+  @State private var showingFilters = false
 
   private var visibleTransactions: [BudgetTransaction] {
     transactions
       .filter { transaction in
-        searchText.isEmpty
+        filter.includes(TransactionFilterItem(
+          accountID: transaction.accountID,
+          transferAccountID: transaction.transferAccountID,
+          envelopeID: transaction.envelopeID,
+          date: transaction.date,
+          amountMinor: transaction.amountMinor,
+          isUncategorizedExpense: transaction.kind == .expense
+            && transaction.envelopeID == nil
+        )) && (searchText.isEmpty
           || transaction.payee.localizedCaseInsensitiveContains(searchText)
           || transaction.notes.localizedCaseInsensitiveContains(searchText)
           || accounts.first(where: { $0.id == transaction.accountID })?.name
             .localizedCaseInsensitiveContains(searchText) == true
+          || envelopes.first(where: { $0.id == transaction.envelopeID })?.name
+            .localizedCaseInsensitiveContains(searchText) == true)
       }
       .sorted {
         $0.date == $1.date ? $0.createdAt > $1.createdAt : $0.date > $1.date
@@ -24,13 +36,22 @@ struct TransactionsScreen: View {
 
   var body: some View {
     List {
+      if filter.isActive {
+        Section {
+          HStack {
+            Label("\(filter.activeCount) filters active", systemImage: "line.3.horizontal.decrease")
+            Spacer()
+            Button("Clear") { filter = TransactionFilter() }
+          }
+        }
+      }
       if visibleTransactions.isEmpty {
         ContentUnavailableView(
-          searchText.isEmpty ? "No transactions yet" : "No matches",
+          searchText.isEmpty && !filter.isActive ? "No transactions yet" : "No matches",
           systemImage: "list.bullet.rectangle",
-          description: Text(searchText.isEmpty
+          description: Text(searchText.isEmpty && !filter.isActive
             ? "Use the plus button to record your first transaction."
-            : "Try a different search.")
+            : "Try a different search or clear your filters.")
         )
       } else {
         ForEach(visibleTransactions) { transaction in
@@ -48,8 +69,26 @@ struct TransactionsScreen: View {
         }
       }
     }
-    .searchable(text: $searchText, prompt: "Payee, note, or account")
+    .searchable(text: $searchText, prompt: "Payee, note, account, or envelope")
     .navigationTitle("Transactions")
+    .toolbar {
+      ToolbarItem(placement: .topBarTrailing) {
+        Button("Filter Transactions", systemImage: "line.3.horizontal.decrease") {
+          showingFilters = true
+        }
+        .accessibilityLabel(filter.isActive
+          ? "Filter Transactions, \(filter.activeCount) active"
+          : "Filter Transactions")
+      }
+    }
+    .sheet(isPresented: $showingFilters) {
+      TransactionFilterScreen(
+        filters: $filter,
+        accounts: accounts,
+        envelopes: envelopes,
+        currencyCode: currencyCode
+      )
+    }
   }
 }
 

@@ -14,7 +14,8 @@ struct AppDefinition: App {
       BudgetEnvelope.self,
       BudgetTransaction.self,
       BudgetAllocation.self,
-      BudgetPayee.self
+      BudgetPayee.self,
+      BudgetSchedule.self
     ])
   }
 }

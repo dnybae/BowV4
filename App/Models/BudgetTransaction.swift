@@ -17,6 +17,8 @@ final class BudgetTransaction {
   var sourceRaw: String = "manual"
   var externalKey: String? = nil
   var needsApproval: Bool = false
+  var scheduleID: UUID? = nil
+  var scheduledFor: Date? = nil
 
   var kind: BudgetTransactionKind {
     BudgetTransactionKind(rawValue: kindRaw) ?? .expense

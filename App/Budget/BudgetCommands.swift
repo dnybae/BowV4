@@ -98,6 +98,8 @@ struct BudgetCommands {
     date: Date,
     payee: String,
     notes: String,
+    scheduleID: UUID? = nil,
+    scheduledFor: Date? = nil,
     in context: ModelContext
   ) throws {
     try validateTransaction(
@@ -108,7 +110,7 @@ struct BudgetCommands {
       amountMinor: amountMinor
     )
     let signedAmount = kind == .inflow ? amountMinor : -amountMinor
-    context.insert(BudgetTransaction(
+    let transaction = BudgetTransaction(
       accountID: account.id,
       transferAccountID: kind == .transfer ? destination?.id : nil,
       envelopeID: envelopeID,
@@ -117,7 +119,10 @@ struct BudgetCommands {
       payee: payee.trimmingCharacters(in: .whitespacesAndNewlines),
       notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
       kind: kind
-    ))
+    )
+    transaction.scheduleID = scheduleID
+    transaction.scheduledFor = scheduledFor
+    context.insert(transaction)
     try context.save()
   }
 

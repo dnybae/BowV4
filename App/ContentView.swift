@@ -9,6 +9,7 @@ struct ContentView: View {
   @Query private var payees: [BudgetPayee]
   @Query private var allocations: [BudgetAllocation]
   @Query private var transactions: [BudgetTransaction]
+  @Query private var schedules: [BudgetSchedule]
   @AppStorage("bow.appearance") private var appearanceRaw = AppAppearance.system.rawValue
   @State private var selectedMonth = Date()
   @State private var activeSheet: BowSheet?
@@ -96,6 +97,24 @@ struct ContentView: View {
               }
             }
           }
+          Tab("Calendar", systemImage: "calendar") {
+            NavigationStack {
+              CalendarScreen(
+                schedules: schedules,
+                transactions: transactions,
+                accounts: accounts,
+                envelopes: envelopes,
+                snapshot: currentSnapshot,
+                currencyCode: currencyCode,
+                onRecord: { activeSheet = .recordScheduled($0) }
+              )
+              .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                  Button("Settings", systemImage: "gearshape") { showingSettings = true }
+                }
+              }
+            }
+          }
           Tab("Accounts", systemImage: "banknote.fill") {
             NavigationStack {
               AccountsScreen(
@@ -143,6 +162,15 @@ struct ContentView: View {
               payees: payees,
               currencyCode: currencyCode
             )
+          case .recordScheduled(let draft):
+            TransactionEditorScreen(
+              transaction: nil,
+              accounts: accounts,
+              envelopes: envelopes,
+              payees: payees,
+              currencyCode: currencyCode,
+              scheduledDraft: draft
+            )
           case .newAccount:
             AccountEditorScreen(currencyCode: currencyCode)
           case .newGroup:
@@ -174,6 +202,7 @@ struct ContentView: View {
 private enum BowSheet: Identifiable {
   case newTransaction
   case editTransaction(UUID)
+  case recordScheduled(ScheduledTransactionDraft)
   case newAccount
   case newGroup
   case newEnvelope
@@ -184,6 +213,7 @@ private enum BowSheet: Identifiable {
     switch self {
     case .newTransaction: "newTransaction"
     case .editTransaction(let id): "editTransaction-\(id)"
+    case .recordScheduled(let draft): "recordScheduled-\(draft.scheduleID)-\(draft.scheduledFor)"
     case .newAccount: "newAccount"
     case .newGroup: "newGroup"
     case .newEnvelope: "newEnvelope"

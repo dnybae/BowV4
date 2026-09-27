@@ -9,6 +9,7 @@ struct TransactionEditorScreen: View {
   var envelopes: [BudgetEnvelope]
   var payees: [BudgetPayee]
   var currencyCode: String
+  var scheduledDraft: ScheduledTransactionDraft?
   @State private var kind: BudgetTransactionKind
   @State private var accountID: UUID?
   @State private var destinationID: UUID?
@@ -26,21 +27,23 @@ struct TransactionEditorScreen: View {
     accounts: [BudgetAccount],
     envelopes: [BudgetEnvelope],
     payees: [BudgetPayee],
-    currencyCode: String
+    currencyCode: String,
+    scheduledDraft: ScheduledTransactionDraft? = nil
   ) {
     self.transaction = transaction
     self.accounts = accounts
     self.envelopes = envelopes
     self.payees = payees
     self.currencyCode = currencyCode
+    self.scheduledDraft = scheduledDraft
     _kind = State(initialValue: transaction?.kind ?? .expense)
-    _accountID = State(initialValue: transaction?.accountID ?? accounts.first?.id)
+    _accountID = State(initialValue: transaction?.accountID ?? scheduledDraft?.accountID ?? accounts.first?.id)
     _destinationID = State(initialValue: transaction?.transferAccountID)
-    _envelopeID = State(initialValue: transaction?.envelopeID)
-    _amount = State(initialValue: transaction.map { BudgetMoney.editable($0.amountMinor) } ?? "")
-    _payee = State(initialValue: transaction?.payee ?? "")
-    _notes = State(initialValue: transaction?.notes ?? "")
-    _date = State(initialValue: transaction?.date ?? Date())
+    _envelopeID = State(initialValue: transaction?.envelopeID ?? scheduledDraft?.envelopeID)
+    _amount = State(initialValue: transaction.map { BudgetMoney.editable($0.amountMinor) } ?? scheduledDraft.map { BudgetMoney.editable($0.amountMinor) } ?? "")
+    _payee = State(initialValue: transaction?.payee ?? scheduledDraft?.payee ?? "")
+    _notes = State(initialValue: transaction?.notes ?? scheduledDraft?.notes ?? "")
+    _date = State(initialValue: transaction?.date ?? scheduledDraft?.date ?? Date())
   }
 
   private var selectedAccount: BudgetAccount? {
@@ -124,7 +127,7 @@ struct TransactionEditorScreen: View {
           }
         }
       }
-      .navigationTitle(transaction == nil ? "Add Transaction" : "Edit Transaction")
+      .navigationTitle(transaction == nil ? (scheduledDraft == nil ? "Add Transaction" : "Record Payment") : "Edit Transaction")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -208,6 +211,8 @@ struct TransactionEditorScreen: View {
           date: date,
           payee: payee,
           notes: notes,
+          scheduleID: scheduledDraft?.scheduleID,
+          scheduledFor: scheduledDraft?.scheduledFor,
           in: modelContext
         )
       }
@@ -226,4 +231,15 @@ struct TransactionEditorScreen: View {
       errorMessage = error.localizedDescription
     }
   }
+}
+
+struct ScheduledTransactionDraft {
+  var scheduleID: UUID
+  var scheduledFor: Date
+  var accountID: UUID?
+  var envelopeID: UUID?
+  var amountMinor: Int64
+  var payee: String
+  var notes: String
+  var date: Date
 }

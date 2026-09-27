@@ -73,16 +73,19 @@ struct BudgetCommands {
     symbol: String,
     groupID: UUID,
     order: Int,
+    targetMinor: Int64? = nil,
     in context: ModelContext
   ) throws {
     guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else { throw BudgetCommandError.missingName }
-    context.insert(BudgetEnvelope(
+    let envelope = BudgetEnvelope(
       groupID: groupID,
       name: name.trimmingCharacters(in: .whitespacesAndNewlines),
       symbol: symbol,
       sortOrder: order
-    ))
+    )
+    envelope.targetMinor = targetMinor
+    context.insert(envelope)
     try context.save()
   }
 

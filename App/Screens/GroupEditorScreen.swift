@@ -5,8 +5,15 @@ struct GroupEditorScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
   var nextOrder: Int
+  var group: BudgetGroup?
   @State private var name = ""
   @State private var errorMessage: String?
+
+  init(nextOrder: Int, group: BudgetGroup? = nil) {
+    self.nextOrder = nextOrder
+    self.group = group
+    _name = State(initialValue: group?.name ?? "")
+  }
 
   var body: some View {
     NavigationStack {
@@ -15,18 +22,18 @@ struct GroupEditorScreen: View {
           TextField("For example, Food & Home", text: $name)
         }
       }
-      .navigationTitle("Add Group")
+      .navigationTitle(group == nil ? "Add Group" : "Edit Group")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel") { dismiss() }
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Add") { save() }
+          Button(group == nil ? "Add" : "Save") { save() }
             .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
       }
-      .alert("Couldn’t Add Group", isPresented: Binding(
+      .alert("Couldn’t Save Group", isPresented: Binding(
         get: { errorMessage != nil },
         set: { if !$0 { errorMessage = nil } }
       )) {
@@ -39,7 +46,12 @@ struct GroupEditorScreen: View {
 
   private func save() {
     do {
-      try BudgetCommands.addGroup(name: name, order: nextOrder, in: modelContext)
+      if let group {
+        group.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        try modelContext.save()
+      } else {
+        try BudgetCommands.addGroup(name: name, order: nextOrder, in: modelContext)
+      }
       dismiss()
     } catch {
       errorMessage = error.localizedDescription

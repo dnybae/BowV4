@@ -6,10 +6,23 @@ struct EnvelopeEditorScreen: View {
   @Environment(\.modelContext) private var modelContext
   var groups: [BudgetGroup]
   var nextOrder: Int
+  var envelope: BudgetEnvelope?
   @State private var name = ""
   @State private var groupID: UUID?
   @State private var symbol = "square.grid.2x2.fill"
+  @State private var targetText = ""
   @State private var errorMessage: String?
+
+  private var targetMinor: Int64? {
+    let trimmed = targetText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    return BudgetMoney.parseMinor(trimmed)
+  }
+
+  private var targetIsValid: Bool {
+    targetText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      || (targetMinor ?? 0) > 0
+  }
 
   private var symbols: [String] {
     [
@@ -19,10 +32,14 @@ struct EnvelopeEditorScreen: View {
     ]
   }
 
-  init(groups: [BudgetGroup], nextOrder: Int) {
+  init(groups: [BudgetGroup], nextOrder: Int, envelope: BudgetEnvelope? = nil) {
     self.groups = groups
     self.nextOrder = nextOrder
-    _groupID = State(initialValue: groups.first?.id)
+    self.envelope = envelope
+    _name = State(initialValue: envelope?.name ?? "")
+    _groupID = State(initialValue: envelope?.groupID ?? groups.first?.id)
+    _symbol = State(initialValue: envelope?.symbol ?? "square.grid.2x2.fill")
+    _targetText = State(initialValue: envelope?.targetMinor.map(BudgetMoney.editable) ?? "")
   }
 
   var body: some View {
@@ -35,6 +52,12 @@ struct EnvelopeEditorScreen: View {
               Text(group.name).tag(Optional(group.id))
             }
           }
+        }
+        Section {
+          TextField("Monthly Target", text: $targetText)
+            .keyboardType(.decimalPad)
+        } footer: {
+          Text("Optional planning goal. A target does not assign money to this envelope.")
         }
         Section("Symbol") {
           LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
@@ -59,18 +82,19 @@ struct EnvelopeEditorScreen: View {
           .padding(.vertical, 6)
         }
       }
-      .navigationTitle("Add Envelope")
+      .navigationTitle(envelope == nil ? "Add Envelope" : "Edit Envelope")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel") { dismiss() }
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Add") { save() }
-            .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || groupID == nil)
+          Button(envelope == nil ? "Add" : "Save") { save() }
+            .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+              || groupID == nil || !targetIsValid)
         }
       }
-      .alert("Couldn’t Add Envelope", isPresented: Binding(
+      .alert("Couldn’t Save Envelope", isPresented: Binding(
         get: { errorMessage != nil },
         set: { if !$0 { errorMessage = nil } }
       )) {
@@ -84,13 +108,22 @@ struct EnvelopeEditorScreen: View {
   private func save() {
     guard let groupID else { return }
     do {
-      try BudgetCommands.addEnvelope(
-        name: name,
-        symbol: symbol,
-        groupID: groupID,
-        order: nextOrder,
-        in: modelContext
-      )
+      if let envelope {
+        envelope.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        envelope.groupID = groupID
+        envelope.symbol = symbol
+        envelope.targetMinor = targetMinor
+        try modelContext.save()
+      } else {
+        try BudgetCommands.addEnvelope(
+          name: name,
+          symbol: symbol,
+          groupID: groupID,
+          order: nextOrder,
+          targetMinor: targetMinor,
+          in: modelContext
+        )
+      }
       dismiss()
     } catch {
       errorMessage = error.localizedDescription

@@ -10,7 +10,6 @@ struct ContentView: View {
   @Query private var transactions: [BudgetTransaction]
   @AppStorage("bow.appearance") private var appearanceRaw = AppAppearance.system.rawValue
   @State private var selectedMonth = Date()
-  @State private var selectedTab: BowTab = .budget
   @State private var activeSheet: BowSheet?
   @State private var showingSettings = false
 
@@ -41,8 +40,8 @@ struct ContentView: View {
       if profiles.isEmpty {
         WelcomeScreen()
       } else {
-        TabView(selection: $selectedTab) {
-          Tab("Budget", systemImage: "square.grid.2x2.fill", value: BowTab.budget) {
+        TabView {
+          Tab("Budget", systemImage: "square.grid.2x2.fill") {
             NavigationStack {
               BudgetScreen(
                 currencyCode: currencyCode,
@@ -60,20 +59,20 @@ struct ContentView: View {
                 }
               )
               .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                  Button("Settings", systemImage: "gearshape") {
+                    showingSettings = true
+                  }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                   Button("Add Transaction", systemImage: "plus") {
                     activeSheet = .newTransaction
                   }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                  Button("Settings", systemImage: "gearshape") {
-                    showingSettings = true
-                  }
-                }
               }
             }
           }
-          Tab("Transactions", systemImage: "list.bullet.rectangle", value: BowTab.transactions) {
+          Tab("Transactions", systemImage: "list.bullet.rectangle") {
             NavigationStack {
               TransactionsScreen(
                 transactions: transactions,
@@ -83,20 +82,20 @@ struct ContentView: View {
                 onSelect: { activeSheet = .editTransaction($0) }
               )
               .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                  Button("Settings", systemImage: "gearshape") {
+                    showingSettings = true
+                  }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                   Button("Add Transaction", systemImage: "plus") {
                     activeSheet = .newTransaction
                   }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                  Button("Settings", systemImage: "gearshape") {
-                    showingSettings = true
-                  }
-                }
               }
             }
           }
-          Tab("Accounts", systemImage: "banknote.fill", value: BowTab.accounts) {
+          Tab("Accounts", systemImage: "banknote.fill") {
             NavigationStack {
               AccountsScreen(
                 accounts: accounts,
@@ -107,14 +106,14 @@ struct ContentView: View {
                 onSelectTransaction: { activeSheet = .editTransaction($0) }
               )
               .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                  Button("Add Transaction", systemImage: "plus") {
-                    activeSheet = .newTransaction
+                ToolbarItem(placement: .topBarLeading) {
+                  Button("Settings", systemImage: "gearshape") {
+                    showingSettings = true
                   }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                  Button("Settings", systemImage: "gearshape") {
-                    showingSettings = true
+                  Button("Add Transaction", systemImage: "plus") {
+                    activeSheet = .newTransaction
                   }
                 }
               }
@@ -123,10 +122,7 @@ struct ContentView: View {
         }
         .tint(Color.accentColor)
         .sheet(isPresented: $showingSettings) {
-          SettingsScreen {
-            showingSettings = false
-            selectedTab = .accounts
-          }
+          SettingsScreen()
         }
         .sheet(item: $activeSheet) { sheet in
           switch sheet {
@@ -170,12 +166,6 @@ struct ContentView: View {
       AppAppearance(rawValue: appearanceRaw)?.colorScheme
     )
   }
-}
-
-private enum BowTab: Hashable {
-  case budget
-  case transactions
-  case accounts
 }
 
 private enum BowSheet: Identifiable {

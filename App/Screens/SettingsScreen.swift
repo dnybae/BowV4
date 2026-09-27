@@ -4,13 +4,9 @@ import SwiftData
 struct SettingsScreen: View {
   @Environment(\.dismiss) private var dismiss
   @AppStorage("bow.appearance") private var appearanceRaw = AppAppearance.system.rawValue
-  @Query private var profiles: [BudgetProfile]
   @Query private var groups: [BudgetGroup]
   @Query private var envelopes: [BudgetEnvelope]
   @State private var showingYNABImport = false
-  var onShowAccounts: () -> Void
-
-  private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
 
   private var version: String {
     Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
@@ -20,30 +16,24 @@ struct SettingsScreen: View {
     NavigationStack {
       Form {
         Section {
-          Picker("Theme", selection: $appearanceRaw) {
+          Picker("Appearance", selection: $appearanceRaw) {
             ForEach(AppAppearance.allCases) { appearance in
               Text(appearance.title).tag(appearance.rawValue)
             }
           }
-          .pickerStyle(.segmented)
+          .pickerStyle(.menu)
         } header: {
           Text("Appearance")
         } footer: {
           Text("System follows your iPhone’s appearance setting.")
         }
 
-        Section {
-          LabeledContent("Currency", value: currencyCode)
-          Button("Accounts", systemImage: "banknote", action: onShowAccounts)
+        Section("Categories") {
           NavigationLink {
-            CategoryManagementScreen(currencyCode: currencyCode)
+            CategoryManagementScreen()
           } label: {
             Label("Groups & Envelopes", systemImage: "square.grid.2x2")
           }
-        } header: {
-          Text("Budget")
-        } footer: {
-          Text("A budget uses one currency. Its currency stays fixed after creation to preserve transaction amounts.")
         }
 
         Section {

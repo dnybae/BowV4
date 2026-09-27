@@ -2,10 +2,12 @@ import SwiftUI
 import SwiftData
 
 struct CategoryManagementScreen: View {
+  @Query private var profiles: [BudgetProfile]
   @Query private var groups: [BudgetGroup]
   @Query private var envelopes: [BudgetEnvelope]
   @State private var editor: CategoryEditor?
-  var currencyCode: String
+
+  private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
 
   private var orderedGroups: [BudgetGroup] {
     groups.sorted {

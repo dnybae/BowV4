@@ -85,6 +85,19 @@ struct BudgetCalculatorChecks {
     expect(nextMonth.available(for: groceriesID) == 0, "cash shortfall does not roll into category")
     expect(nextMonth.readyToAssignMinor == -3_000, "uncovered cash shortfall remains in ready money")
 
+    var releaseToReady = allocation(3_000, from: .envelope(diningID), to: .readyToAssign)
+    releaseToReady.date = day(2, 2)
+    let nextMonthCovered = calculator.calculate(
+      month: day(2, 15),
+      accounts: [cash],
+      envelopes: envelopes,
+      allocations: startingAllocations + [releaseToReady],
+      transactions: [cashOverspend]
+    )
+    expect(nextMonthCovered.readyToAssignMinor == 0, "returning funds clears carried ready deficit")
+    expect(nextMonthCovered.available(for: diningID) == 5_000, "deficit cover uses real envelope funds")
+    expect(nextMonthCovered.assigned[diningID] == -3_000, "release counts as negative assignment")
+
     let partlyAssigned = calculator.calculate(
       month: day(1, 15),
       accounts: [cash],

@@ -188,7 +188,7 @@ struct BudgetCommands {
     in context: ModelContext
   ) throws {
     guard amountMinor > 0 else { throw BudgetCommandError.invalidAmount }
-    guard source != target, target != .readyToAssign else {
+    guard source != target else {
       throw BudgetCommandError.invalidTransfer
     }
     let available: Int64

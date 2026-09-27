@@ -25,6 +25,8 @@ struct BudgetLedger {
           target = .envelope(envelopeID)
         } else if let cardID = allocation.targetCardID {
           target = .cardPayment(cardID)
+        } else if allocation.sourceEnvelopeID != nil || allocation.sourceCardID != nil {
+          target = .readyToAssign
         } else {
           return nil
         }

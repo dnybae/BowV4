@@ -58,6 +58,7 @@ struct MoneyMoveScreen: View {
             }
           }
           Picker("To", selection: $target) {
+            Text("Ready to Assign").tag(BudgetBucket.readyToAssign)
             ForEach(envelopes) { envelope in
               Text(envelope.name).tag(BudgetBucket.envelope(envelope.id))
             }

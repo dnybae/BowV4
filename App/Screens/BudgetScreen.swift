@@ -28,6 +28,37 @@ struct BudgetScreen: View {
       + snapshot.creditShortfall.values.reduce(0, +)
   }
 
+  private var readyStatusMessage: String {
+    if totalOverspent > 0 {
+      return "\(BudgetMoney.formatted(totalOverspent, currencyCode: currencyCode)) overspent in envelopes"
+    }
+    if snapshot.readyToAssignMinor < 0 {
+      return "Cover this shortfall before assigning more money."
+    }
+    return "Cash waiting for a job."
+  }
+
+  private var deficitCoverSource: BudgetBucket? {
+    if let envelope = envelopes.first(where: { snapshot.available(for: $0.id) > 0 }) {
+      return .envelope(envelope.id)
+    }
+    if let card = creditCards.first(where: {
+      snapshot.paymentAvailable[$0.id, default: 0] > 0
+    }) {
+      return .cardPayment(card.id)
+    }
+    return nil
+  }
+
+  private var deficitCoverTarget: BudgetBucket {
+    if let overspent = envelopes.first(where: {
+      snapshot.cashShortfall[$0.id, default: 0] > 0
+    }) {
+      return .envelope(overspent.id)
+    }
+    return .readyToAssign
+  }
+
   var body: some View {
     List {
       Section {
@@ -58,16 +89,29 @@ struct BudgetScreen: View {
             .foregroundStyle(snapshot.readyToAssignMinor < 0 ? Color.red : Color.primary)
             .minimumScaleFactor(0.7)
             .lineLimit(1)
-          Text(totalOverspent > 0
-            ? "\(BudgetMoney.formatted(totalOverspent, currencyCode: currencyCode)) overspent in envelopes"
-            : "Cash waiting for a job.")
+          Text(readyStatusMessage)
             .font(.footnote)
-            .foregroundStyle(totalOverspent > 0 ? Color.red : Color.secondary)
-          Button("Assign Money", systemImage: "arrow.right") {
-            onMoveMoney(.readyToAssign, .envelope(envelopes.first?.id ?? UUID()))
+            .foregroundStyle(totalOverspent > 0 || snapshot.readyToAssignMinor < 0
+              ? Color.red : Color.secondary)
+          if snapshot.readyToAssignMinor < 0 {
+            if let deficitCoverSource {
+              Button(deficitCoverTarget == .readyToAssign ? "Cover Deficit" : "Cover Overspending",
+                     systemImage: "arrow.uturn.backward") {
+                onMoveMoney(deficitCoverSource, deficitCoverTarget)
+              }
+              .padding(.top, 4)
+            } else {
+              Text("Add cash to clear this deficit.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+          } else {
+            Button("Assign Money", systemImage: "arrow.right") {
+              onMoveMoney(.readyToAssign, .envelope(envelopes.first?.id ?? UUID()))
+            }
+            .disabled(envelopes.isEmpty || snapshot.readyToAssignMinor <= 0)
+            .padding(.top, 4)
           }
-          .disabled(envelopes.isEmpty || snapshot.readyToAssignMinor <= 0)
-          .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 10)

@@ -58,6 +58,12 @@ struct TransactionEditorScreen: View {
   var body: some View {
     NavigationStack {
       Form {
+        if transaction?.needsApproval == true {
+          Section {
+            Text("Review this imported transaction. Saving it marks it approved.")
+              .foregroundStyle(.secondary)
+          }
+        }
         Section {
           Picker("Type", selection: $kind) {
             ForEach(BudgetTransactionKind.allCases) { option in

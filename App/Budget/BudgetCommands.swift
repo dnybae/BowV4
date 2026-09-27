@@ -148,6 +148,7 @@ struct BudgetCommands {
     transaction.date = date
     transaction.payee = payee.trimmingCharacters(in: .whitespacesAndNewlines)
     transaction.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+    transaction.needsApproval = false
     try context.save()
   }
 

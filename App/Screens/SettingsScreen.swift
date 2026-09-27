@@ -7,6 +7,7 @@ struct SettingsScreen: View {
   @Query private var groups: [BudgetGroup]
   @Query private var envelopes: [BudgetEnvelope]
   @State private var showingYNABImport = false
+  @State private var showingBankImport = false
 
   private var version: String {
     Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
@@ -42,6 +43,9 @@ struct SettingsScreen: View {
         }
 
         Section {
+          Button("Import Bank File", systemImage: "doc.text") {
+            showingBankImport = true
+          }
           Button("Import YNAB Categories", systemImage: "square.and.arrow.down") {
             showingYNABImport = true
           }
@@ -73,6 +77,9 @@ struct SettingsScreen: View {
       }
       .sheet(isPresented: $showingYNABImport) {
         YNABImportScreen(groups: groups, envelopes: envelopes)
+      }
+      .sheet(isPresented: $showingBankImport) {
+        BankFileImportScreen()
       }
     }
   }

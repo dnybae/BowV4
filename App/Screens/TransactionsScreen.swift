@@ -112,6 +112,11 @@ struct TransactionRow: View {
         Text("\(accountName) · \(transaction.date.formatted(date: .abbreviated, time: .omitted))")
           .font(.caption)
           .foregroundStyle(.secondary)
+        if transaction.needsApproval {
+          Text("Needs approval")
+            .font(.caption)
+            .foregroundStyle(.orange)
+        }
         if transaction.envelopeID == nil && transaction.kind == .expense {
           Text("Needs categorization")
             .font(.caption)

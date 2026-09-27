@@ -115,6 +115,26 @@ struct ContentView: View {
               }
             }
           }
+          Tab("Insights", systemImage: "chart.bar.fill") {
+            NavigationStack {
+              InsightsScreen(
+                groups: groups,
+                envelopes: envelopes,
+                accounts: accounts,
+                allocations: allocations,
+                transactions: transactions,
+                currencyCode: currencyCode
+              )
+              .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                  Button("Settings", systemImage: "gearshape") { showingSettings = true }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                  Button("Add Transaction", systemImage: "plus") { activeSheet = .newTransaction }
+                }
+              }
+            }
+          }
           Tab("Accounts", systemImage: "banknote.fill") {
             NavigationStack {
               AccountsScreen(

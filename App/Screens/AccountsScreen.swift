@@ -67,6 +67,7 @@ private struct AccountDetailScreen: View {
   var balanceMinor: Int64
   var currencyCode: String
   var onSelectTransaction: (UUID) -> Void
+  @State private var showingReconciliation = false
 
   private var accountTransactions: [BudgetTransaction] {
     transactions
@@ -85,6 +86,14 @@ private struct AccountDetailScreen: View {
             .font(.title.weight(.semibold))
         }
         .padding(.vertical, 8)
+        Button("Reconcile Account", systemImage: "checkmark.circle") {
+          showingReconciliation = true
+        }
+        if let date = account.lastReconciledAt,
+           let balance = account.lastReconciledBalanceMinor {
+          LabeledContent("Last Reconciled", value: date.formatted(date: .abbreviated, time: .omitted))
+          LabeledContent("Statement Balance", value: BudgetMoney.formatted(balance, currencyCode: currencyCode))
+        }
       }
       Section("Ledger") {
         if accountTransactions.isEmpty {
@@ -109,5 +118,8 @@ private struct AccountDetailScreen: View {
       }
     }
     .navigationTitle(account.name)
+    .sheet(isPresented: $showingReconciliation) {
+      ReconciliationScreen(account: account, transactions: accountTransactions, currencyCode: currencyCode)
+    }
   }
 }

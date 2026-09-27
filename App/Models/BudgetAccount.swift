@@ -9,6 +9,8 @@ final class BudgetAccount {
   var currencyCode: String = "USD"
   var openingBalanceMinor: Int64 = 0
   var openedAt: Date = Date()
+  var lastReconciledAt: Date? = nil
+  var lastReconciledBalanceMinor: Int64? = nil
 
   var kind: BudgetAccountKind {
     BudgetAccountKind(rawValue: kindRaw) ?? .cash

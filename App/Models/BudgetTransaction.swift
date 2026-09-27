@@ -14,6 +14,9 @@ final class BudgetTransaction {
   var notes: String = ""
   var kindRaw: String = BudgetTransactionKind.expense.rawValue
   var isCleared: Bool = false
+  var destinationIsCleared: Bool = false
+  var reconciledAt: Date? = nil
+  var destinationReconciledAt: Date? = nil
   var sourceRaw: String = "manual"
   var externalKey: String? = nil
   var needsApproval: Bool = false

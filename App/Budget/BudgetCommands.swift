@@ -123,6 +123,7 @@ struct BudgetCommands {
     transaction.scheduleID = scheduleID
     transaction.scheduledFor = scheduledFor
     context.insert(transaction)
+    try invalidateReconciliation(accountIDs: [account.id, destination?.id].compactMap { $0 }, from: date, in: context)
     try context.save()
   }
 
@@ -145,6 +146,8 @@ struct BudgetCommands {
       envelopeID: envelopeID,
       amountMinor: amountMinor
     )
+    let previousAccountIDs = [transaction.accountID, transaction.transferAccountID].compactMap { $0 }
+    let earliestDate = min(transaction.date, date)
     transaction.kindRaw = kind.rawValue
     transaction.accountID = account.id
     transaction.transferAccountID = kind == .transfer ? destination?.id : nil
@@ -154,12 +157,27 @@ struct BudgetCommands {
     transaction.payee = payee.trimmingCharacters(in: .whitespacesAndNewlines)
     transaction.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
     transaction.needsApproval = false
+    transaction.reconciledAt = nil
+    transaction.destinationReconciledAt = nil
+    try invalidateReconciliation(accountIDs: previousAccountIDs + [account.id, destination?.id].compactMap { $0 }, from: earliestDate, in: context)
     try context.save()
   }
 
   static func deleteTransaction(_ transaction: BudgetTransaction, in context: ModelContext) throws {
+    try invalidateReconciliation(accountIDs: [transaction.accountID, transaction.transferAccountID].compactMap { $0 }, from: transaction.date, in: context)
     context.delete(transaction)
     try context.save()
+  }
+
+  private static func invalidateReconciliation(accountIDs: [UUID], from date: Date, in context: ModelContext) throws {
+    let ids = Set(accountIDs)
+    for account in try context.fetch(FetchDescriptor<BudgetAccount>()) where ids.contains(account.id) {
+      if let reconciled = account.lastReconciledAt,
+         Calendar.current.startOfDay(for: date) <= Calendar.current.startOfDay(for: reconciled) {
+        account.lastReconciledAt = nil
+        account.lastReconciledBalanceMinor = nil
+      }
+    }
   }
 
   private static func validateTransaction(

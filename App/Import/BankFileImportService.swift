@@ -88,7 +88,17 @@ struct BankFileImportService {
         summary.created += 1
       }
     }
+    let openingChanged = adjustedOpeningBalance != account.openingBalanceMinor
     account.openingBalanceMinor = adjustedOpeningBalance
+    if openingChanged || proposals.contains(where: {
+      if let reconciled = account.lastReconciledAt {
+        return $0.row.date <= reconciled && !existingKeys.contains($0.externalKey)
+      }
+      return false
+    }) {
+      account.lastReconciledAt = nil
+      account.lastReconciledBalanceMinor = nil
+    }
     try context.save()
     return summary
   }

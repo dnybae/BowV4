@@ -1,0 +1,101 @@
+import SwiftUI
+import SwiftData
+import UniformTypeIdentifiers
+
+struct YNABImportScreen: View {
+  @Environment(\.dismiss) private var dismiss
+  @Environment(\.modelContext) private var modelContext
+  var groups: [BudgetGroup]
+  var envelopes: [BudgetEnvelope]
+  @State private var showingFilePicker = false
+  @State private var preview: YNABCategoryPreview?
+  @State private var errorMessage: String?
+
+  var body: some View {
+    NavigationStack {
+      Form {
+        Section {
+          Button("Choose YNAB Plan Export", systemImage: "text.document") {
+            showingFilePicker = true
+          }
+        } header: {
+          Text("File")
+        } footer: {
+          Text("Bow imports category groups and envelopes only. Transactions, past assignments, balances, and targets are left behind.")
+        }
+
+        if let preview {
+          Section {
+            Text("\(preview.groups.count) groups · \(preview.envelopeCount) envelopes")
+              .font(.headline)
+          }
+          ForEach(preview.groups) { group in
+            Section(group.name) {
+              ForEach(group.envelopes, id: \.self) { name in
+                Label(name, systemImage: "square.grid.2x2.fill")
+              }
+            }
+          }
+        }
+      }
+      .navigationTitle("Import from YNAB")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") { dismiss() }
+        }
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Import") { save() }
+            .disabled(preview == nil)
+        }
+      }
+      .fileImporter(
+        isPresented: $showingFilePicker,
+        allowedContentTypes: [
+          .commaSeparatedText,
+          UTType(filenameExtension: "tsv") ?? .plainText,
+          .plainText
+        ]
+      ) { result in
+        do {
+          let url = try result.get()
+          let accessed = url.startAccessingSecurityScopedResource()
+          defer {
+            if accessed { url.stopAccessingSecurityScopedResource() }
+          }
+          let data = try Data(contentsOf: url)
+          guard let content = String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .utf16) else {
+            throw YNABImportError.unreadableText
+          }
+          preview = try YNABCategoryParser().parse(content)
+        } catch {
+          errorMessage = error.localizedDescription
+        }
+      }
+      .alert("Couldn’t Import Categories", isPresented: Binding(
+        get: { errorMessage != nil },
+        set: { if !$0 { errorMessage = nil } }
+      )) {
+        Button("OK") { errorMessage = nil }
+      } message: {
+        Text(errorMessage ?? "")
+      }
+    }
+  }
+
+  private func save() {
+    guard let preview else { return }
+    do {
+      _ = try YNABCategoryImporter().save(
+        preview,
+        existingGroups: groups,
+        existingEnvelopes: envelopes,
+        in: modelContext
+      )
+      dismiss()
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+}

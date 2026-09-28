@@ -7,7 +7,6 @@ struct BudgetScreen: View {
   var accounts: [BudgetAccount]
   var snapshot: BudgetSnapshot
   @Binding var selectedMonth: Date
-  var onAddAccount: () -> Void
   var onAddGroup: () -> Void
   var onAddEnvelope: () -> Void
   var onImportYNAB: () -> Void
@@ -115,17 +114,6 @@ struct BudgetScreen: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 10)
-      }
-
-      if accounts.isEmpty {
-        Section {
-          ContentUnavailableView(
-            "Start with an account",
-            systemImage: "banknote.fill",
-            description: Text("Add your current balance to see money you can assign.")
-          )
-          Button("Add Account", systemImage: "plus", action: onAddAccount)
-        }
       }
 
       ForEach(orderedGroups) { group in

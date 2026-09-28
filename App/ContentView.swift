@@ -54,7 +54,6 @@ struct ContentView: View {
                 accounts: accounts,
                 snapshot: snapshot,
                 selectedMonth: $selectedMonth,
-                onAddAccount: { activeSheet = .newAccount },
                 onAddGroup: { activeSheet = .newGroup },
                 onAddEnvelope: { activeSheet = .newEnvelope },
                 onImportYNAB: { activeSheet = .importYNAB },

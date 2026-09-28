@@ -30,21 +30,28 @@ struct CalendarScreen: View {
   }
 
   var body: some View {
-    ScrollView {
+    GeometryReader { geometry in
+      let rowHeight = min(42, max(28, (geometry.size.height * 0.5 - 72) / CGFloat(days.count / 7)))
       VStack(alignment: .leading, spacing: 0) {
-        HStack(alignment: .firstTextBaseline) {
+        HStack {
           Text(visibleMonth.formatted(.dateTime.month(.wide).year()))
-            .font(.system(size: 34, weight: .bold))
+            .font(.title2.weight(.bold))
             .minimumScaleFactor(0.7)
           Spacer(minLength: 12)
-          Button("Previous Month", systemImage: "chevron.left") { shiftMonth(-1) }
-            .labelStyle(.iconOnly)
-          Button("Next Month", systemImage: "chevron.right") { shiftMonth(1) }
-            .labelStyle(.iconOnly)
+          Button { shiftMonth(-1) } label: {
+            Label("Previous Month", systemImage: "chevron.left")
+              .labelStyle(.iconOnly)
+              .frame(width: 44, height: 44)
+              .contentShape(Rectangle())
+          }
+          Button { shiftMonth(1) } label: {
+            Label("Next Month", systemImage: "chevron.right")
+              .labelStyle(.iconOnly)
+              .frame(width: 44, height: 44)
+              .contentShape(Rectangle())
+          }
         }
         .padding(.horizontal, 20)
-        .padding(.top, 10)
-        .padding(.bottom, 18)
 
         let weekdaySymbols = calendar.veryShortStandaloneWeekdaySymbols
         HStack(spacing: 0) {
@@ -55,31 +62,34 @@ struct CalendarScreen: View {
               .frame(maxWidth: .infinity)
           }
         }
-        .padding(.bottom, 6)
+        .frame(height: 18)
+        .padding(.bottom, 2)
 
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 0) {
           ForEach(days.indices, id: \.self) { index in
             if let day = days[index] {
-              dayButton(day)
+              dayButton(day, height: rowHeight)
             } else {
-              Color.clear.frame(height: 76)
-                .overlay(alignment: .top) { Rectangle().fill(.quaternary).frame(height: 0.5) }
+              Color.clear.frame(height: rowHeight)
             }
           }
         }
+        .padding(.bottom, 8)
 
-        VStack(alignment: .leading, spacing: 0) {
-          HStack {
-            Text(selectedDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-              .font(.headline)
-            Spacer()
-            Text("\(selectedSchedules.count) scheduled")
-              .font(.subheadline)
-              .foregroundStyle(.secondary)
-          }
-          .padding(.horizontal, 20)
-          .padding(.vertical, 16)
+        HStack {
+          Text(selectedDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+            .font(.headline)
+          Spacer()
+          Text("\(selectedSchedules.count) scheduled")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity)
+        .overlay(alignment: .top) { Rectangle().fill(.quaternary).frame(height: 0.5) }
 
+        ScrollView {
           if selectedSchedules.isEmpty {
             ContentUnavailableView(
               "No scheduled bills",
@@ -88,11 +98,14 @@ struct CalendarScreen: View {
             )
             .frame(maxWidth: .infinity)
           } else {
-            ForEach(selectedSchedules) { schedule in
-              agendaRow(schedule)
+            LazyVStack(alignment: .leading, spacing: 0) {
+              ForEach(selectedSchedules) { schedule in
+                agendaRow(schedule)
+              }
             }
           }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
       .frame(maxWidth: .infinity)
     }
@@ -111,18 +124,19 @@ struct CalendarScreen: View {
     }
   }
 
-  private func dayButton(_ day: Date) -> some View {
+  private func dayButton(_ day: Date, height: CGFloat) -> some View {
     let due = schedulesForDay(day)
     let isSelected = calendar.isDate(day, inSameDayAs: selectedDate)
     let isToday = calendar.isDateInToday(day)
+    let dayDiameter = min(28, height - 6)
     return Button {
       selectedDate = day
     } label: {
-      VStack(spacing: 7) {
+      VStack(spacing: 2) {
         Text(day.formatted(.dateTime.day()))
-          .font(.system(.title3, design: .rounded, weight: isSelected ? .bold : .medium))
+          .font(.system(.callout, design: .rounded, weight: isSelected ? .bold : .medium))
           .foregroundStyle(isSelected ? Color(uiColor: .systemBackground) : (isToday ? Color.red : Color.primary))
-          .frame(width: 34, height: 34)
+          .frame(width: dayDiameter, height: dayDiameter)
           .background {
             if isSelected { Circle().fill(Color.primary) }
           }
@@ -130,16 +144,14 @@ struct CalendarScreen: View {
           ForEach(due.prefix(3)) { schedule in
             Capsule()
               .fill(schedule.envelopeID == nil ? Color.orange : Color.accentColor)
-              .frame(width: due.count == 1 ? 16 : 7, height: 5)
+              .frame(width: due.count == 1 ? 14 : 6, height: 4)
           }
         }
-        .frame(height: 5)
-        Spacer(minLength: 0)
+        .frame(height: 4)
       }
       .frame(maxWidth: .infinity)
-      .frame(height: 76)
+      .frame(height: height)
       .contentShape(Rectangle())
-      .overlay(alignment: .top) { Rectangle().fill(.quaternary).frame(height: 0.5) }
     }
     .buttonStyle(.plain)
     .accessibilityLabel("\(day.formatted(date: .complete, time: .omitted)), \(due.count) scheduled bills")

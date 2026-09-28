@@ -4,6 +4,8 @@ import SwiftData
 struct PayeeRuleEditorScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
+  @Query private var transactions: [BudgetTransaction]
+  @Query private var schedules: [BudgetSchedule]
   var rule: BudgetPayee?
   var rules: [BudgetPayee]
   var envelopes: [BudgetEnvelope]
@@ -27,7 +29,7 @@ struct PayeeRuleEditorScreen: View {
       Form {
         Section("Payee") {
           TextField("Name", text: $name)
-          TextField("Exact text to match", text: $matchText)
+          TextField("Exact bank text (optional)", text: $matchText)
             .textInputAutocapitalization(.words)
         }
         Section("Default Envelope") {
@@ -54,7 +56,6 @@ struct PayeeRuleEditorScreen: View {
         ToolbarItem(placement: .confirmationAction) {
           Button("Save") { save() }
             .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-              || matchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
               || envelopeID == nil)
         }
       }
@@ -78,23 +79,50 @@ struct PayeeRuleEditorScreen: View {
     guard let envelopeID else { return }
     let matcher = PayeeRuleMatcher()
     let match = matcher.normalized(matchText)
-    guard !rules.contains(where: {
-      $0.id != rule?.id && matcher.normalized($0.exactMatchText) == match
+    let normalizedName = matcher.normalized(name)
+    guard match.isEmpty || !rules.contains(where: {
+      $0.id != rule?.id
+        && (matcher.normalized($0.exactMatchText) == match
+          || matcher.normalized($0.name) == match)
     }) else {
       errorMessage = "Another rule already matches this payee text."
       return
     }
+    guard rule == nil || !rules.contains(where: {
+      $0.id != rule?.id
+        && (matcher.normalized($0.name) == normalizedName
+          || matcher.normalized($0.exactMatchText) == normalizedName)
+    }) else {
+      errorMessage = "Another payee already uses this name."
+      return
+    }
     do {
       if let rule {
-        rule.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let updatedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if rule.name != updatedName
+            || matcher.normalized(rule.exactMatchText) != match {
+          PayeeDirectory.rename(
+            from: PayeeDirectory.key(rule.name),
+            to: updatedName,
+            payees: rules,
+            transactions: transactions,
+            schedules: schedules
+          )
+        }
+        rule.name = updatedName
         rule.exactMatchText = matchText.trimmingCharacters(in: .whitespacesAndNewlines)
         rule.defaultEnvelopeID = envelopeID
       } else {
-        modelContext.insert(BudgetPayee(
-          name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-          defaultEnvelopeID: envelopeID,
-          exactMatchText: matchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        ))
+        if let existing = rules.first(where: { matcher.normalized($0.name) == normalizedName }) {
+          existing.defaultEnvelopeID = envelopeID
+          existing.exactMatchText = matchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+          modelContext.insert(BudgetPayee(
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            defaultEnvelopeID: envelopeID,
+            exactMatchText: matchText.trimmingCharacters(in: .whitespacesAndNewlines)
+          ))
+        }
       }
       try modelContext.save()
       dismiss()
@@ -106,6 +134,13 @@ struct PayeeRuleEditorScreen: View {
   private func delete() {
     guard let rule else { return }
     do {
+      PayeeDirectory.rename(
+        from: PayeeDirectory.key(rule.name),
+        to: rule.name,
+        payees: rules,
+        transactions: transactions,
+        schedules: schedules
+      )
       modelContext.delete(rule)
       try modelContext.save()
       dismiss()

@@ -23,6 +23,7 @@ struct TransactionEditorScreen: View {
   @State private var showingDeleteConfirmation = false
   @State private var possibleImportedMatchIDs: [UUID] = []
   @State private var autoAssignedEnvelopeID: UUID?
+  @FocusState private var payeeFocused: Bool
 
   init(
     transaction: BudgetTransaction?,
@@ -58,6 +59,23 @@ struct TransactionEditorScreen: View {
           let destination = accounts.first(where: { $0.id == destinationID })
     else { return false }
     return destination.kind == .asset || destination.kind == .liability
+  }
+
+  private var suggestedPayees: [PayeeDirectory.Entry] {
+    let search = payee.trimmingCharacters(in: .whitespacesAndNewlines)
+    return PayeeDirectory.entries(payees: payees, transactions: existingTransactions, schedules: [])
+      .filter {
+        !$0.isTransferOnly
+          && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search))
+          && PayeeDirectory.key($0.name) != PayeeDirectory.key(search)
+      }
+      .sorted {
+        $0.transactionCount == $1.transactionCount
+          ? $0.name.localizedStandardCompare($1.name) == .orderedAscending
+          : $0.transactionCount > $1.transactionCount
+      }
+      .prefix(5)
+      .map { $0 }
   }
 
   var body: some View {
@@ -96,6 +114,15 @@ struct TransactionEditorScreen: View {
           } else {
             TextField(kind == .expense ? "Payee" : "Source", text: $payee)
               .textInputAutocapitalization(.words)
+              .focused($payeeFocused)
+            if payeeFocused {
+              ForEach(suggestedPayees) { suggestion in
+                Button(suggestion.name) {
+                  payee = suggestion.name
+                  payeeFocused = false
+                }
+              }
+            }
           }
           if (kind != .transfer && selectedAccount?.kind != .asset
               && selectedAccount?.kind != .liability)
@@ -191,12 +218,12 @@ struct TransactionEditorScreen: View {
   private func applyPayeeRule() {
     let nextEnvelopeID: UUID?
     if kind == .expense {
-      let rules = payees.compactMap { rule -> PayeeRuleItem? in
-        guard let id = rule.defaultEnvelopeID,
-              envelopes.contains(where: { $0.id == id }) else { return nil }
-        return PayeeRuleItem(matchText: rule.exactMatchText, envelopeID: id)
-      }
-      nextEnvelopeID = PayeeRuleMatcher().envelopeID(for: payee, rules: rules)
+      let matcher = PayeeRuleMatcher()
+      let rules = PayeeDirectory.ruleItems(
+        payees: payees,
+        validEnvelopeIDs: Set(envelopes.map(\.id))
+      )
+      nextEnvelopeID = matcher.envelopeID(for: payee, rules: rules)
     } else {
       nextEnvelopeID = nil
     }

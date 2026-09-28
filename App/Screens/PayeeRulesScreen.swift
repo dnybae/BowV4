@@ -7,23 +7,27 @@ struct PayeeRulesScreen: View {
   @State private var showingAdd = false
   @State private var editingRule: BudgetPayee?
 
+  private var activeRules: [BudgetPayee] {
+    rules.filter { $0.defaultEnvelopeID != nil }
+  }
+
   var body: some View {
     List {
-      if rules.isEmpty {
+      if activeRules.isEmpty {
         ContentUnavailableView(
           "No payee rules yet",
           systemImage: "person.text.rectangle",
           description: Text("Match a payee name to an envelope for faster categorization.")
         )
       } else {
-        ForEach(rules.sorted { $0.name < $1.name }) { rule in
+        ForEach(activeRules.sorted { $0.name < $1.name }) { rule in
           Button {
             editingRule = rule
           } label: {
             VStack(alignment: .leading, spacing: 3) {
               Text(rule.name)
                 .foregroundStyle(.primary)
-              Text("\(rule.exactMatchText) → \(envelopes.first { $0.id == rule.defaultEnvelopeID }?.name ?? "Choose an envelope")")
+              Text("\(rule.exactMatchText.isEmpty ? rule.name : rule.exactMatchText) → \(envelopes.first { $0.id == rule.defaultEnvelopeID }?.name ?? "Choose an envelope")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
@@ -37,7 +41,7 @@ struct PayeeRulesScreen: View {
         }
         .disabled(envelopes.isEmpty)
       } footer: {
-        Text("Rules match the full payee text, ignoring case and surrounding spaces. They never change an envelope you selected yourself.")
+        Text("Rules match the payee name or exact bank text, ignoring case and surrounding spaces. They never change an envelope you selected yourself.")
       }
     }
     .navigationTitle("Payee Rules")

@@ -65,6 +65,11 @@ struct SettingsScreen: View {
             Label("Groups & Envelopes", systemImage: "square.grid.2x2")
           }
           NavigationLink {
+            ManagePayeesScreen()
+          } label: {
+            Label("Manage Payees", systemImage: "person.crop.circle")
+          }
+          NavigationLink {
             PayeeRulesScreen()
           } label: {
             Label("Payee Rules", systemImage: "person.text.rectangle")

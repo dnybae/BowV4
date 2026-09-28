@@ -32,11 +32,8 @@ struct BankFileImportService {
     let existingKeys = Set(existingTransactions.compactMap(\.externalKey))
     let existingByID = Dictionary(uniqueKeysWithValues: existingTransactions.map { ($0.id, $0) })
     let validEnvelopeIDs = Set(envelopes.map(\.id))
-    let rules = payees.compactMap { rule -> PayeeRuleItem? in
-      guard let id = rule.defaultEnvelopeID, validEnvelopeIDs.contains(id) else { return nil }
-      return PayeeRuleItem(matchText: rule.exactMatchText, envelopeID: id)
-    }
     let matcher = PayeeRuleMatcher()
+    let rules = PayeeDirectory.ruleItems(payees: payees, validEnvelopeIDs: validEnvelopeIDs)
     var summary = BankFileImportSummary()
     var adjustedOpeningBalance = account.openingBalanceMinor
     for proposal in proposals {

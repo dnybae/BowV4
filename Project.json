@@ -23,6 +23,10 @@
           "CFBundleShortVersionString": "1.0",
           "CFBundleVersion": "1",
           "ITSAppUsesNonExemptEncryption": false,
+          "BGTaskSchedulerPermittedIdentifiers": [
+            "app.bitrig.new.b6ec559c-1e09-43ff-a70f-25c814186523.simplefin-refresh"
+          ],
+          "UIBackgroundModes": ["fetch"],
           "UILaunchScreen": {},
           "UISupportedInterfaceOrientations": [
             "UIInterfaceOrientationPortrait",

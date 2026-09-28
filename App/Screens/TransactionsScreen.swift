@@ -1,6 +1,8 @@
 import SwiftUI
+import SwiftData
 
 struct TransactionsScreen: View {
+  @Query private var simpleFINRecords: [SimpleFINImportRecord]
   var transactions: [BudgetTransaction]
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
@@ -36,6 +38,16 @@ struct TransactionsScreen: View {
 
   var body: some View {
     List {
+      let reviewCount = simpleFINRecords.filter { $0.status == .review }.count
+      if reviewCount > 0 {
+        Section {
+          NavigationLink {
+            SimpleFINScreen()
+          } label: {
+            Label("Review \(reviewCount) possible bank duplicates", systemImage: "arrow.clockwise")
+          }
+        }
+      }
       if filter.isActive {
         Section {
           HStack {

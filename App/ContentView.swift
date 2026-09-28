@@ -2,6 +2,8 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+  @Environment(\.modelContext) private var modelContext
+  @Environment(\.scenePhase) private var scenePhase
   @Query private var profiles: [BudgetProfile]
   @Query private var accounts: [BudgetAccount]
   @Query private var groups: [BudgetGroup]
@@ -216,6 +218,19 @@ struct ContentView: View {
     .preferredColorScheme(
       AppAppearance(rawValue: appearanceRaw)?.colorScheme
     )
+    .task { await refreshSimpleFINIfConnected() }
+    .onChange(of: scenePhase) { _, phase in
+      if phase == .active {
+        Task { await refreshSimpleFINIfConnected() }
+      } else if phase == .background {
+        SimpleFINBackgroundRefresh.schedule(in: modelContext)
+      }
+    }
+  }
+
+  private func refreshSimpleFINIfConnected() async {
+    guard (try? SimpleFINCredentialStore().load()) != nil else { return }
+    _ = try? await SimpleFINSyncCoordinator.shared.sync(in: modelContext)
   }
 }
 

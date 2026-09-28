@@ -3,11 +3,8 @@ import SwiftData
 
 @main
 struct AppDefinition: App {
-  var body: some Scene {
-    WindowGroup {
-      ContentView()
-    }
-    .modelContainer(for: [
+  private var modelContainer: ModelContainer = {
+    try! ModelContainer(for:
       BudgetProfile.self,
       BudgetAccount.self,
       BudgetGroup.self,
@@ -15,7 +12,20 @@ struct AppDefinition: App {
       BudgetTransaction.self,
       BudgetAllocation.self,
       BudgetPayee.self,
-      BudgetSchedule.self
-    ])
+      BudgetSchedule.self,
+      SimpleFINConnection.self,
+      SimpleFINAccountLink.self,
+      SimpleFINImportRecord.self
+    )
+  }()
+
+  var body: some Scene {
+    WindowGroup {
+      ContentView()
+    }
+    .modelContainer(modelContainer)
+    .backgroundTask(.appRefresh(SimpleFINBackgroundRefresh.identifier)) {
+      await SimpleFINBackgroundRefresh.run(container: modelContainer)
+    }
   }
 }

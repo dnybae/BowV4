@@ -6,6 +6,7 @@ struct SettingsScreen: View {
   @AppStorage("bow.appearance") private var appearanceRaw = AppAppearance.system.rawValue
   @Query private var groups: [BudgetGroup]
   @Query private var envelopes: [BudgetEnvelope]
+  @Query private var simpleFINRecords: [SimpleFINImportRecord]
   @State private var showingYNABImport = false
   @State private var showingBankImport = false
 
@@ -46,6 +47,20 @@ struct SettingsScreen: View {
           Button("Import Bank File", systemImage: "doc.text") {
             showingBankImport = true
           }
+          NavigationLink {
+            SimpleFINScreen()
+          } label: {
+            HStack {
+              Label("SimpleFIN Bank Sync", systemImage: "arrow.clockwise")
+              Spacer()
+              let reviewCount = simpleFINRecords.filter { $0.status == .review }.count
+              if reviewCount > 0 {
+                Text("\(reviewCount) to review")
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+              }
+            }
+          }
           Button("Import YNAB Categories", systemImage: "square.and.arrow.down") {
             showingYNABImport = true
           }
@@ -61,7 +76,7 @@ struct SettingsScreen: View {
         } header: {
           Text("Data & Privacy")
         } footer: {
-          Text("Your budget is stored on this device. iCloud sync and bank connections are not active yet.")
+          Text("Your budget is stored on this device. SimpleFIN bank sync is optional and uses a credential stored in this device’s Keychain. iCloud sync is not active yet.")
         }
 
         Section("About") {

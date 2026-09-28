@@ -4,6 +4,7 @@ import SwiftData
 struct TransactionEditorScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
+  @Query private var existingTransactions: [BudgetTransaction]
   var transaction: BudgetTransaction?
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
@@ -20,6 +21,7 @@ struct TransactionEditorScreen: View {
   @State private var date: Date
   @State private var errorMessage: String?
   @State private var showingDeleteConfirmation = false
+  @State private var possibleImportedMatchIDs: [UUID] = []
   @State private var autoAssignedEnvelopeID: UUID?
 
   init(
@@ -147,6 +149,29 @@ struct TransactionEditorScreen: View {
       } message: {
         Text("Its effect on your accounts and envelopes will be removed.")
       }
+      .confirmationDialog(
+        "Possible imported match",
+        isPresented: Binding(
+          get: { !possibleImportedMatchIDs.isEmpty },
+          set: { if !$0 { possibleImportedMatchIDs = [] } }
+        ),
+        titleVisibility: .visible
+      ) {
+        if possibleImportedMatchIDs.count == 1,
+           let id = possibleImportedMatchIDs.first {
+          Button("Update Imported Transaction") {
+            possibleImportedMatchIDs = []
+            save(matching: id)
+          }
+        }
+        Button("Add Separate Transaction") {
+          possibleImportedMatchIDs = []
+          save(allowSeparate: true)
+        }
+        Button("Cancel", role: .cancel) { possibleImportedMatchIDs = [] }
+      } message: {
+        Text("A SimpleFIN transaction has the same amount in this account within ten days. Updating it keeps one ledger entry and uses the details you entered.")
+      }
       .alert("Couldn’t Save Transaction", isPresented: Binding(
         get: { errorMessage != nil },
         set: { if !$0 { errorMessage = nil } }
@@ -178,7 +203,7 @@ struct TransactionEditorScreen: View {
     }
   }
 
-  private func save() {
+  private func save(allowSeparate: Bool = false, matching importedID: UUID? = nil) {
     guard let account = selectedAccount,
           let minor = BudgetMoney.parseMinor(amount) else {
       errorMessage = "Choose an account and enter a valid amount."
@@ -187,8 +212,18 @@ struct TransactionEditorScreen: View {
     let destination = accounts.first { $0.id == destinationID }
     let chosenEnvelopeID = kind == .transfer && !needsEnvelopeForTransfer
       ? nil : envelopeID
+    if transaction == nil && importedID == nil && !allowSeparate && scheduledDraft == nil
+        && kind != .transfer {
+      let signedAmount = kind == .inflow ? minor : -minor
+      possibleImportedMatchIDs = existingTransactions.filter {
+        $0.sourceRaw == "simplefin" && $0.accountID == account.id
+          && $0.amountMinor == signedAmount
+          && abs($0.date.timeIntervalSince(date)) <= 10 * 86_400
+      }.map(\.id)
+      if !possibleImportedMatchIDs.isEmpty { return }
+    }
     do {
-      if let transaction {
+      if let transaction = transaction ?? existingTransactions.first(where: { $0.id == importedID }) {
         try BudgetCommands.updateTransaction(
           transaction,
           kind: kind,

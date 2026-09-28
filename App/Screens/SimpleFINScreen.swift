@@ -1,0 +1,179 @@
+import SwiftUI
+import SwiftData
+
+struct SimpleFINScreen: View {
+  @Environment(\.modelContext) private var modelContext
+  @Query private var connections: [SimpleFINConnection]
+  @Query private var links: [SimpleFINAccountLink]
+  @Query private var records: [SimpleFINImportRecord]
+  @Query private var accounts: [BudgetAccount]
+  @State private var coordinator = SimpleFINSyncCoordinator.shared
+  @State private var setupToken = ""
+  @State private var message: String?
+  @State private var showingDisconnect = false
+
+  private var connection: SimpleFINConnection? { connections.first }
+  private var reviewItems: [SimpleFINImportRecord] {
+    records.filter { $0.status == .review }.sorted { $0.date > $1.date }
+  }
+
+  var body: some View {
+    Form {
+      if let connection {
+        Section {
+          LabeledContent("Status", value: "Connected")
+          if let date = connection.lastSuccessfulAt {
+            LabeledContent("Last sync", value: date.formatted(date: .abbreviated, time: .shortened))
+          }
+          Toggle("Automatic Sync", isOn: Binding(
+            get: { connection.automaticSync },
+            set: { enabled in
+              connection.automaticSync = enabled
+              try? modelContext.save()
+              SimpleFINBackgroundRefresh.schedule(in: modelContext)
+            }
+          ))
+          Button("Sync Now", systemImage: "arrow.clockwise") {
+            Task { await sync() }
+          }
+          .disabled(coordinator.isSyncing)
+        } header: {
+          Text("Connection")
+        } footer: {
+          Text("Bow checks while you use the app and requests background refresh when iOS allows it. SimpleFIN may update a bank only once a day.")
+        }
+
+        if let lastMessage = connection.lastMessage, !lastMessage.isEmpty {
+          Section("SimpleFIN Messages") {
+            Text(lastMessage)
+              .foregroundStyle(.secondary)
+          }
+        }
+
+        Section {
+          if links.isEmpty {
+            Text("No bank accounts were returned. Sync again after connecting accounts in SimpleFIN.")
+              .foregroundStyle(.secondary)
+          }
+          ForEach(links.sorted { $0.name < $1.name }) { link in
+            VStack(alignment: .leading, spacing: 4) {
+              Picker(selection: Binding(
+                get: { link.localAccountID },
+                set: { id in
+                  link.localAccountID = id
+                  connection.lastMappingChangeAt = Date()
+                  try? modelContext.save()
+                }
+              )) {
+                Text("Do Not Import").tag(nil as UUID?)
+                ForEach(accounts.filter { account in
+                  account.currencyCode == link.currencyCode
+                    && (account.id == link.localAccountID
+                      || !links.contains { $0.id != link.id && $0.localAccountID == account.id })
+                }) { account in
+                  Text(account.name).tag(Optional(account.id))
+                }
+              } label: {
+                Text(link.name)
+              }
+              .pickerStyle(.menu)
+              if let balance = link.reportedBalance, let date = link.reportedAt {
+                Text("Bank balance: \(balance) \(link.currencyCode) · \(date.formatted(date: .abbreviated, time: .omitted))")
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+              }
+            }
+          }
+        } header: {
+          Text("Import Into Bow")
+        } footer: {
+          Text("Choose an existing Bow account with the same currency for each bank account, then tap Sync Now. Unmapped accounts are skipped. Changing a mapping affects future imports; existing transactions stay where they are.")
+        }
+
+        if !reviewItems.isEmpty {
+          Section("Possible Duplicates · \(reviewItems.count)") {
+            ForEach(reviewItems) { record in
+              NavigationLink {
+                SimpleFINReviewScreen(record: record)
+              } label: {
+                VStack(alignment: .leading, spacing: 3) {
+                  Text(record.payee.isEmpty ? "Bank transaction" : record.payee)
+                  Text("\(record.date.formatted(date: .abbreviated, time: .omitted)) · \(BudgetMoney.formatted(record.amountMinor, currencyCode: accounts.first { $0.id == record.localAccountID }?.currencyCode ?? "USD"))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+              }
+            }
+          }
+        }
+
+        Section {
+          Button("Disconnect SimpleFIN", role: .destructive) { showingDisconnect = true }
+        } footer: {
+          Text("Disconnecting stops future imports. Transactions already in Bow remain. You can also revoke access in SimpleFIN.")
+        }
+      } else {
+        Section {
+          Link("Get a SimpleFIN Setup Token", destination: URL(string: "https://bridge.simplefin.org/simplefin/create")!)
+          SecureField("Setup Token", text: $setupToken)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .textContentType(.password)
+          Button("Connect SimpleFIN", systemImage: "link") {
+            Task { await connect() }
+          }
+          .disabled(setupToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || coordinator.isSyncing)
+        } header: {
+          Text("Connect")
+        } footer: {
+          Text("SimpleFIN supplies read-only bank data. Paste its one-time token here. Bow stores the access credential securely on this device.")
+        }
+      }
+    }
+    .navigationTitle("SimpleFIN")
+    .overlay {
+      if coordinator.isSyncing {
+        ProgressView("Contacting SimpleFIN…")
+          .padding()
+          .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+      }
+    }
+    .alert("SimpleFIN", isPresented: Binding(
+      get: { message != nil },
+      set: { if !$0 { message = nil } }
+    )) {
+      Button("OK") { message = nil }
+    } message: {
+      Text(message ?? "")
+    }
+    .confirmationDialog("Disconnect SimpleFIN?", isPresented: $showingDisconnect) {
+      Button("Disconnect", role: .destructive) {
+        do { try coordinator.disconnect(in: modelContext) }
+        catch { message = error.localizedDescription }
+      }
+    } message: {
+      Text("Bank transactions already imported into Bow will remain.")
+    }
+  }
+
+  private func connect() async {
+    do {
+      try await coordinator.connect(token: setupToken, in: modelContext)
+      setupToken = ""
+      SimpleFINBackgroundRefresh.schedule(in: modelContext)
+    } catch {
+      setupToken = ""
+      message = error.localizedDescription
+    }
+  }
+
+  private func sync() async {
+    do {
+      let result = try await coordinator.sync(in: modelContext, manual: true)
+      message = "Imported \(result.imported), matched \(result.linked), and held \(result.needsReview) for duplicate review."
+      SimpleFINBackgroundRefresh.schedule(in: modelContext)
+    } catch {
+      message = error.localizedDescription
+    }
+  }
+}

@@ -69,7 +69,6 @@ private struct BudgetHomeView: View {
   @Query private var schedules: [BudgetSchedule]
   @AppStorage("bow.appearance") private var appearanceRaw = AppAppearance.system.rawValue
   @State private var selectedMonth = Date()
-  @State private var selectedTab: HomeTab = .budget
   @State private var activeSheet: BowSheet?
   @State private var showingSettings = false
   @State private var showingInsights = false
@@ -101,8 +100,8 @@ private struct BudgetHomeView: View {
       if profiles.isEmpty {
         WelcomeScreen()
       } else {
-        TabView(selection: $selectedTab) {
-          Tab("Budget", systemImage: "square.grid.2x2.fill", value: .budget) {
+        TabView {
+          Tab("Budget", systemImage: "square.grid.2x2.fill") {
             NavigationStack {
               BudgetScreen(
                 currencyCode: currencyCode,
@@ -127,9 +126,8 @@ private struct BudgetHomeView: View {
                 }
               }
             }
-            .toolbar(.hidden, for: .tabBar)
           }
-          Tab("Transactions", systemImage: "list.bullet.rectangle", value: .transactions) {
+          Tab("Transactions", systemImage: "list.bullet.rectangle") {
             NavigationStack {
               TransactionsScreen(
                 transactions: transactions,
@@ -146,9 +144,8 @@ private struct BudgetHomeView: View {
                 }
               }
             }
-            .toolbar(.hidden, for: .tabBar)
           }
-          Tab("Calendar", systemImage: "calendar", value: .calendar) {
+          Tab("Calendar", systemImage: "calendar") {
             NavigationStack {
               CalendarScreen(
                 schedules: schedules,
@@ -166,9 +163,8 @@ private struct BudgetHomeView: View {
                 }
               }
             }
-            .toolbar(.hidden, for: .tabBar)
           }
-          Tab("Accounts", systemImage: "banknote.fill", value: .accounts) {
+          Tab("Accounts", systemImage: "banknote.fill") {
             NavigationStack {
               AccountsScreen(
                 accounts: accounts,
@@ -197,13 +193,21 @@ private struct BudgetHomeView: View {
                 }
               }
             }
-            .toolbar(.hidden, for: .tabBar)
           }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-          HomeTabBar(selection: $selectedTab) {
-            activeSheet = .newTransaction
+        .tabBarMinimizeBehavior(.onScrollDown)
+        .tabViewBottomAccessory {
+          HStack {
+            Spacer()
+            Button("Add Transaction", systemImage: "plus") {
+              activeSheet = .newTransaction
+            }
+            .labelStyle(.iconOnly)
+            .font(.title3.weight(.semibold))
+            .buttonStyle(.glassProminent)
+            .accessibilityLabel("Add Transaction")
           }
+          .padding(.horizontal, 16)
         }
         .tint(Color.accentColor)
         .sheet(isPresented: $showingSettings) {

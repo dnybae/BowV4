@@ -30,9 +30,15 @@ struct SimpleFINScreen: View {
             Toggle("Automatic Sync", isOn: Binding(
               get: { connection.automaticSync },
               set: { enabled in
+                let previous = connection.automaticSync
                 connection.automaticSync = enabled
-                try? modelContext.save()
-                SimpleFINBackgroundRefresh.schedule(in: modelContext)
+                do {
+                  try modelContext.save()
+                  SimpleFINBackgroundRefresh.schedule(in: modelContext)
+                } catch {
+                  connection.automaticSync = previous
+                  message = "Automatic sync could not be updated: \(error.localizedDescription)"
+                }
               }
             ))
             Button("Sync Now", systemImage: "arrow.clockwise") {
@@ -65,9 +71,17 @@ struct SimpleFINScreen: View {
               Picker(selection: Binding(
                 get: { link.localAccountID },
                 set: { id in
+                  let previousID = link.localAccountID
+                  let previousChange = connection.lastMappingChangeAt
                   link.localAccountID = id
                   connection.lastMappingChangeAt = Date()
-                  try? modelContext.save()
+                  do {
+                    try modelContext.save()
+                  } catch {
+                    link.localAccountID = previousID
+                    connection.lastMappingChangeAt = previousChange
+                    message = "Account mapping could not be updated: \(error.localizedDescription)"
+                  }
                 }
               )) {
                 Text("Do Not Import").tag(nil as UUID?)

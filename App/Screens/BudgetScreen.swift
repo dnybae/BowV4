@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct BudgetScreen: View {
-  @AppStorage("bow.demoMode") private var isDemoMode = false
-  @AppStorage("bow.demoScenario") private var demoScenarioRaw = DemoScenario.showcase.rawValue
   var currencyCode: String
   var groups: [BudgetGroup]
   var envelopes: [BudgetEnvelope]
@@ -80,15 +78,6 @@ struct BudgetScreen: View {
 
   var body: some View {
     List {
-      if isDemoMode {
-        Section {
-          Label("Demo · \((DemoScenario(rawValue: demoScenarioRaw) ?? .showcase).title)", systemImage: "play.rectangle")
-            .font(.subheadline.weight(.semibold))
-          Text("Explore freely. Change the situation or reset sample data in Settings.")
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-        }
-      }
       Section {
         HStack {
           Button("Previous Month", systemImage: "chevron.left") {

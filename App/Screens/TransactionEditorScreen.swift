@@ -182,6 +182,9 @@ struct TransactionEditorScreen: View {
       }
       .onChange(of: payee) { _, _ in applyPayeeRule() }
       .onChange(of: kind) { _, _ in applyPayeeRule() }
+      .onChange(of: accountID) { _, newAccountID in
+        if destinationID == newAccountID { destinationID = nil }
+      }
     }
   }
 

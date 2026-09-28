@@ -57,11 +57,11 @@ struct TransactionsScreen: View {
             }
           }
           if reviewCount > 0 {
-          NavigationLink {
-            SimpleFINScreen()
-          } label: {
-            Label("Resolve \(reviewCount) bank transactions", systemImage: "arrow.clockwise")
-          }
+            NavigationLink {
+              SimpleFINScreen()
+            } label: {
+              Label("Resolve \(reviewCount) bank transactions", systemImage: "arrow.clockwise")
+            }
           }
         }
       }

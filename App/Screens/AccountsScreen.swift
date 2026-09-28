@@ -39,6 +39,8 @@ struct AccountsScreen: View {
         .frame(maxWidth: .infinity)
       } else {
         VStack(alignment: .leading, spacing: 30) {
+          netWorthCard
+
           if hasOnBudgetAccounts {
             budgetGroup("On Budget") {
               accountGroup(.cash, title: "Cash")
@@ -48,12 +50,10 @@ struct AccountsScreen: View {
 
           if hasOffBudgetAccounts {
             budgetGroup("Off Budget") {
-              accountGroup(.asset, title: "Assets")
-              accountGroup(.liability, title: "Liabilities")
+              accountGroup(.asset, title: "Investments")
+              accountGroup(.liability, title: "Loans")
             }
           }
-
-          netWorthCard
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)

@@ -164,7 +164,8 @@ private struct BudgetHomeView: View {
                 simpleFINRecords: simpleFINRecords,
                 currencyCode: currencyCode,
                 onSelect: { activeSheet = .editTransaction($0) },
-                onRecord: { activeSheet = .recordScheduled($0) }
+                onRecord: { activeSheet = .recordScheduled($0) },
+                onEditSchedule: { activeSheet = .editSchedule($0) }
               )
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

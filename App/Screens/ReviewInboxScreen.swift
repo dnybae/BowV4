@@ -11,6 +11,7 @@ struct ReviewInboxScreen: View {
   var currencyCode: String
   var onSelectTransaction: (UUID) -> Void
   var onRecord: (ScheduledTransactionDraft) -> Void
+  var onEditSchedule: (UUID) -> Void
   @State private var pendingSkip: BudgetScheduleOccurrence?
   @State private var message: String?
 
@@ -75,6 +76,10 @@ struct ReviewInboxScreen: View {
                 Button("Skip") { pendingSkip = occurrence }
                   .buttonStyle(.bordered)
               }
+              Button("Edit Schedule", systemImage: "pencil") {
+                onEditSchedule(schedule.id)
+              }
+              .font(.subheadline)
             }
             .padding(.vertical, 4)
           }

@@ -11,6 +11,7 @@ struct TransactionsScreen: View {
   var currencyCode: String
   var onSelect: (UUID) -> Void
   var onRecord: (ScheduledTransactionDraft) -> Void
+  var onEditSchedule: (UUID) -> Void
   @State private var searchText = ""
   @State private var filter = TransactionFilter()
   @State private var showingFilters = false
@@ -56,7 +57,8 @@ struct TransactionsScreen: View {
               transactions: transactions, records: simpleFINRecords,
               occurrences: occurrences, schedules: schedules,
               accounts: accounts, currencyCode: currencyCode,
-              onSelectTransaction: onSelect, onRecord: onRecord
+              onSelectTransaction: onSelect, onRecord: onRecord,
+              onEditSchedule: onEditSchedule
             )
           } label: {
             VStack(alignment: .leading, spacing: 4) {

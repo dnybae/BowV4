@@ -76,6 +76,14 @@ private struct BudgetHomeView: View {
 
   private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
 
+  private var accountsTabSymbol: String {
+    if #available(iOS 27.0, *) {
+      "building.classical.columns.fill"
+    } else {
+      "building.columns.fill"
+    }
+  }
+
   private var snapshot: BudgetSnapshot {
     BudgetLedger.snapshot(
       month: selectedMonth,
@@ -137,7 +145,7 @@ private struct BudgetHomeView: View {
               }
             }
           }
-          Tab("Transactions", systemImage: "list.bullet.rectangle", value: .transactions) {
+          Tab("Spending", systemImage: "list.bullet.rectangle", value: .transactions) {
             NavigationStack {
               TransactionsScreen(
                 transactions: transactions,
@@ -174,7 +182,7 @@ private struct BudgetHomeView: View {
               }
             }
           }
-          Tab("Accounts", systemImage: "banknote.fill", value: .accounts) {
+          Tab("Accounts", systemImage: accountsTabSymbol, value: .accounts) {
             NavigationStack {
               AccountsScreen(
                 accounts: accounts,

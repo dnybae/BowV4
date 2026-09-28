@@ -99,7 +99,7 @@ struct TransactionsScreen: View {
       }
     }
     .searchable(text: $searchText, prompt: "Payee, note, account, or envelope")
-    .navigationTitle("Transactions")
+    .navigationTitle("Spending")
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
         Button("Filter Transactions", systemImage: "line.3.horizontal.decrease") {

@@ -6,6 +6,8 @@ struct BudgetCalculatorChecks {
     let decimalSeparator = Locale.current.decimalSeparator ?? "."
     expect(BudgetMoney.parseMinor("12\(decimalSeparator)34") == 1_234, "money uses exact minor units")
     expect(BudgetMoney.parseMinor("-3\(decimalSeparator)25") == -325, "negative opening balance parses")
+    expect(BudgetMoney.parseMinor(BudgetMoney.editableSigned(-325)) == -325,
+           "editing a debt balance preserves its sign")
     expect(BudgetMoney.parseMinor("12\(decimalSeparator)345") == nil, "fractional cents are rejected")
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(secondsFromGMT: 0)!

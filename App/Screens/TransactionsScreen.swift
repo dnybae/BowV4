@@ -22,7 +22,8 @@ struct TransactionsScreen: View {
           date: transaction.date,
           amountMinor: transaction.amountMinor,
           isUncategorizedExpense: transaction.kind == .expense
-            && transaction.envelopeID == nil
+            && transaction.envelopeID == nil,
+          needsApproval: transaction.needsApproval
         )) && (searchText.isEmpty
           || transaction.payee.localizedCaseInsensitiveContains(searchText)
           || transaction.notes.localizedCaseInsensitiveContains(searchText)
@@ -39,12 +40,28 @@ struct TransactionsScreen: View {
   var body: some View {
     List {
       let reviewCount = simpleFINRecords.filter { $0.status == .review }.count
-      if reviewCount > 0 {
-        Section {
+      let approvalCount = transactions.filter(\.needsApproval).count
+      let uncategorizedCount = transactions.filter { $0.kind == .expense && $0.envelopeID == nil }.count
+      if reviewCount + approvalCount + uncategorizedCount > 0 {
+        Section("Needs Attention") {
+          if approvalCount > 0 {
+            Button("Review \(approvalCount) imported transactions", systemImage: "checkmark.circle") {
+              searchText = ""
+              filter = TransactionFilter(needsApprovalOnly: true)
+            }
+          }
+          if uncategorizedCount > 0 {
+            Button("Categorize \(uncategorizedCount) transactions", systemImage: "tag") {
+              searchText = ""
+              filter = TransactionFilter(envelopeScope: .uncategorized)
+            }
+          }
+          if reviewCount > 0 {
           NavigationLink {
             SimpleFINScreen()
           } label: {
-            Label("Review \(reviewCount) possible bank duplicates", systemImage: "arrow.clockwise")
+            Label("Resolve \(reviewCount) bank transactions", systemImage: "arrow.clockwise")
+          }
           }
         }
       }

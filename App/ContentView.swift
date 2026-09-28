@@ -14,7 +14,7 @@ struct ContentView: View {
         if let demoContainer {
           BudgetHomeView(isDemoMode: true)
             .modelContainer(demoContainer)
-            .id(demoResetVersion)
+            .id("\(demoScenarioRaw)-\(demoResetVersion)")
         } else if let demoError {
           ContentUnavailableView {
             Label("Demo Unavailable", systemImage: "exclamationmark.triangle")
@@ -111,6 +111,7 @@ private struct BudgetHomeView: View {
                 selectedMonth: $selectedMonth,
                 onAddGroup: { activeSheet = .newGroup },
                 onAddEnvelope: { activeSheet = .newEnvelope },
+                onEditEnvelope: { activeSheet = .editEnvelope($0) },
                 onImportYNAB: { activeSheet = .importYNAB },
                 onMoveMoney: { source, target in
                   activeSheet = .moveMoney(source, target)
@@ -160,9 +161,10 @@ private struct BudgetHomeView: View {
                 transactions: transactions,
                 accounts: accounts,
                 envelopes: envelopes,
-                snapshot: currentSnapshot,
+                allocations: allocations,
                 currencyCode: currencyCode,
-                onRecord: { activeSheet = .recordScheduled($0) }
+                onRecord: { activeSheet = .recordScheduled($0) },
+                onSelectTransaction: { activeSheet = .editTransaction($0) }
               )
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -253,6 +255,12 @@ private struct BudgetHomeView: View {
             GroupEditorScreen(nextOrder: groups.count)
           case .newEnvelope:
             EnvelopeEditorScreen(groups: groups, nextOrder: envelopes.count)
+          case .editEnvelope(let id):
+            EnvelopeEditorScreen(
+              groups: groups,
+              nextOrder: envelopes.count,
+              envelope: envelopes.first { $0.id == id }
+            )
           case .importYNAB:
             YNABImportScreen(groups: groups, envelopes: envelopes)
           case .moveMoney(let source, let target):
@@ -296,6 +304,7 @@ private enum BowSheet: Identifiable {
   case newAccount
   case newGroup
   case newEnvelope
+  case editEnvelope(UUID)
   case importYNAB
   case moveMoney(BudgetBucket, BudgetBucket)
 
@@ -307,6 +316,7 @@ private enum BowSheet: Identifiable {
     case .newAccount: "newAccount"
     case .newGroup: "newGroup"
     case .newEnvelope: "newEnvelope"
+    case .editEnvelope(let id): "editEnvelope-\(id)"
     case .importYNAB: "importYNAB"
     case .moveMoney: "moveMoney"
     }

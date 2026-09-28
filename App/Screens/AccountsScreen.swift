@@ -7,6 +7,7 @@ struct AccountsScreen: View {
   var currencyCode: String
   var onAddAccount: () -> Void
   var onSelectTransaction: (UUID) -> Void
+  @State private var editingAccount: BudgetAccount?
 
   var body: some View {
     List {
@@ -32,7 +33,8 @@ struct AccountsScreen: View {
                   transactions: transactions,
                   balanceMinor: snapshot.accountBalances[account.id, default: 0],
                   currencyCode: currencyCode,
-                  onSelectTransaction: onSelectTransaction
+                  onSelectTransaction: onSelectTransaction,
+                  onEditAccount: { editingAccount = account }
                 )
               } label: {
                 HStack(spacing: 12) {
@@ -58,6 +60,9 @@ struct AccountsScreen: View {
       }
     }
     .navigationTitle("Accounts")
+    .sheet(item: $editingAccount) { account in
+      AccountEditorScreen(currencyCode: currencyCode, account: account)
+    }
   }
 }
 
@@ -67,6 +72,7 @@ private struct AccountDetailScreen: View {
   var balanceMinor: Int64
   var currencyCode: String
   var onSelectTransaction: (UUID) -> Void
+  var onEditAccount: () -> Void
   @State private var showingReconciliation = false
 
   private var accountTransactions: [BudgetTransaction] {
@@ -118,6 +124,11 @@ private struct AccountDetailScreen: View {
       }
     }
     .navigationTitle(account.name)
+    .toolbar {
+      ToolbarItem(placement: .topBarTrailing) {
+        Button("Edit Account", systemImage: "pencil", action: onEditAccount)
+      }
+    }
     .sheet(isPresented: $showingReconciliation) {
       ReconciliationScreen(account: account, transactions: accountTransactions, currencyCode: currencyCode)
     }

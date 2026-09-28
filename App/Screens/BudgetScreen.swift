@@ -11,6 +11,7 @@ struct BudgetScreen: View {
   @Binding var selectedMonth: Date
   var onAddGroup: () -> Void
   var onAddEnvelope: () -> Void
+  var onEditEnvelope: (UUID) -> Void
   var onImportYNAB: () -> Void
   var onMoveMoney: (BudgetBucket, BudgetBucket) -> Void
 
@@ -58,6 +59,23 @@ struct BudgetScreen: View {
       return .envelope(overspent.id)
     }
     return .readyToAssign
+  }
+
+  private func moveForEnvelope(_ envelope: BudgetEnvelope) -> (BudgetBucket, BudgetBucket)? {
+    let target = BudgetBucket.envelope(envelope.id)
+    if snapshot.readyToAssignMinor > 0 { return (.readyToAssign, target) }
+    if snapshot.available(for: envelope.id) > 0 { return (target, .readyToAssign) }
+    if let other = envelopes.first(where: {
+      $0.id != envelope.id && snapshot.available(for: $0.id) > 0
+    }) {
+      return (.envelope(other.id), target)
+    }
+    if let card = creditCards.first(where: {
+      snapshot.paymentAvailable[$0.id, default: 0] > 0
+    }) {
+      return (.cardPayment(card.id), target)
+    }
+    return nil
   }
 
   var body: some View {
@@ -135,9 +153,13 @@ struct BudgetScreen: View {
               EnvelopeBudgetRow(
                 envelope: envelope,
                 currencyCode: currencyCode,
-                snapshot: snapshot
+                snapshot: snapshot,
+                canMove: moveForEnvelope(envelope) != nil,
+                onEdit: { onEditEnvelope(envelope.id) }
               ) {
-                onMoveMoney(.readyToAssign, .envelope(envelope.id))
+                if let (source, target) = moveForEnvelope(envelope) {
+                  onMoveMoney(source, target)
+                }
               }
             }
         }
@@ -199,6 +221,8 @@ private struct EnvelopeBudgetRow: View {
   var envelope: BudgetEnvelope
   var currencyCode: String
   var snapshot: BudgetSnapshot
+  var canMove: Bool
+  var onEdit: () -> Void
   var onSelect: () -> Void
 
   private var available: Int64 { snapshot.available(for: envelope.id) }
@@ -216,7 +240,7 @@ private struct EnvelopeBudgetRow: View {
           Text(envelope.name)
             .foregroundStyle(.primary)
           if available < 0 {
-            Text("Overspent · Tap to cover")
+            Text(canMove ? "Overspent · Tap to cover" : "Overspent · Add cash to cover")
               .font(.caption)
               .foregroundStyle(.red)
           } else {
@@ -225,6 +249,14 @@ private struct EnvelopeBudgetRow: View {
               .foregroundStyle(.secondary)
               .lineLimit(1)
               .minimumScaleFactor(0.8)
+          }
+          if let target = envelope.targetMinor {
+            let remaining = max(0, target - max(0, snapshot.assigned[envelope.id, default: 0]))
+            Text(remaining == 0
+              ? "Monthly target met"
+              : "\(BudgetMoney.formatted(remaining, currencyCode: currencyCode)) to monthly target")
+              .font(.caption)
+              .foregroundStyle(.secondary)
           }
         }
         Spacer(minLength: 8)
@@ -236,7 +268,11 @@ private struct EnvelopeBudgetRow: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    .disabled(!canMove)
+    .swipeActions {
+      Button("Edit", systemImage: "pencil", action: onEdit)
+    }
     .accessibilityLabel("\(envelope.name), available \(BudgetMoney.formatted(available, currencyCode: currencyCode))")
-    .accessibilityHint("Opens money movement")
+    .accessibilityHint(canMove ? "Opens money movement" : "Add funds before moving money")
   }
 }

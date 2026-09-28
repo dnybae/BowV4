@@ -78,6 +78,10 @@ struct TransactionFilterScreen: View {
           .pickerStyle(.menu)
         }
 
+        Section("Review") {
+          Toggle("Needs Approval Only", isOn: $draft.needsApprovalOnly)
+        }
+
         Section("Date Range") {
           Toggle("From Date", isOn: $usesStartDate)
           if usesStartDate {

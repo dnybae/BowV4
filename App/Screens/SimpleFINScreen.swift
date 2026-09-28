@@ -92,7 +92,9 @@ struct SimpleFINScreen: View {
         } header: {
           Text("Import Into Bow")
         } footer: {
-          Text("Choose an existing Bow account with the same currency for each bank account, then tap Sync Now. Unmapped accounts are skipped. Changing a mapping affects future imports; existing transactions stay where they are.")
+          Text(isDemoMode
+            ? "Try changing these mappings. The sample review items stay with their original accounts; in a connected budget, a mapping change affects future imports."
+            : "Choose an existing Bow account with the same currency for each bank account, then tap Sync Now. Unmapped accounts are skipped. Changing a mapping affects future imports; existing transactions stay where they are.")
         }
 
         if !reviewItems.isEmpty {

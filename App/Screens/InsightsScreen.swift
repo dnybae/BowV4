@@ -1,7 +1,9 @@
 import SwiftUI
 import Charts
+import SwiftData
 
 struct InsightsScreen: View {
+  @Query private var payees: [BudgetPayee]
   var groups: [BudgetGroup]
   var envelopes: [BudgetEnvelope]
   var accounts: [BudgetAccount]
@@ -11,6 +13,7 @@ struct InsightsScreen: View {
   @State private var selectedBarMonth: Date?
   @State private var selectedSpendingAngle: Double?
   @State private var detail: InsightsDetail?
+  @State private var editingTransaction: BudgetTransaction?
 
   private var calendar: Calendar { .current }
   private var months: [Date] {
@@ -159,26 +162,42 @@ struct InsightsScreen: View {
     }
     .sheet(item: $detail) { value in
       NavigationStack {
-        List(value.transactions.sorted { $0.date > $1.date }) { transaction in
-          HStack {
-            VStack(alignment: .leading) {
-              Text(transaction.payee.isEmpty ? transaction.kind.title : transaction.payee)
-              Text(transaction.date, style: .date)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        List(transactions.filter { value.transactionIDs.contains($0.id) }.sorted { $0.date > $1.date }) { transaction in
+          Button {
+            editingTransaction = transaction
+          } label: {
+            HStack {
+              VStack(alignment: .leading) {
+                Text(transaction.payee.isEmpty ? transaction.kind.title : transaction.payee)
+                  .foregroundStyle(.primary)
+                Text(transaction.date, style: .date)
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+              }
+              Spacer()
+              Text(BudgetMoney.formatted(transaction.amountMinor, currencyCode: currencyCode))
+                .foregroundStyle(.primary)
             }
-            Spacer()
-            Text(BudgetMoney.formatted(transaction.amountMinor, currencyCode: currencyCode))
           }
+          .buttonStyle(.plain)
         }
         .overlay {
-          if value.transactions.isEmpty {
+          if !transactions.contains(where: { value.transactionIDs.contains($0.id) }) {
             ContentUnavailableView("No transactions", systemImage: "list.bullet.rectangle")
           }
         }
         .navigationTitle(value.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { detail = nil } } }
+        .sheet(item: $editingTransaction) { transaction in
+          TransactionEditorScreen(
+            transaction: transaction,
+            accounts: accounts,
+            envelopes: envelopes,
+            payees: payees,
+            currencyCode: currencyCode
+          )
+        }
       }
     }
   }
@@ -202,7 +221,12 @@ private struct InsightsGroup: Identifiable {
 private struct InsightsDetail: Identifiable {
   var id = UUID()
   var title: String
-  var transactions: [BudgetTransaction]
+  var transactionIDs: Set<UUID>
+
+  init(title: String, transactions: [BudgetTransaction]) {
+    self.title = title
+    transactionIDs = Set(transactions.map(\.id))
+  }
 }
 
 private extension View {

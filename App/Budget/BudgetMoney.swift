@@ -33,6 +33,10 @@ struct BudgetMoney {
       .stringValue
       .replacingOccurrences(of: ".", with: Locale.current.decimalSeparator ?? ".")
   }
+
+  static func editableSigned(_ minor: Int64) -> String {
+    (minor < 0 ? "-" : "") + editable(minor)
+  }
 }
 
 private extension Decimal {

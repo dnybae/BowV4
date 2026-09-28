@@ -5,9 +5,10 @@ struct CalendarScreen: View {
   var transactions: [BudgetTransaction]
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
-  var snapshot: BudgetSnapshot
+  var allocations: [BudgetAllocation]
   var currencyCode: String
   var onRecord: (ScheduledTransactionDraft) -> Void
+  var onSelectTransaction: (UUID) -> Void
   @State private var selectedDate = Date()
   @State private var visibleMonth = Date()
   @State private var showingNewSchedule = false
@@ -28,10 +29,18 @@ struct CalendarScreen: View {
   private var selectedSchedules: [BudgetSchedule] {
     schedulesForDay(selectedDate)
   }
+  private var selectedSnapshot: BudgetSnapshot {
+    BudgetLedger.snapshot(
+      month: selectedDate,
+      accounts: accounts,
+      envelopes: envelopes,
+      allocations: allocations,
+      transactions: transactions
+    )
+  }
 
   var body: some View {
-    GeometryReader { geometry in
-      let rowHeight = min(42, max(28, (geometry.size.height * 0.5 - 72) / CGFloat(days.count / 7)))
+    ScrollView {
       VStack(alignment: .leading, spacing: 0) {
         HStack {
           Text(visibleMonth.formatted(.dateTime.month(.wide).year()))
@@ -68,9 +77,9 @@ struct CalendarScreen: View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 0) {
           ForEach(days.indices, id: \.self) { index in
             if let day = days[index] {
-              dayButton(day, height: rowHeight)
+              dayButton(day)
             } else {
-              Color.clear.frame(height: rowHeight)
+              Color.clear.frame(height: 48)
             }
           }
         }
@@ -89,23 +98,20 @@ struct CalendarScreen: View {
         .frame(maxWidth: .infinity)
         .overlay(alignment: .top) { Rectangle().fill(.quaternary).frame(height: 0.5) }
 
-        ScrollView {
-          if selectedSchedules.isEmpty {
-            ContentUnavailableView(
-              "No scheduled bills",
-              systemImage: "calendar.badge.clock",
-              description: Text("Add a bill to see its upcoming dates and funding status.")
-            )
-            .frame(maxWidth: .infinity)
-          } else {
-            LazyVStack(alignment: .leading, spacing: 0) {
-              ForEach(selectedSchedules) { schedule in
-                agendaRow(schedule)
-              }
+        if selectedSchedules.isEmpty {
+          ContentUnavailableView(
+            "No scheduled bills",
+            systemImage: "calendar.badge.clock",
+            description: Text("Add a bill to see its upcoming dates and funding status.")
+          )
+          .frame(maxWidth: .infinity)
+        } else {
+          LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(selectedSchedules) { schedule in
+              agendaRow(schedule)
             }
           }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
       .frame(maxWidth: .infinity)
     }
@@ -124,11 +130,10 @@ struct CalendarScreen: View {
     }
   }
 
-  private func dayButton(_ day: Date, height: CGFloat) -> some View {
+  private func dayButton(_ day: Date) -> some View {
     let due = schedulesForDay(day)
     let isSelected = calendar.isDate(day, inSameDayAs: selectedDate)
     let isToday = calendar.isDateInToday(day)
-    let dayDiameter = min(28, height - 6)
     return Button {
       selectedDate = day
     } label: {
@@ -136,7 +141,7 @@ struct CalendarScreen: View {
         Text(day.formatted(.dateTime.day()))
           .font(.system(.callout, design: .rounded, weight: isSelected ? .bold : .medium))
           .foregroundStyle(isSelected ? Color(uiColor: .systemBackground) : (isToday ? Color.red : Color.primary))
-          .frame(width: dayDiameter, height: dayDiameter)
+          .frame(width: 28, height: 28)
           .background {
             if isSelected { Circle().fill(Color.primary) }
           }
@@ -150,7 +155,7 @@ struct CalendarScreen: View {
         .frame(height: 4)
       }
       .frame(maxWidth: .infinity)
-      .frame(height: height)
+      .frame(height: 48)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -159,10 +164,11 @@ struct CalendarScreen: View {
   }
 
   private func agendaRow(_ schedule: BudgetSchedule) -> some View {
-    let recorded = transactions.contains {
+    let recordedTransaction = transactions.first {
       $0.scheduleID == schedule.id && $0.scheduledFor.map { calendar.isDate($0, inSameDayAs: selectedDate) } == true
     }
-    let available = schedule.envelopeID.map { snapshot.available(for: $0) }
+    let recorded = recordedTransaction != nil
+    let available = schedule.envelopeID.map { selectedSnapshot.available(for: $0) }
     let shortfall = max(0, schedule.amountMinor - max(0, available ?? 0))
     return VStack(alignment: .leading, spacing: 8) {
       Button { editingSchedule = schedule } label: {
@@ -205,6 +211,12 @@ struct CalendarScreen: View {
             notes: schedule.notes,
             date: selectedDate
           ))
+        }
+        .font(.subheadline)
+      }
+      if let recordedTransaction {
+        Button("View Recorded Transaction", systemImage: "arrow.up.right") {
+          onSelectTransaction(recordedTransaction.id)
         }
         .font(.subheadline)
       }

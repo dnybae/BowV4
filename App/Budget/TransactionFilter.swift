@@ -3,6 +3,7 @@ import Foundation
 struct TransactionFilter: Equatable {
   var accountID: UUID?
   var envelopeScope: TransactionEnvelopeScope = .all
+  var needsApprovalOnly = false
   var startDate: Date?
   var endDate: Date?
   var minimumAmountMinor: Int64?
@@ -12,6 +13,7 @@ struct TransactionFilter: Equatable {
     [
       accountID != nil,
       envelopeScope != .all,
+      needsApprovalOnly,
       startDate != nil,
       endDate != nil,
       minimumAmountMinor != nil,
@@ -35,6 +37,8 @@ struct TransactionFilter: Equatable {
     case .envelope(let id):
       guard item.envelopeID == id else { return false }
     }
+
+    if needsApprovalOnly && !item.needsApproval { return false }
 
     if let startDate,
        calendar.compare(item.date, to: startDate, toGranularity: .day) == .orderedAscending {
@@ -65,4 +69,5 @@ struct TransactionFilterItem {
   var date: Date
   var amountMinor: Int64
   var isUncategorizedExpense: Bool
+  var needsApproval: Bool = false
 }

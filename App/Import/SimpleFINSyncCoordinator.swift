@@ -10,7 +10,7 @@ final class SimpleFINSyncCoordinator {
 
   private init() {}
 
-  func connect(token: String, in context: ModelContext) async throws {
+  func connect(token: String, startDate: Date? = nil, in context: ModelContext) async throws {
     guard !isSyncing else { return }
     isSyncing = true
     defer { isSyncing = false }
@@ -18,12 +18,13 @@ final class SimpleFINSyncCoordinator {
     // A setup token can only be claimed once. Save its replacement before any other request.
     try SimpleFINCredentialStore().save(accessURL)
     let connection = try connection(in: context)
+    connection.importStartDate = startDate
     try recordRequest(on: connection, at: Date())
     try context.save()
     do {
       let response = try await SimpleFINClient().fetch(
         accessURL: accessURL,
-        startDate: Date().addingTimeInterval(-89 * 86_400)
+        startDate: max(Date().addingTimeInterval(-89 * 86_400), startDate ?? .distantPast)
       )
       updateAccounts(response.accounts, in: context)
       connection.lastMessage = response.messages.isEmpty ? nil : response.messages.joined(separator: "\n")
@@ -68,8 +69,9 @@ final class SimpleFINSyncCoordinator {
     let earliest = now.addingTimeInterval(-89 * 86_400)
     let mappingChanged = (connection.lastMappingChangeAt ?? .distantPast)
       > (connection.lastSuccessfulAt ?? .distantPast)
-    let start = mappingChanged ? earliest
+    let historyStart = mappingChanged ? earliest
       : max(earliest, (connection.lastSuccessfulAt ?? earliest).addingTimeInterval(-5 * 86_400))
+    let start = max(historyStart, connection.importStartDate ?? .distantPast)
     do {
       let response = try await SimpleFINClient().fetch(accessURL: accessURL, startDate: start)
       updateAccounts(response.accounts, in: work)

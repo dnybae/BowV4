@@ -11,6 +11,7 @@ final class SimpleFINConnection {
   var requestsInWindow: Int = 0
   var lastMessage: String? = nil
   var automaticSync: Bool = true
+  var importStartDate: Date? = nil
 
   init() {}
 }

@@ -69,7 +69,9 @@ struct AccountsScreen: View {
       }
     }
     .sheet(item: $editingAccount) { account in
-      AccountEditorScreen(currencyCode: currencyCode, account: account)
+      NavigationStack {
+        AccountEditorScreen(currencyCode: currencyCode, account: account)
+      }
     }
   }
 
@@ -245,6 +247,10 @@ private struct AccountDetailScreen: View {
             .font(.title.weight(.semibold))
         }
         .padding(.vertical, 8)
+        LabeledContent("Type", value: account.accountType.title)
+        if !account.note.isEmpty {
+          LabeledContent("Note", value: account.note)
+        }
         Button("Reconcile Account", systemImage: "checkmark.circle") {
           showingReconciliation = true
         }

@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct SimpleFINScreen: View {
+  var onDone: (() -> Void)? = nil
   @Environment(\.modelContext) private var modelContext
   @AppStorage("bow.demoMode") private var isDemoMode = false
   @Query private var connections: [SimpleFINConnection]
@@ -10,6 +11,8 @@ struct SimpleFINScreen: View {
   @Query private var accounts: [BudgetAccount]
   @State private var coordinator = SimpleFINSyncCoordinator.shared
   @State private var setupToken = ""
+  @State private var chooseImportDate = false
+  @State private var importDate = Date().addingTimeInterval(-89 * 86_400)
   @State private var message: String?
   @State private var showingDisconnect = false
 
@@ -70,19 +73,7 @@ struct SimpleFINScreen: View {
             VStack(alignment: .leading, spacing: 4) {
               AccountSelectionField(title: link.name, selection: Binding(
                 get: { link.localAccountID },
-                set: { id in
-                  let previousID = link.localAccountID
-                  let previousChange = connection.lastMappingChangeAt
-                  link.localAccountID = id
-                  connection.lastMappingChangeAt = Date()
-                  do {
-                    try modelContext.save()
-                  } catch {
-                    link.localAccountID = previousID
-                    connection.lastMappingChangeAt = previousChange
-                    message = "Account mapping could not be updated: \(error.localizedDescription)"
-                  }
-                }
+                set: { id in setMapping(id, for: link, connection: connection) }
               ), accounts: accounts.filter { account in
                   account.currencyCode == link.currencyCode
                     && (account.id == link.localAccountID
@@ -94,13 +85,28 @@ struct SimpleFINScreen: View {
                   .foregroundStyle(.secondary)
               }
             }
+            if link.localAccountID == nil && !isDemoMode {
+              NavigationLink {
+                AccountEditorScreen(
+                  currencyCode: link.currencyCode,
+                  suggestedName: link.name,
+                  suggestedBalanceMinor: link.reportedBalance.flatMap {
+                    BudgetMoney.parseMinor($0, locale: Locale(identifier: "en_US_POSIX"))
+                  }
+                ) { account in
+                  setMapping(account.id, for: link, connection: connection)
+                }
+              } label: {
+                Label("Create and Link \(link.name)", systemImage: "plus")
+              }
+            }
           }
         } header: {
           Text("Import Into Bow")
         } footer: {
           Text(isDemoMode
             ? "Try changing these mappings. The sample review items stay with their original accounts; in a connected budget, a mapping change affects future imports."
-            : "Choose an existing Bow account with the same currency for each bank account, then tap Sync Now. Unmapped accounts are skipped. Changing a mapping affects future imports; existing transactions stay where they are.")
+            : "Create a Bow account or choose an existing one with the same currency, then tap Sync Now. Unlinked bank accounts are skipped. Changing a link affects future imports only.")
         }
 
         if !reviewItems.isEmpty {
@@ -137,11 +143,19 @@ struct SimpleFINScreen: View {
         }
       } else {
         Section {
+          Text("Connect a read-only bank feed, then choose which bank accounts to add to Bow.")
+            .foregroundStyle(.secondary)
           Link("Get a SimpleFIN Setup Token", destination: URL(string: "https://bridge.simplefin.org/simplefin/create")!)
           SecureField("Setup Token", text: $setupToken)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
             .textContentType(.password)
+          Toggle("Choose import start date", isOn: $chooseImportDate)
+          if chooseImportDate {
+            DatePicker("Import From", selection: $importDate,
+                       in: Date().addingTimeInterval(-89 * 86_400)...Date(),
+                       displayedComponents: .date)
+          }
           Button("Connect SimpleFIN", systemImage: "link") {
             Task { await connect() }
           }
@@ -149,11 +163,18 @@ struct SimpleFINScreen: View {
         } header: {
           Text("Connect")
         } footer: {
-          Text("SimpleFIN supplies read-only bank data. Paste its one-time token here. Bow stores the access credential securely on this device.")
+          Text("Leave the date off to request available history from the last 90 days. SimpleFIN has a separate signup and fee. Bow stores the access credential securely on this device.")
         }
       }
     }
     .navigationTitle("SimpleFIN")
+    .toolbar {
+      if connection != nil, let onDone {
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Done", action: onDone)
+        }
+      }
+    }
     .overlay {
       if coordinator.isSyncing {
         ProgressView("Contacting SimpleFIN…")
@@ -181,12 +202,31 @@ struct SimpleFINScreen: View {
 
   private func connect() async {
     do {
-      try await coordinator.connect(token: setupToken, in: modelContext)
+      try await coordinator.connect(
+        token: setupToken,
+        startDate: chooseImportDate ? Calendar.current.startOfDay(for: importDate) : nil,
+        in: modelContext
+      )
       setupToken = ""
       SimpleFINBackgroundRefresh.schedule(in: modelContext)
     } catch {
       setupToken = ""
       message = error.localizedDescription
+    }
+  }
+
+  private func setMapping(_ id: UUID?, for link: SimpleFINAccountLink,
+                          connection: SimpleFINConnection) {
+    let previousID = link.localAccountID
+    let previousChange = connection.lastMappingChangeAt
+    link.localAccountID = id
+    connection.lastMappingChangeAt = Date()
+    do {
+      try modelContext.save()
+    } catch {
+      link.localAccountID = previousID
+      connection.lastMappingChangeAt = previousChange
+      message = "Account link could not be updated: \(error.localizedDescription)"
     }
   }
 

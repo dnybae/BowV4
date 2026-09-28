@@ -270,7 +270,7 @@ private struct BudgetHomeView: View {
               scheduledDraft: draft
             )
           case .newAccount:
-            AccountEditorScreen(currencyCode: currencyCode)
+            AddAccountFlowScreen(currencyCode: currencyCode, isDemoMode: isDemoMode)
           case .newGroup:
             GroupEditorScreen(nextOrder: groups.count)
           case .newEnvelope:

@@ -2,7 +2,10 @@ import Foundation
 
 struct BudgetMoney {
   static func parseMinor(_ text: String) -> Int64? {
-    let locale = Locale.current
+    parseMinor(text, locale: .current)
+  }
+
+  static func parseMinor(_ text: String, locale: Locale) -> Int64? {
     let grouping = locale.groupingSeparator ?? ","
     let decimalSeparator = locale.decimalSeparator ?? "."
     let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)

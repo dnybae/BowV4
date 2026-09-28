@@ -48,17 +48,23 @@ struct BudgetCommands {
     kind: BudgetAccountKind,
     currencyCode: String,
     openingBalanceMinor: Int64,
+    type: BudgetAccountType? = nil,
+    note: String = "",
     in context: ModelContext
-  ) throws {
+  ) throws -> BudgetAccount {
     guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else { throw BudgetCommandError.missingName }
-    context.insert(BudgetAccount(
+    let account = BudgetAccount(
       name: name.trimmingCharacters(in: .whitespacesAndNewlines),
       kind: kind,
       currencyCode: currencyCode,
-      openingBalanceMinor: openingBalanceMinor
-    ))
+      openingBalanceMinor: openingBalanceMinor,
+      type: type,
+      note: note.trimmingCharacters(in: .whitespacesAndNewlines)
+    )
+    context.insert(account)
     try context.save()
+    return account
   }
 
   static func addGroup(name: String, order: Int, in context: ModelContext) throws {

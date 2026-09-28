@@ -6,8 +6,10 @@ final class BudgetAccount {
   var id: UUID = UUID()
   var name: String = ""
   var kindRaw: String = BudgetAccountKind.cash.rawValue
+  var typeRaw: String? = nil
   var currencyCode: String = "USD"
   var openingBalanceMinor: Int64 = 0
+  var note: String = ""
   var openedAt: Date = Date()
   var lastReconciledAt: Date? = nil
   var lastReconciledBalanceMinor: Int64? = nil
@@ -16,10 +18,17 @@ final class BudgetAccount {
     BudgetAccountKind(rawValue: kindRaw) ?? .cash
   }
 
-  init(name: String, kind: BudgetAccountKind, currencyCode: String, openingBalanceMinor: Int64) {
+  var accountType: BudgetAccountType {
+    BudgetAccountType(rawValue: typeRaw ?? "") ?? .defaultType(for: kind)
+  }
+
+  init(name: String, kind: BudgetAccountKind, currencyCode: String, openingBalanceMinor: Int64,
+       type: BudgetAccountType? = nil, note: String = "") {
     self.name = name
     self.kindRaw = kind.rawValue
+    self.typeRaw = type?.rawValue
     self.currencyCode = currencyCode
     self.openingBalanceMinor = openingBalanceMinor
+    self.note = note
   }
 }

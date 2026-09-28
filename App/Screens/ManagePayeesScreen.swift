@@ -30,6 +30,26 @@ struct ManagePayeesScreen: View {
     entries.filter { !$0.isTransferOnly && $0.transactionCount < 2 }
   }
 
+  private var alphabeticalSections: [PayeeAlphabetSection] {
+    let grouped = Dictionary(grouping: otherEntries) { entry in
+      let folded = entry.name.folding(options: .diacriticInsensitive, locale: .current)
+      let initial = folded.localizedUppercase.first.map(String.init) ?? "#"
+      guard let scalar = initial.unicodeScalars.first,
+            CharacterSet.letters.contains(scalar) else { return "#" }
+      return initial
+    }
+    return grouped.keys.sorted {
+      $0.localizedStandardCompare($1) == .orderedAscending
+    }.map { letter in
+      PayeeAlphabetSection(
+        letter: letter,
+        entries: (grouped[letter] ?? []).sorted {
+          $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
+      )
+    }
+  }
+
   var body: some View {
     List {
       if entries.isEmpty {
@@ -51,9 +71,16 @@ struct ManagePayeesScreen: View {
             ForEach(frequentEntries) { entry in payeeRow(entry) }
           }
         }
-        if !otherEntries.isEmpty {
-          Section("All Payees") {
-            ForEach(otherEntries) { entry in payeeRow(entry) }
+        ForEach(alphabeticalSections) { section in
+          Section {
+            ForEach(section.entries) { entry in payeeRow(entry) }
+          } header: {
+            VStack(alignment: .leading, spacing: 8) {
+              if section.id == alphabeticalSections.first?.id {
+                Text("All Payees")
+              }
+              Text(section.letter)
+            }
           }
         }
       }
@@ -85,4 +112,11 @@ struct ManagePayeesScreen: View {
       .accessibilityLabel("\(entry.name), \(entry.transactionCount) transactions")
     }
   }
+}
+
+private struct PayeeAlphabetSection: Identifiable {
+  var letter: String
+  var entries: [PayeeDirectory.Entry]
+
+  var id: String { letter }
 }

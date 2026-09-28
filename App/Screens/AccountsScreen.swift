@@ -10,6 +10,14 @@ struct AccountsScreen: View {
   var onSelectTransaction: (UUID) -> Void
   @State private var editingAccount: BudgetAccount?
 
+  private var onBudgetAccounts: [BudgetAccount] {
+    accounts(for: [.cash, .credit])
+  }
+
+  private var offBudgetAccounts: [BudgetAccount] {
+    accounts(for: [.asset, .liability])
+  }
+
   var body: some View {
     List {
       Section {
@@ -24,35 +32,18 @@ struct AccountsScreen: View {
         Button("View Insights", systemImage: "chart.bar.fill", action: onViewInsights)
       }
 
-      ForEach(BudgetAccountKind.allCases) { kind in
-        let matching = accounts.filter { $0.kind == kind }.sorted { $0.name < $1.name }
-        if !matching.isEmpty {
-          Section(kind.title) {
-            ForEach(matching) { account in
-              NavigationLink {
-                AccountDetailScreen(
-                  account: account,
-                  transactions: transactions,
-                  balanceMinor: snapshot.accountBalances[account.id, default: 0],
-                  currencyCode: currencyCode,
-                  onSelectTransaction: onSelectTransaction,
-                  onEditAccount: { editingAccount = account }
-                )
-              } label: {
-                HStack(spacing: 12) {
-                  Image(systemName: kind.systemImage)
-                    .foregroundStyle(.tint)
-                    .frame(width: 28)
-                  Text(account.name)
-                  Spacer()
-                  Text(BudgetMoney.formatted(
-                    snapshot.accountBalances[account.id, default: 0],
-                    currencyCode: currencyCode
-                  ))
-                  .fontWeight(.medium)
-                }
-              }
-            }
+      if !onBudgetAccounts.isEmpty {
+        Section("On Budget") {
+          ForEach(onBudgetAccounts) { account in
+            accountRow(account)
+          }
+        }
+      }
+
+      if !offBudgetAccounts.isEmpty {
+        Section("Off Budget") {
+          ForEach(offBudgetAccounts) { account in
+            accountRow(account)
           }
         }
       }
@@ -64,6 +55,44 @@ struct AccountsScreen: View {
     .navigationTitle("Accounts")
     .sheet(item: $editingAccount) { account in
       AccountEditorScreen(currencyCode: currencyCode, account: account)
+    }
+  }
+
+  private func accounts(for kinds: [BudgetAccountKind]) -> [BudgetAccount] {
+    kinds.flatMap { kind in
+      accounts.filter { $0.kind == kind }.sorted { $0.name < $1.name }
+    }
+  }
+
+  private func accountRow(_ account: BudgetAccount) -> some View {
+    NavigationLink {
+      AccountDetailScreen(
+        account: account,
+        transactions: transactions,
+        balanceMinor: snapshot.accountBalances[account.id, default: 0],
+        currencyCode: currencyCode,
+        onSelectTransaction: onSelectTransaction,
+        onEditAccount: { editingAccount = account }
+      )
+    } label: {
+      HStack(spacing: 12) {
+        Image(systemName: account.kind.systemImage)
+          .foregroundStyle(.tint)
+          .frame(width: 28)
+          .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(account.name)
+          Text(account.kind.title)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        Spacer()
+        Text(BudgetMoney.formatted(
+          snapshot.accountBalances[account.id, default: 0],
+          currencyCode: currencyCode
+        ))
+        .fontWeight(.medium)
+      }
     }
   }
 }

@@ -8,6 +8,7 @@ struct GroupEditorScreen: View {
   var group: BudgetGroup?
   @State private var name = ""
   @State private var errorMessage: String?
+  @State private var showingDelete = false
 
   init(nextOrder: Int, group: BudgetGroup? = nil) {
     self.nextOrder = nextOrder
@@ -20,6 +21,11 @@ struct GroupEditorScreen: View {
       Form {
         Section("Group Name") {
           TextField("For example, Food & Home", text: $name)
+        }
+        if group != nil {
+          Section {
+            Button("Delete Group", role: .destructive) { showingDelete = true }
+          }
         }
       }
       .navigationTitle(group == nil ? "Add Group" : "Edit Group")
@@ -40,6 +46,15 @@ struct GroupEditorScreen: View {
         Button("OK") { errorMessage = nil }
       } message: {
         Text(errorMessage ?? "")
+      }
+      .confirmationDialog("Delete this empty group?", isPresented: $showingDelete) {
+        Button("Delete Group", role: .destructive) {
+          guard let group else { return }
+          do {
+            try BudgetCommands.deleteEmptyGroup(group, in: modelContext)
+            dismiss()
+          } catch { errorMessage = error.localizedDescription }
+        }
       }
     }
   }

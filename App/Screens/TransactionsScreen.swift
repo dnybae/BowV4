@@ -2,15 +2,25 @@ import SwiftUI
 import SwiftData
 
 struct TransactionsScreen: View {
-  @Query private var simpleFINRecords: [SimpleFINImportRecord]
   var transactions: [BudgetTransaction]
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
+  var schedules: [BudgetSchedule]
+  var occurrences: [BudgetScheduleOccurrence]
+  var simpleFINRecords: [SimpleFINImportRecord]
   var currencyCode: String
   var onSelect: (UUID) -> Void
+  var onRecord: (ScheduledTransactionDraft) -> Void
   @State private var searchText = ""
   @State private var filter = TransactionFilter()
   @State private var showingFilters = false
+
+  private var reviewCount: Int {
+    ReviewInbox(
+      transactions: transactions, records: simpleFINRecords,
+      occurrences: occurrences, schedules: schedules
+    ).items.count
+  }
 
   private var visibleTransactions: [BudgetTransaction] {
     transactions
@@ -39,29 +49,35 @@ struct TransactionsScreen: View {
 
   var body: some View {
     List {
-      let reviewCount = simpleFINRecords.filter { $0.status == .review }.count
-      let approvalCount = transactions.filter(\.needsApproval).count
+      if reviewCount > 0 {
+        Section {
+          NavigationLink {
+            ReviewInboxScreen(
+              transactions: transactions, records: simpleFINRecords,
+              occurrences: occurrences, schedules: schedules,
+              accounts: accounts, currencyCode: currencyCode,
+              onSelectTransaction: onSelect, onRecord: onRecord
+            )
+          } label: {
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Transactions Needing Approval")
+                .font(.headline)
+              Text("\(reviewCount) \(reviewCount == 1 ? "item" : "items") to review, record, or resolve")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 8)
+          }
+          .listRowBackground(Color.accentColor.opacity(0.10))
+        }
+      }
       let uncategorizedCount = transactions.filter { $0.kind == .expense && $0.envelopeID == nil }.count
-      if reviewCount + approvalCount + uncategorizedCount > 0 {
+      if uncategorizedCount > 0 {
         Section("Needs Attention") {
-          if approvalCount > 0 {
-            Button("Review \(approvalCount) imported transactions", systemImage: "checkmark.circle") {
-              searchText = ""
-              filter = TransactionFilter(needsApprovalOnly: true)
-            }
-          }
-          if uncategorizedCount > 0 {
-            Button("Categorize \(uncategorizedCount) transactions", systemImage: "tag") {
-              searchText = ""
-              filter = TransactionFilter(envelopeScope: .uncategorized)
-            }
-          }
-          if reviewCount > 0 {
-            NavigationLink {
-              SimpleFINScreen()
-            } label: {
-              Label("Resolve \(reviewCount) bank transactions", systemImage: "arrow.clockwise")
-            }
+          Button("Categorize \(uncategorizedCount) transactions", systemImage: "tag") {
+            searchText = ""
+            filter = TransactionFilter(envelopeScope: .uncategorized)
           }
         }
       }

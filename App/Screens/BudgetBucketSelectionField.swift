@@ -80,7 +80,7 @@ struct BudgetBucketSelectionSheet: View {
         }
         ForEach(groups.sorted { $0.sortOrder < $1.sortOrder }) { group in
           let matching = envelopes.filter {
-            $0.groupID == group.id
+            $0.groupID == group.id && !$0.isHidden
               && (searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText))
           }.sorted { $0.sortOrder < $1.sortOrder }
           if !matching.isEmpty {
@@ -90,12 +90,20 @@ struct BudgetBucketSelectionSheet: View {
           }
         }
         let ungrouped = envelopes.filter { envelope in
-          !groups.contains(where: { $0.id == envelope.groupID })
+          !groups.contains(where: { $0.id == envelope.groupID }) && !envelope.isHidden
             && (searchText.isEmpty || envelope.name.localizedCaseInsensitiveContains(searchText))
         }.sorted { $0.sortOrder < $1.sortOrder }
         if !ungrouped.isEmpty {
           Section("Other") {
             ForEach(ungrouped) { envelope in categoryButton(envelope) }
+          }
+        }
+        let hidden = envelopes.filter {
+          $0.isHidden && (searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText))
+        }.sorted { $0.name < $1.name }
+        if !hidden.isEmpty {
+          Section("Hidden Envelopes") {
+            ForEach(hidden) { envelope in categoryButton(envelope) }
           }
         }
         let matchingCards = cardAccounts.filter {
@@ -140,8 +148,7 @@ struct BudgetBucketSelectionSheet: View {
       SelectionRow(
         title: envelope.name,
         balance: BudgetMoney.formatted(snapshot.available(for: envelope.id), currencyCode: currencyCode),
-        isSelected: selected == .envelope(envelope.id),
-        symbol: envelope.symbol
+        isSelected: selected == .envelope(envelope.id)
       )
     }
   }

@@ -13,6 +13,9 @@ final class BudgetAccount {
   var openedAt: Date = Date()
   var lastReconciledAt: Date? = nil
   var lastReconciledBalanceMinor: Int64? = nil
+  var debtGoalStartMinor: Int64? = nil
+  var debtGoalDate: Date? = nil
+  var debtMonthlyTargetMinor: Int64? = nil
 
   var kind: BudgetAccountKind {
     BudgetAccountKind(rawValue: kindRaw) ?? .cash
@@ -30,5 +33,8 @@ final class BudgetAccount {
     self.currencyCode = currencyCode
     self.openingBalanceMinor = openingBalanceMinor
     self.note = note
+    if kind == .credit && openingBalanceMinor < 0 {
+      self.debtGoalStartMinor = -openingBalanceMinor
+    }
   }
 }

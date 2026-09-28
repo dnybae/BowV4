@@ -181,6 +181,7 @@ struct CategorySelectionSheet: View {
       (groupID == nil
         ? !groups.contains(where: { group in group.id == envelope.groupID })
         : envelope.groupID == groupID)
+        && (!envelope.isHidden || envelope.id == selectedID)
         && (searchText.isEmpty || envelope.name.localizedCaseInsensitiveContains(searchText))
     }.sorted { $0.sortOrder < $1.sortOrder }
   }
@@ -192,8 +193,7 @@ struct CategorySelectionSheet: View {
       SelectionRow(
         title: envelope.name,
         balance: BudgetMoney.formatted(snapshot.available(for: envelope.id), currencyCode: currencyCode),
-        isSelected: selectedID == envelope.id && !isUncategorizedSelected,
-        symbol: envelope.symbol
+        isSelected: selectedID == envelope.id && !isUncategorizedSelected
       )
     }
   }

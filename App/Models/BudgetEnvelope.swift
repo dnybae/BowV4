@@ -9,6 +9,8 @@ final class BudgetEnvelope {
   var symbol: String = "square.grid.2x2.fill"
   var sortOrder: Int = 0
   var targetMinor: Int64? = nil
+  var targetDate: Date? = nil
+  var isHidden: Bool = false
 
   init(groupID: UUID, name: String, symbol: String, sortOrder: Int) {
     self.groupID = groupID

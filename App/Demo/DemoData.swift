@@ -29,6 +29,7 @@ enum DemoData {
       BudgetAllocation.self,
       BudgetPayee.self,
       BudgetSchedule.self,
+      BudgetScheduleOccurrence.self,
       SimpleFINConnection.self,
       SimpleFINAccountLink.self,
       SimpleFINImportRecord.self

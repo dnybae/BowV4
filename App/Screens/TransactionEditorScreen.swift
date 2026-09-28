@@ -5,6 +5,7 @@ struct TransactionEditorScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
   @Query private var existingTransactions: [BudgetTransaction]
+  @Query private var schedules: [BudgetSchedule]
   var transaction: BudgetTransaction?
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
@@ -23,6 +24,7 @@ struct TransactionEditorScreen: View {
   @State private var showingDeleteConfirmation = false
   @State private var possibleImportedMatchIDs: [UUID] = []
   @State private var autoAssignedEnvelopeID: UUID?
+  @State private var linkScheduledBill = true
   @FocusState private var payeeFocused: Bool
 
   init(
@@ -78,6 +80,23 @@ struct TransactionEditorScreen: View {
       .map { $0 }
   }
 
+  private var matchingSchedule: BudgetSchedule? {
+    guard let transaction, transaction.needsApproval, transaction.scheduleID == nil,
+          kind == .expense, let accountID, let minor = BudgetMoney.parseMinor(amount) else { return nil }
+    let matches = schedules.filter { schedule in
+      schedule.accountID == accountID && schedule.amountMinor == minor
+        && schedule.payee.localizedCaseInsensitiveCompare(payee) == .orderedSame
+        && ScheduleRecurrence().occurs(
+          starting: schedule.startDate, frequency: schedule.frequency, on: date
+        )
+        && !existingTransactions.contains {
+          $0.id != transaction.id && $0.scheduleID == schedule.id
+            && $0.scheduledFor.map { Calendar.current.isDate($0, inSameDayAs: date) } == true
+        }
+    }
+    return matches.count == 1 ? matches.first : nil
+  }
+
   var body: some View {
     NavigationStack {
       Form {
@@ -86,6 +105,12 @@ struct TransactionEditorScreen: View {
             Text("Review this imported transaction. Saving it marks it approved.")
               .foregroundStyle(.secondary)
           }
+        }
+        if let matchingSchedule {
+          ScheduledMatchSection(
+            payee: matchingSchedule.payee, date: date,
+            isLinked: $linkScheduledBill
+          )
         }
         Section {
           Picker("Type", selection: $kind) {
@@ -189,7 +214,7 @@ struct TransactionEditorScreen: View {
         }
         Button("Cancel", role: .cancel) { possibleImportedMatchIDs = [] }
       } message: {
-        Text("A SimpleFIN transaction has the same amount in this account within ten days. Updating it keeps one ledger entry and uses the details you entered.")
+        Text("An imported transaction may already represent this payment. Updating it keeps one ledger entry and uses the details you entered.")
       }
       .alert("Couldn’t Save Transaction", isPresented: Binding(
         get: { errorMessage != nil },
@@ -213,7 +238,7 @@ struct TransactionEditorScreen: View {
       let matcher = PayeeRuleMatcher()
       let rules = PayeeDirectory.ruleItems(
         payees: payees,
-        validEnvelopeIDs: Set(envelopes.map(\.id))
+        validEnvelopeIDs: Set(envelopes.filter { !$0.isHidden }.map(\.id))
       )
       nextEnvelopeID = matcher.envelopeID(for: payee, rules: rules)
     } else {
@@ -234,13 +259,19 @@ struct TransactionEditorScreen: View {
     let destination = accounts.first { $0.id == destinationID }
     let chosenEnvelopeID = kind == .transfer && !needsEnvelopeForTransfer
       ? nil : envelopeID
-    if transaction == nil && importedID == nil && !allowSeparate && scheduledDraft == nil
-        && kind != .transfer {
+    let linkedScheduleID = scheduledDraft?.scheduleID
+      ?? (linkScheduledBill ? matchingSchedule?.id : nil)
+    let linkedScheduledFor = scheduledDraft?.scheduledFor
+      ?? (linkScheduledBill && matchingSchedule != nil ? date : nil)
+    if transaction == nil && importedID == nil && !allowSeparate && kind != .transfer {
       let signedAmount = kind == .inflow ? minor : -minor
       possibleImportedMatchIDs = existingTransactions.filter {
-        $0.sourceRaw == "simplefin" && $0.accountID == account.id
+        ($0.sourceRaw == "simplefin" || $0.sourceRaw == "bankFile")
+          && $0.accountID == account.id
           && $0.amountMinor == signedAmount
-          && abs($0.date.timeIntervalSince(date)) <= 10 * 86_400
+          && $0.scheduleID == nil
+          && abs($0.date.timeIntervalSince(date)) <= (scheduledDraft == nil ? 10 : 3) * 86_400
+          && (scheduledDraft == nil || $0.payee.localizedCaseInsensitiveCompare(payee) == .orderedSame)
       }.map(\.id)
       if !possibleImportedMatchIDs.isEmpty { return }
     }
@@ -256,6 +287,8 @@ struct TransactionEditorScreen: View {
           date: date,
           payee: payee,
           notes: notes,
+          scheduleID: linkedScheduleID,
+          scheduledFor: linkedScheduledFor,
           in: modelContext
         )
       } else {
@@ -268,8 +301,8 @@ struct TransactionEditorScreen: View {
           date: date,
           payee: payee,
           notes: notes,
-          scheduleID: scheduledDraft?.scheduleID,
-          scheduledFor: scheduledDraft?.scheduledFor,
+          scheduleID: linkedScheduleID,
+          scheduledFor: linkedScheduledFor,
           in: modelContext
         )
       }
@@ -299,4 +332,20 @@ struct ScheduledTransactionDraft {
   var payee: String
   var notes: String
   var date: Date
+}
+
+private struct ScheduledMatchSection: View {
+  var payee: String
+  var date: Date
+  @Binding var isLinked: Bool
+
+  var body: some View {
+    Section {
+      Toggle("Link to \(payee) on \(date.formatted(date: .abbreviated, time: .omitted))", isOn: $isLinked)
+    } header: {
+      Text("Scheduled Bill")
+    } footer: {
+      Text("Linking marks this bill recorded without creating another transaction.")
+    }
+  }
 }

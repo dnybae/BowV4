@@ -31,7 +31,7 @@ struct BankFileImportService {
   ) throws -> BankFileImportSummary {
     let existingKeys = Set(existingTransactions.compactMap(\.externalKey))
     let existingByID = Dictionary(uniqueKeysWithValues: existingTransactions.map { ($0.id, $0) })
-    let validEnvelopeIDs = Set(envelopes.map(\.id))
+    let validEnvelopeIDs = Set(envelopes.filter { !$0.isHidden }.map(\.id))
     let matcher = PayeeRuleMatcher()
     let rules = PayeeDirectory.ruleItems(payees: payees, validEnvelopeIDs: validEnvelopeIDs)
     var summary = BankFileImportSummary()
@@ -72,6 +72,7 @@ struct BankFileImportService {
         transaction.externalKey = proposal.externalKey
         transaction.sourceRaw = "manualLinked"
         transaction.isCleared = true
+        transaction.needsApproval = true
         summary.linked += 1
       case .review:
         if importSeparately.contains(proposal.externalKey) {

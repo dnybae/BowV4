@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct ContentView: View {
   @AppStorage("bow.demoMode") private var isDemoMode = false
@@ -67,6 +68,8 @@ private struct BudgetHomeView: View {
   @Query private var allocations: [BudgetAllocation]
   @Query private var transactions: [BudgetTransaction]
   @Query private var schedules: [BudgetSchedule]
+  @Query private var scheduleOccurrences: [BudgetScheduleOccurrence]
+  @Query private var simpleFINRecords: [SimpleFINImportRecord]
   @AppStorage("bow.appearance") private var appearanceRaw = AppAppearance.system.rawValue
   @State private var selectedMonth = Date()
   @State private var selectedTab: HomeTab = .budget
@@ -126,6 +129,9 @@ private struct BudgetHomeView: View {
                 groups: groups,
                 envelopes: envelopes,
                 accounts: accounts,
+                allocations: allocations,
+                transactions: transactions,
+                schedules: schedules,
                 snapshot: snapshot,
                 selectedMonth: $selectedMonth,
                 onAddGroup: { activeSheet = .newGroup },
@@ -134,7 +140,9 @@ private struct BudgetHomeView: View {
                 onImportYNAB: { activeSheet = .importYNAB },
                 onMoveMoney: { source, target in
                   activeSheet = .moveMoney(source, target)
-                }
+                },
+                onSelectTransaction: { activeSheet = .editTransaction($0) },
+                onEditSchedule: { activeSheet = .editSchedule($0) }
               )
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -151,8 +159,12 @@ private struct BudgetHomeView: View {
                 transactions: transactions,
                 accounts: accounts,
                 envelopes: envelopes,
+                schedules: schedules,
+                occurrences: scheduleOccurrences,
+                simpleFINRecords: simpleFINRecords,
                 currencyCode: currencyCode,
-                onSelect: { activeSheet = .editTransaction($0) }
+                onSelect: { activeSheet = .editTransaction($0) },
+                onRecord: { activeSheet = .recordScheduled($0) }
               )
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -167,6 +179,7 @@ private struct BudgetHomeView: View {
             NavigationStack {
               CalendarScreen(
                 schedules: schedules,
+                occurrences: scheduleOccurrences,
                 transactions: transactions,
                 accounts: accounts,
                 envelopes: envelopes,
@@ -269,6 +282,11 @@ private struct BudgetHomeView: View {
               currencyCode: currencyCode,
               scheduledDraft: draft
             )
+          case .editSchedule(let id):
+            ScheduleEditorScreen(
+              schedule: schedules.first { $0.id == id },
+              accounts: accounts, envelopes: envelopes, currencyCode: currencyCode
+            )
           case .newAccount:
             AddAccountFlowScreen(currencyCode: currencyCode, isDemoMode: isDemoMode)
           case .newGroup:
@@ -300,14 +318,21 @@ private struct BudgetHomeView: View {
     .preferredColorScheme(
       AppAppearance(rawValue: appearanceRaw)?.colorScheme
     )
-    .task { if !isDemoMode { await refreshSimpleFINIfConnected() } }
+    .task {
+      try? ScheduleReviewPlanner().refresh(in: modelContext)
+      if !isDemoMode { await refreshSimpleFINIfConnected() }
+    }
     .onChange(of: scenePhase) { _, phase in
       guard !isDemoMode else { return }
       if phase == .active {
+        try? ScheduleReviewPlanner().refresh(in: modelContext)
         Task { await refreshSimpleFINIfConnected() }
       } else if phase == .background {
         SimpleFINBackgroundRefresh.schedule(in: modelContext)
       }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+      try? ScheduleReviewPlanner().refresh(in: modelContext)
     }
   }
 
@@ -321,6 +346,7 @@ private enum BowSheet: Identifiable {
   case newTransaction
   case editTransaction(UUID)
   case recordScheduled(ScheduledTransactionDraft)
+  case editSchedule(UUID)
   case newAccount
   case newGroup
   case newEnvelope
@@ -333,6 +359,7 @@ private enum BowSheet: Identifiable {
     case .newTransaction: "newTransaction"
     case .editTransaction(let id): "editTransaction-\(id)"
     case .recordScheduled(let draft): "recordScheduled-\(draft.scheduleID)-\(draft.scheduledFor)"
+    case .editSchedule(let id): "editSchedule-\(id)"
     case .newAccount: "newAccount"
     case .newGroup: "newGroup"
     case .newEnvelope: "newEnvelope"

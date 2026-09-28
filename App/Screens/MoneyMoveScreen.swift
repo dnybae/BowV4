@@ -4,9 +4,10 @@ import SwiftData
 struct MoneyMoveScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
-  var accounts: [BudgetAccount]
-  var envelopes: [BudgetEnvelope]
-  var snapshot: BudgetSnapshot
+  @Query private var currentAccounts: [BudgetAccount]
+  @Query private var currentEnvelopes: [BudgetEnvelope]
+  @Query private var currentAllocations: [BudgetAllocation]
+  @Query private var currentTransactions: [BudgetTransaction]
   var currencyCode: String
   var month: Date
   @State private var source: BudgetBucket
@@ -23,25 +24,27 @@ struct MoneyMoveScreen: View {
     source: BudgetBucket,
     target: BudgetBucket
   ) {
-    self.accounts = accounts
-    self.envelopes = envelopes
-    self.snapshot = snapshot
     self.currencyCode = currencyCode
     self.month = month
     _source = State(initialValue: source)
     _target = State(initialValue: target)
   }
 
-  private var cardAccounts: [BudgetAccount] {
-    accounts.filter { $0.kind == .credit }.sorted { $0.name < $1.name }
+  private var snapshot: BudgetSnapshot {
+    BudgetLedger.snapshot(
+      month: month, accounts: currentAccounts, envelopes: currentEnvelopes,
+      allocations: currentAllocations, transactions: currentTransactions
+    )
   }
 
-  private var sourceAvailable: Int64 {
-    switch source {
-    case .readyToAssign: snapshot.readyToAssignMinor
-    case .envelope(let id): snapshot.available(for: id)
-    case .cardPayment(let id): snapshot.paymentAvailable[id, default: 0]
-    }
+  private var cardAccounts: [BudgetAccount] {
+    currentAccounts.filter { $0.kind == .credit }.sorted { $0.name < $1.name }
+  }
+
+  private var sourceAvailable: Int64 { balance(of: source) }
+  private var enteredMinor: Int64? { BudgetMoney.parseMinor(amount) }
+  private var isValid: Bool {
+    source != target && (enteredMinor ?? 0) > 0 && (enteredMinor ?? 0) <= max(0, sourceAvailable)
   }
 
   var body: some View {
@@ -50,23 +53,56 @@ struct MoneyMoveScreen: View {
         Section {
           BudgetBucketSelectionField(
             title: "From", selection: $source,
-            envelopes: envelopes, cardAccounts: cardAccounts,
+            envelopes: currentEnvelopes, cardAccounts: cardAccounts,
             snapshot: snapshot, currencyCode: currencyCode
           )
+          LabeledContent("Available", value: BudgetMoney.formatted(sourceAvailable, currencyCode: currencyCode))
           BudgetBucketSelectionField(
             title: "To", selection: $target,
-            envelopes: envelopes, cardAccounts: cardAccounts,
+            envelopes: currentEnvelopes, cardAccounts: cardAccounts,
             snapshot: snapshot, currencyCode: currencyCode
           )
-          TextField("Amount", text: $amount)
-            .keyboardType(.decimalPad)
+          Button("Swap Direction", systemImage: "arrow.up.arrow.down") {
+            let oldSource = source
+            source = target
+            target = oldSource
+          }
+          .disabled(source == target)
         } header: {
-          Text("Transfer")
+          Text("Move Between")
         } footer: {
-          Text("Available to move: \(BudgetMoney.formatted(max(0, sourceAvailable), currencyCode: currencyCode))")
+          Text("Choose the money’s current location and where it should go.")
         }
+
+        Section("Amount") {
+          HStack {
+            TextField("0.00", text: $amount)
+              .keyboardType(.decimalPad)
+              .accessibilityLabel("Amount to move")
+            Button("Move All") {
+              amount = BudgetMoney.editable(max(0, sourceAvailable))
+            }
+            .disabled(sourceAvailable <= 0)
+          }
+          if let enteredMinor, enteredMinor > sourceAvailable {
+            Text("Only \(BudgetMoney.formatted(max(0, sourceAvailable), currencyCode: currencyCode)) is available to move.")
+              .font(.footnote)
+              .foregroundStyle(.red)
+          }
+        }
+
+        Section("After Moving") {
+          LabeledContent(bucketName(source), value: BudgetMoney.formatted(
+            sourceAvailable - (enteredMinor ?? 0), currencyCode: currencyCode
+          ))
+          LabeledContent(bucketName(target), value: BudgetMoney.formatted(
+            balance(of: target) + (enteredMinor ?? 0), currencyCode: currencyCode
+          ))
+        }
+
         Section {
-          Text("This change applies to \(month.formatted(.dateTime.month(.wide).year())).")
+          Text("This move changes \(month.formatted(.dateTime.month(.wide).year())). Changes to a past month can affect later months.")
+            .font(.footnote)
             .foregroundStyle(.secondary)
         }
       }
@@ -76,10 +112,18 @@ struct MoneyMoveScreen: View {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel") { dismiss() }
         }
-        ToolbarItem(placement: .confirmationAction) {
-          Button("Move") { save() }
-            .disabled(amount.isEmpty || source == target)
+      }
+      .safeAreaInset(edge: .bottom) {
+        Button(action: save) {
+          Text("Move \(BudgetMoney.formatted(enteredMinor ?? 0, currencyCode: currencyCode))")
+            .fontWeight(.semibold)
+            .frame(maxWidth: .infinity, minHeight: 44)
         }
+        .buttonStyle(.borderedProminent)
+        .disabled(!isValid)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
+        .background(.regularMaterial)
       }
       .alert("Couldn’t Move Money", isPresented: Binding(
         get: { errorMessage != nil },
@@ -92,23 +136,62 @@ struct MoneyMoveScreen: View {
     }
   }
 
+  private func balance(of bucket: BudgetBucket) -> Int64 {
+    switch bucket {
+    case .readyToAssign: snapshot.readyToAssignMinor
+    case .envelope(let id): snapshot.available(for: id)
+    case .cardPayment(let id): snapshot.paymentAvailable[id, default: 0]
+    }
+  }
+
+  private func bucketName(_ bucket: BudgetBucket) -> String {
+    switch bucket {
+    case .readyToAssign: "Ready to Assign"
+    case .envelope(let id): currentEnvelopes.first { $0.id == id }?.name ?? "Envelope"
+    case .cardPayment(let id): (currentAccounts.first { $0.id == id }?.name ?? "Card") + " Payment"
+    }
+  }
+
   private func save() {
-    guard let minor = BudgetMoney.parseMinor(amount) else {
-      errorMessage = "Enter a valid amount with no more than two decimal places."
+    guard let minor = enteredMinor, minor > 0 else {
+      errorMessage = "Enter an amount greater than zero."
       return
     }
+    guard source != target else {
+      errorMessage = "Choose two different places for the money."
+      return
+    }
+    let validEnvelopeIDs = Set(currentEnvelopes.map(\.id))
+    let validCardIDs = Set(cardAccounts.map(\.id))
+    for bucket in [source, target] {
+      switch bucket {
+      case .readyToAssign: break
+      case .envelope(let id):
+        guard validEnvelopeIDs.contains(id) else {
+          errorMessage = "An envelope changed. Choose it again."
+          return
+        }
+      case .cardPayment(let id):
+        guard validCardIDs.contains(id) else {
+          errorMessage = "A card changed. Choose it again."
+          return
+        }
+      }
+    }
     let now = Date()
-    let allocationDate = Calendar.current.isDate(month, equalTo: now, toGranularity: .month)
-      ? now
-      : (Calendar.current.dateInterval(of: .month, for: month)?.start ?? month)
+    let monthInterval = Calendar.current.dateInterval(of: .month, for: month)
+    let allocationDate: Date
+    if Calendar.current.isDate(month, equalTo: now, toGranularity: .month) {
+      allocationDate = now
+    } else if month < now {
+      allocationDate = monthInterval?.end.addingTimeInterval(-1) ?? month
+    } else {
+      allocationDate = monthInterval?.start ?? month
+    }
     do {
       try BudgetCommands.moveMoney(
-        amountMinor: minor,
-        from: source,
-        to: target,
-        snapshot: snapshot,
-        date: allocationDate,
-        in: modelContext
+        amountMinor: minor, from: source, to: target,
+        date: allocationDate, in: modelContext
       )
       dismiss()
     } catch {

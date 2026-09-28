@@ -8,6 +8,7 @@ struct SimpleFINReviewScreen: View {
   @Query private var records: [SimpleFINImportRecord]
   @Query private var accounts: [BudgetAccount]
   var record: SimpleFINImportRecord
+  var relatedOccurrence: BudgetScheduleOccurrence? = nil
   @State private var selectedID: UUID?
   @State private var message: String?
 
@@ -90,7 +91,12 @@ struct SimpleFINReviewScreen: View {
 
   private func resolve(_ decision: SimpleFINReviewDecision) {
     do {
-      try SimpleFINSyncCoordinator.shared.resolve(record, as: decision, in: modelContext)
+      try SimpleFINSyncCoordinator.shared.resolve(
+        record, as: decision,
+        scheduleID: relatedOccurrence?.scheduleID,
+        scheduledFor: relatedOccurrence?.scheduledFor,
+        in: modelContext
+      )
       dismiss()
     } catch {
       message = error.localizedDescription

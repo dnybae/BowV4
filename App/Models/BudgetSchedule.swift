@@ -12,6 +12,7 @@ final class BudgetSchedule {
   var frequencyRaw: String = ScheduleFrequency.monthly.rawValue
   var notes: String = ""
   var isActive: Bool = true
+  var reviewedThrough: Date? = nil
 
   var frequency: ScheduleFrequency {
     ScheduleFrequency(rawValue: frequencyRaw) ?? .monthly
@@ -25,5 +26,6 @@ final class BudgetSchedule {
     self.startDate = startDate
     self.frequencyRaw = frequency.rawValue
     self.notes = notes
+    self.reviewedThrough = Calendar.current.date(byAdding: .day, value: -1, to: Date())
   }
 }

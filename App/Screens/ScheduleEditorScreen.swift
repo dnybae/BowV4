@@ -4,6 +4,7 @@ import SwiftData
 struct ScheduleEditorScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
+  @Query private var occurrences: [BudgetScheduleOccurrence]
   var schedule: BudgetSchedule?
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
@@ -107,6 +108,10 @@ struct ScheduleEditorScreen: View {
       frequency: frequency,
       notes: notes
     )
+    let recurrenceChanged = schedule != nil && (
+      !Calendar.current.isDate(item.startDate, inSameDayAs: startDate)
+        || item.frequency != frequency || (!isActive && item.isActive)
+    )
     item.payee = payee.trimmingCharacters(in: .whitespacesAndNewlines)
     item.amountMinor = minor
     item.accountID = accountID
@@ -115,15 +120,25 @@ struct ScheduleEditorScreen: View {
     item.frequencyRaw = frequency.rawValue
     item.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
     item.isActive = isActive
+    if recurrenceChanged {
+      for occurrence in occurrences where occurrence.scheduleID == item.id {
+        modelContext.delete(occurrence)
+      }
+      item.reviewedThrough = Calendar.current.date(byAdding: .day, value: -1, to: Date())
+    }
     if schedule == nil { modelContext.insert(item) }
     do {
       try modelContext.save()
+      try? ScheduleReviewPlanner().refresh(in: modelContext)
       dismiss()
     } catch { errorMessage = error.localizedDescription }
   }
 
   private func delete() {
     guard let schedule else { return }
+    for occurrence in occurrences where occurrence.scheduleID == schedule.id {
+      modelContext.delete(occurrence)
+    }
     modelContext.delete(schedule)
     do {
       try modelContext.save()

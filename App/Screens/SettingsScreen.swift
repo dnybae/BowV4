@@ -21,48 +21,11 @@ struct SettingsScreen: View {
   var body: some View {
     NavigationStack {
       Form {
-        Section {
-          Picker("Appearance", selection: $appearanceRaw) {
-            ForEach(AppAppearance.allCases) { appearance in
-              Text(appearance.title).tag(appearance.rawValue)
-            }
-          }
-          .pickerStyle(.menu)
-        } header: {
-          Text("Appearance")
-        } footer: {
-          Text("System follows your iPhone’s appearance setting.")
-        }
-
-        Section {
-          Toggle("Demo Mode", systemImage: "play.rectangle", isOn: $isDemoMode)
-          if isDemoMode {
-            Picker("Situation", selection: $demoScenarioRaw) {
-              ForEach(DemoScenario.allCases) { scenario in
-                Text(scenario.title).tag(scenario.rawValue)
-              }
-            }
-            .pickerStyle(.menu)
-            Text((DemoScenario(rawValue: demoScenarioRaw) ?? .showcase).explanation)
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-            Button("Reset Demo Data", systemImage: "arrow.counterclockwise", role: .destructive) {
-              showingResetDemo = true
-            }
-          }
-        } header: {
-          Text("Explore Bow")
-        } footer: {
-          Text(isDemoMode
-            ? "Sample data is separate from your budget and resets when the app restarts. Reset here to undo changes made during this session. Bank sync is simulated."
-            : "Try every screen with sample data. Your budget stays separate.")
-        }
-
-        Section("Categories") {
+        Section("Budget Settings") {
           NavigationLink {
             CategoryManagementScreen()
           } label: {
-            Label("Groups & Envelopes", systemImage: "square.grid.2x2")
+            Label("Manage Groups & Envelopes", systemImage: "square.grid.2x2")
           }
           NavigationLink {
             ManagePayeesScreen()
@@ -76,46 +39,108 @@ struct SettingsScreen: View {
           }
         }
 
-        Section {
-          Button("Import Bank File", systemImage: "doc.text") {
-            showingBankImport = true
-          }
+        Section("Bank Connections & Import") {
           NavigationLink {
             SimpleFINScreen()
           } label: {
             HStack {
               Label("SimpleFIN Bank Sync", systemImage: "arrow.clockwise")
               Spacer()
-              let reviewCount = simpleFINRecords.filter { $0.status == .review }.count
-              if reviewCount > 0 {
-                Text("\(reviewCount) to review")
+              let count = simpleFINRecords.filter { $0.status == .review }.count
+              if count > 0 {
+                Text("\(count) to review")
                   .font(.caption)
                   .foregroundStyle(.secondary)
               }
             }
           }
+          Button("Import Bank File", systemImage: "doc.text") {
+            showingBankImport = true
+          }
           Button("Import YNAB Categories", systemImage: "square.and.arrow.down") {
             showingYNABImport = true
           }
-        } header: {
-          Text("Import")
-        } footer: {
-          Text("Bring over category groups and envelopes from a YNAB Plan export. Recreate targets and balances in Bow.")
         }
 
-        Section {
+        Section("Preferences") {
+          Picker("Appearance", selection: $appearanceRaw) {
+            ForEach(AppAppearance.allCases) { appearance in
+              Text(appearance.title).tag(appearance.rawValue)
+            }
+          }
+          .pickerStyle(.menu)
+          NavigationLink {
+            SettingsPlaceholderScreen(
+              title: "Notifications",
+              description: "Notification controls will appear here when reminders are available.",
+              systemImage: "bell"
+            )
+          } label: {
+            Label("Notifications", systemImage: "bell")
+          }
+        }
+
+        Section("More") {
+          NavigationLink {
+            SettingsPlaceholderScreen(
+              title: "Home Inventory",
+              description: "A place to track personal items and home supplies is coming soon.",
+              systemImage: "shippingbox"
+            )
+          } label: {
+            Label("Home Inventory", systemImage: "shippingbox")
+          }
+        }
+
+        Section("Privacy & Legal") {
           LabeledContent("Storage", value: isDemoMode ? "Temporary demo" : "On this iPhone")
-          Label("No Bow account required", systemImage: "lock.shield")
-        } header: {
-          Text("Data & Privacy")
-        } footer: {
-          Text(isDemoMode
-            ? "Demo changes stay in this app session. Your personal budget and SimpleFIN connection are separate."
-            : "Your budget is stored on this device. SimpleFIN bank sync is optional and uses a credential stored in this device’s Keychain. iCloud sync is not active yet.")
+          NavigationLink {
+            SettingsPlaceholderScreen(
+              title: "Privacy Policy",
+              description: "The privacy policy has not been published in the app yet.",
+              systemImage: "hand.raised"
+            )
+          } label: {
+            Label("Privacy Policy", systemImage: "hand.raised")
+          }
+          NavigationLink {
+            SettingsPlaceholderScreen(
+              title: "Terms of Use",
+              description: "The terms of use have not been published in the app yet.",
+              systemImage: "doc.text"
+            )
+          } label: {
+            Label("Terms of Use", systemImage: "doc.text")
+          }
         }
 
         Section("About") {
           LabeledContent("Version", value: version)
+        }
+
+        Section {
+          HStack(spacing: 12) {
+            Toggle("Demo Mode", systemImage: "play.rectangle", isOn: $isDemoMode)
+            if isDemoMode {
+              Menu {
+                Picker("Situation", selection: $demoScenarioRaw) {
+                  ForEach(DemoScenario.allCases) { scenario in
+                    Text(scenario.title).tag(scenario.rawValue)
+                  }
+                }
+                Button("Reset Demo Data", systemImage: "arrow.counterclockwise", role: .destructive) {
+                  showingResetDemo = true
+                }
+              } label: {
+                Image(systemName: "ellipsis")
+                  .frame(minWidth: 32, minHeight: 44)
+                  .contentShape(Rectangle())
+              }
+              .accessibilityLabel("Demo Options")
+            }
+          }
+        } footer: {
+          Text("Sample data stays separate from your budget.")
         }
       }
       .navigationTitle("Settings")

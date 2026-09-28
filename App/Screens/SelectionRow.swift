@@ -4,7 +4,6 @@ struct SelectionRow: View {
   var title: String
   var balance: String?
   var isSelected: Bool
-  var symbol: String? = nil
 
   var body: some View {
     HStack(spacing: 12) {
@@ -14,12 +13,6 @@ struct SelectionRow: View {
         .frame(width: 20)
         .opacity(isSelected ? 1 : 0)
         .accessibilityHidden(true)
-      if let symbol {
-        Image(systemName: symbol)
-          .foregroundStyle(.tint)
-          .frame(width: 24)
-          .accessibilityHidden(true)
-      }
       Text(title)
         .foregroundStyle(.primary)
         .frame(maxWidth: .infinity, alignment: .leading)

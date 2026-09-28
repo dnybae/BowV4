@@ -80,6 +80,7 @@ struct BudgetCommands {
     groupID: UUID,
     order: Int,
     targetMinor: Int64? = nil,
+    targetDate: Date? = nil,
     in context: ModelContext
   ) throws {
     guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -91,6 +92,7 @@ struct BudgetCommands {
       sortOrder: order
     )
     envelope.targetMinor = targetMinor
+    envelope.targetDate = targetDate
     context.insert(envelope)
     try context.save()
   }
@@ -108,6 +110,14 @@ struct BudgetCommands {
     scheduledFor: Date? = nil,
     in context: ModelContext
   ) throws {
+    if let scheduleID, let scheduledFor {
+      let calendar = Calendar.current
+      let alreadyRecorded = try context.fetch(FetchDescriptor<BudgetTransaction>()).contains {
+        $0.scheduleID == scheduleID
+          && $0.scheduledFor.map { calendar.isDate($0, inSameDayAs: scheduledFor) } == true
+      }
+      guard !alreadyRecorded else { throw BudgetCommandError.duplicateScheduledOccurrence }
+    }
     try validateTransaction(
       kind: kind,
       account: account,
@@ -143,8 +153,18 @@ struct BudgetCommands {
     date: Date,
     payee: String,
     notes: String,
+    scheduleID: UUID? = nil,
+    scheduledFor: Date? = nil,
     in context: ModelContext
   ) throws {
+    if let scheduleID, let scheduledFor {
+      let calendar = Calendar.current
+      let alreadyRecorded = try context.fetch(FetchDescriptor<BudgetTransaction>()).contains {
+        $0.id != transaction.id && $0.scheduleID == scheduleID
+          && $0.scheduledFor.map { calendar.isDate($0, inSameDayAs: scheduledFor) } == true
+      }
+      guard !alreadyRecorded else { throw BudgetCommandError.duplicateScheduledOccurrence }
+    }
     try validateTransaction(
       kind: kind,
       account: account,
@@ -162,6 +182,10 @@ struct BudgetCommands {
     transaction.date = date
     transaction.payee = payee.trimmingCharacters(in: .whitespacesAndNewlines)
     transaction.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let scheduleID, let scheduledFor {
+      transaction.scheduleID = scheduleID
+      transaction.scheduledFor = scheduledFor
+    }
     transaction.needsApproval = false
     transaction.reconciledAt = nil
     transaction.destinationReconciledAt = nil
@@ -213,7 +237,6 @@ struct BudgetCommands {
     amountMinor: Int64,
     from source: BudgetBucket,
     to target: BudgetBucket,
-    snapshot: BudgetSnapshot,
     date: Date,
     in context: ModelContext
   ) throws {
@@ -221,6 +244,23 @@ struct BudgetCommands {
     guard source != target else {
       throw BudgetCommandError.invalidTransfer
     }
+    let accounts = try context.fetch(FetchDescriptor<BudgetAccount>())
+    let envelopes = try context.fetch(FetchDescriptor<BudgetEnvelope>())
+    let allocations = try context.fetch(FetchDescriptor<BudgetAllocation>())
+    let transactions = try context.fetch(FetchDescriptor<BudgetTransaction>())
+    let envelopeIDs = Set(envelopes.map(\.id))
+    let cardIDs = Set(accounts.filter { $0.kind == .credit }.map(\.id))
+    for bucket in [source, target] {
+      switch bucket {
+      case .readyToAssign: break
+      case .envelope(let id): guard envelopeIDs.contains(id) else { throw BudgetCommandError.invalidTransfer }
+      case .cardPayment(let id): guard cardIDs.contains(id) else { throw BudgetCommandError.invalidTransfer }
+      }
+    }
+    let snapshot = BudgetLedger.snapshot(
+      month: date, accounts: accounts, envelopes: envelopes,
+      allocations: allocations, transactions: transactions
+    )
     let available: Int64
     switch source {
     case .readyToAssign:
@@ -253,6 +293,45 @@ struct BudgetCommands {
     context.insert(allocation)
     try context.save()
   }
+
+  static func setEnvelopeHidden(_ envelope: BudgetEnvelope, hidden: Bool, in context: ModelContext) throws {
+    if hidden {
+      let snapshot = BudgetLedger.snapshot(
+        month: Date(),
+        accounts: try context.fetch(FetchDescriptor<BudgetAccount>()),
+        envelopes: try context.fetch(FetchDescriptor<BudgetEnvelope>()),
+        allocations: try context.fetch(FetchDescriptor<BudgetAllocation>()),
+        transactions: try context.fetch(FetchDescriptor<BudgetTransaction>())
+      )
+      guard snapshot.available(for: envelope.id) >= 0 else {
+        throw BudgetCommandError.hiddenOverspending
+      }
+    }
+    envelope.isHidden = hidden
+    try context.save()
+  }
+
+  static func deleteEmptyGroup(_ group: BudgetGroup, in context: ModelContext) throws {
+    let hasEnvelopes = try context.fetch(FetchDescriptor<BudgetEnvelope>()).contains { $0.groupID == group.id }
+    guard !hasEnvelopes else { throw BudgetCommandError.groupNotEmpty }
+    context.delete(group)
+    try context.save()
+  }
+
+  static func deleteUnusedEnvelope(_ envelope: BudgetEnvelope, in context: ModelContext) throws {
+    let id = envelope.id
+    let hasTransactions = try context.fetch(FetchDescriptor<BudgetTransaction>()).contains { $0.envelopeID == id }
+    let hasAllocations = try context.fetch(FetchDescriptor<BudgetAllocation>()).contains {
+      $0.sourceEnvelopeID == id || $0.targetEnvelopeID == id
+    }
+    let hasSchedules = try context.fetch(FetchDescriptor<BudgetSchedule>()).contains { $0.envelopeID == id }
+    let hasPayeeRules = try context.fetch(FetchDescriptor<BudgetPayee>()).contains { $0.defaultEnvelopeID == id }
+    guard !hasTransactions && !hasAllocations && !hasSchedules && !hasPayeeRules else {
+      throw BudgetCommandError.envelopeHasHistory
+    }
+    context.delete(envelope)
+    try context.save()
+  }
 }
 
 enum BudgetCommandError: LocalizedError {
@@ -262,6 +341,10 @@ enum BudgetCommandError: LocalizedError {
   case unsupportedCardTransfer
   case trackingTransferNeedsEnvelope
   case insufficientFunds
+  case envelopeHasHistory
+  case duplicateScheduledOccurrence
+  case hiddenOverspending
+  case groupNotEmpty
 
   var errorDescription: String? {
     switch self {
@@ -272,6 +355,10 @@ enum BudgetCommandError: LocalizedError {
     case .trackingTransferNeedsEnvelope:
       "Choose an envelope to fund this transfer to a tracking account."
     case .insufficientFunds: "There isn’t enough available money in that source."
+    case .envelopeHasHistory: "This envelope has budget history. Hide it to preserve past activity."
+    case .duplicateScheduledOccurrence: "This scheduled bill has already been recorded for that day."
+    case .hiddenOverspending: "Cover this envelope’s overspending before hiding it."
+    case .groupNotEmpty: "Move or remove the envelopes in this group before deleting it."
     }
   }
 }

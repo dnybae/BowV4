@@ -9,8 +9,9 @@ struct EnvelopeEditorScreen: View {
   var envelope: BudgetEnvelope?
   @State private var name = ""
   @State private var groupID: UUID?
-  @State private var symbol = "square.grid.2x2.fill"
   @State private var targetText = ""
+  @State private var hasTargetDate = false
+  @State private var targetDate = Date()
   @State private var errorMessage: String?
 
   private var targetMinor: Int64? {
@@ -24,22 +25,15 @@ struct EnvelopeEditorScreen: View {
       || (targetMinor ?? 0) > 0
   }
 
-  private var symbols: [String] {
-    [
-      "cart.fill", "house.fill", "bolt.fill", "fork.knife",
-      "car.fill", "wrench.adjustable.fill", "bag.fill", "heart.fill",
-      "sparkles", "cross.case.fill", "banknote.fill", "square.grid.2x2.fill"
-    ]
-  }
-
   init(groups: [BudgetGroup], nextOrder: Int, envelope: BudgetEnvelope? = nil) {
     self.groups = groups
     self.nextOrder = nextOrder
     self.envelope = envelope
     _name = State(initialValue: envelope?.name ?? "")
     _groupID = State(initialValue: envelope?.groupID ?? groups.first?.id)
-    _symbol = State(initialValue: envelope?.symbol ?? "square.grid.2x2.fill")
     _targetText = State(initialValue: envelope?.targetMinor.map(BudgetMoney.editable) ?? "")
+    _hasTargetDate = State(initialValue: envelope?.targetDate != nil)
+    _targetDate = State(initialValue: envelope?.targetDate ?? Date())
   }
 
   var body: some View {
@@ -56,31 +50,12 @@ struct EnvelopeEditorScreen: View {
         Section {
           TextField("Monthly Target", text: $targetText)
             .keyboardType(.decimalPad)
+          Toggle("Set target date", isOn: $hasTargetDate)
+          if hasTargetDate {
+            DatePicker("Target date", selection: $targetDate, displayedComponents: .date)
+          }
         } footer: {
           Text("Optional planning goal. A target does not assign money to this envelope.")
-        }
-        Section("Symbol") {
-          LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
-            ForEach(symbols, id: \.self) { option in
-              Button {
-                symbol = option
-              } label: {
-                Image(systemName: option)
-                  .font(.title3)
-                  .frame(maxWidth: .infinity, minHeight: 42)
-                  .foregroundStyle(symbol == option
-                    ? Color(uiColor: .systemBackground) : Color.accentColor)
-                  .background(
-                    symbol == option ? Color.accentColor : Color.accentColor.opacity(0.1),
-                    in: RoundedRectangle(cornerRadius: 10)
-                  )
-              }
-              .buttonStyle(.plain)
-              .accessibilityLabel(option.replacingOccurrences(of: ".", with: " "))
-              .accessibilityAddTraits(symbol == option ? .isSelected : [])
-            }
-          }
-          .padding(.vertical, 6)
         }
       }
       .navigationTitle(envelope == nil ? "Add Envelope" : "Edit Envelope")
@@ -112,16 +87,17 @@ struct EnvelopeEditorScreen: View {
       if let envelope {
         envelope.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         envelope.groupID = groupID
-        envelope.symbol = symbol
         envelope.targetMinor = targetMinor
+        envelope.targetDate = hasTargetDate ? targetDate : nil
         try modelContext.save()
       } else {
         try BudgetCommands.addEnvelope(
           name: name,
-          symbol: symbol,
+          symbol: "",
           groupID: groupID,
           order: nextOrder,
           targetMinor: targetMinor,
+          targetDate: hasTargetDate ? targetDate : nil,
           in: modelContext
         )
       }

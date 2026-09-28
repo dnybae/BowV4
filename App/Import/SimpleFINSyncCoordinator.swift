@@ -108,9 +108,24 @@ final class SimpleFINSyncCoordinator {
   func resolve(
     _ record: SimpleFINImportRecord,
     as decision: SimpleFINReviewDecision,
+    scheduleID: UUID? = nil,
+    scheduledFor: Date? = nil,
     in context: ModelContext
   ) throws {
     guard record.status == .review else { return }
+    if let scheduleID, let scheduledFor {
+      switch decision {
+      case .ignore:
+        break
+      case .importNew, .link:
+        let calendar = Calendar.current
+        let recorded = try context.fetch(FetchDescriptor<BudgetTransaction>()).contains {
+          $0.scheduleID == scheduleID
+            && $0.scheduledFor.map { calendar.isDate($0, inSameDayAs: scheduledFor) } == true
+        }
+        guard !recorded else { throw BudgetCommandError.duplicateScheduledOccurrence }
+      }
+    }
     switch decision {
     case .ignore:
       record.status = .ignored
@@ -124,6 +139,8 @@ final class SimpleFINSyncCoordinator {
         amount: record.amountMinor, payee: record.payee, in: context
       )
       transaction.externalKey = record.remoteKey
+      transaction.scheduleID = scheduleID
+      transaction.scheduledFor = scheduledFor
       try adjustOpeningBalance(for: transaction, account: account)
       context.insert(transaction)
       record.transactionID = transaction.id
@@ -132,6 +149,10 @@ final class SimpleFINSyncCoordinator {
       guard let transaction = try context.fetch(FetchDescriptor<BudgetTransaction>())
         .first(where: { $0.id == id }),
         isPossibleMatch(transaction, for: record) else {
+        throw SimpleFINError.invalidResponse
+      }
+      if let scheduleID, let existingScheduleID = transaction.scheduleID,
+         existingScheduleID != scheduleID {
         throw SimpleFINError.invalidResponse
       }
       let otherRecords = try context.fetch(FetchDescriptor<SimpleFINImportRecord>())
@@ -150,6 +171,10 @@ final class SimpleFINSyncCoordinator {
         transaction.isCleared = true
       }
       transaction.needsApproval = true
+      if transaction.scheduleID == nil {
+        transaction.scheduleID = scheduleID
+        transaction.scheduledFor = scheduledFor
+      }
       if transaction.sourceRaw == "manual" { transaction.sourceRaw = "manualLinked" }
       if transaction.externalKey == nil { transaction.externalKey = record.remoteKey }
       record.transactionID = transaction.id

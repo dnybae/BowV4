@@ -1,0 +1,84 @@
+import SwiftUI
+import SwiftData
+
+struct CardDebtGoalEditorScreen: View {
+  @Environment(\.dismiss) private var dismiss
+  @Environment(\.modelContext) private var modelContext
+  var card: BudgetAccount
+  var currentDebtMinor: Int64
+  var currencyCode: String
+  @State private var monthlyAmount: String
+  @State private var hasDate: Bool
+  @State private var targetDate: Date
+  @State private var resetBaseline = false
+  @State private var message: String?
+
+  init(card: BudgetAccount, currentDebtMinor: Int64, currencyCode: String) {
+    self.card = card
+    self.currentDebtMinor = currentDebtMinor
+    self.currencyCode = currencyCode
+    _monthlyAmount = State(initialValue: card.debtMonthlyTargetMinor.map(BudgetMoney.editable) ?? "")
+    _hasDate = State(initialValue: card.debtGoalDate != nil)
+    _targetDate = State(initialValue: card.debtGoalDate ?? Date())
+  }
+
+  var body: some View {
+    NavigationStack {
+      Form {
+        Section {
+          LabeledContent("Debt today", value: BudgetMoney.formatted(currentDebtMinor, currencyCode: currencyCode))
+          TextField("Monthly funding target", text: $monthlyAmount)
+            .keyboardType(.decimalPad)
+          Toggle("Set payoff date", isOn: $hasDate)
+          if hasDate {
+            DatePicker("Pay off by", selection: $targetDate, in: Date()..., displayedComponents: .date)
+          }
+        } footer: {
+          Text("A target guides your plan. It does not move money into the card payment envelope.")
+        }
+        if card.debtGoalStartMinor != nil {
+          Section {
+            Button("Start a New Payoff Goal", systemImage: "arrow.counterclockwise") {
+              resetBaseline = true
+            }
+          } footer: {
+            Text(resetBaseline
+              ? "Saving will restart progress from today’s debt balance."
+              : "Restarts progress from today’s debt balance when you save.")
+          }
+        }
+      }
+      .navigationTitle("Payoff Goal")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+        ToolbarItem(placement: .confirmationAction) { Button("Save") { save() } }
+      }
+      .alert("Couldn’t Save Goal", isPresented: Binding(
+        get: { message != nil }, set: { if !$0 { message = nil } }
+      )) {
+        Button("OK") { message = nil }
+      } message: {
+        Text(message ?? "")
+      }
+    }
+  }
+
+  private func save() {
+    let trimmed = monthlyAmount.trimmingCharacters(in: .whitespacesAndNewlines)
+    let parsed = trimmed.isEmpty ? nil : BudgetMoney.parseMinor(trimmed)
+    guard trimmed.isEmpty || (parsed ?? 0) > 0 else {
+      message = "Enter a monthly target greater than zero."
+      return
+    }
+    card.debtMonthlyTargetMinor = parsed
+    card.debtGoalDate = hasDate ? targetDate : nil
+    if card.debtGoalStartMinor == nil || resetBaseline {
+      card.debtGoalStartMinor = currentDebtMinor
+    }
+    do {
+      try modelContext.save()
+      dismiss()
+    } catch { message = error.localizedDescription }
+  }
+}

@@ -58,24 +58,14 @@ struct TransactionFilterScreen: View {
     NavigationStack {
       Form {
         Section("Account") {
-          Picker("Account", selection: $draft.accountID) {
-            Text("All Accounts").tag(nil as UUID?)
-            ForEach(accounts.sorted { $0.name < $1.name }) { account in
-              Text(account.name).tag(Optional(account.id))
-            }
-          }
-          .pickerStyle(.menu)
+          AccountSelectionField(
+            title: "Account", selection: $draft.accountID,
+            accounts: accounts, noneTitle: "All Accounts"
+          )
         }
 
-        Section("Envelope") {
-          Picker("Envelope", selection: $draft.envelopeScope) {
-            Text("All Envelopes").tag(TransactionEnvelopeScope.all)
-            Text("Needs Categorization").tag(TransactionEnvelopeScope.uncategorized)
-            ForEach(envelopes.sorted { $0.name < $1.name }) { envelope in
-              Text(envelope.name).tag(TransactionEnvelopeScope.envelope(envelope.id))
-            }
-          }
-          .pickerStyle(.menu)
+        Section("Category") {
+          CategoryScopeSelectionField(selection: $draft.envelopeScope, envelopes: envelopes)
         }
 
         Section("Review") {

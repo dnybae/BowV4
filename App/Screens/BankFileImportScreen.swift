@@ -58,13 +58,7 @@ struct BankFileImportScreen: View {
         }
 
         Section("Account") {
-          Picker("Import Into", selection: $accountID) {
-            Text("Choose an account").tag(nil as UUID?)
-            ForEach(accounts.sorted { $0.name < $1.name }) { account in
-              Text(account.name).tag(Optional(account.id))
-            }
-          }
-          .pickerStyle(.menu)
+          AccountSelectionField(title: "Import Into", selection: $accountID, accounts: accounts)
         }
 
         if format == .csv, let csvTable {

@@ -99,18 +99,12 @@ struct TransactionEditorScreen: View {
           DatePicker("Date", selection: $date, in: ...Date(), displayedComponents: .date)
         }
         Section("Details") {
-          Picker("Account", selection: $accountID) {
-            ForEach(accounts) { account in
-              Text(account.name).tag(Optional(account.id))
-            }
-          }
+          AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts)
           if kind == .transfer {
-            Picker("To Account", selection: $destinationID) {
-              Text("Choose an account").tag(nil as UUID?)
-              ForEach(accounts.filter { $0.id != accountID }) { account in
-                Text(account.name).tag(Optional(account.id))
-              }
-            }
+            AccountSelectionField(
+              title: "To Account", selection: $destinationID,
+              accounts: accounts, excludingID: accountID
+            )
           } else {
             TextField(kind == .expense ? "Payee" : "Source", text: $payee)
               .textInputAutocapitalization(.words)
@@ -127,12 +121,10 @@ struct TransactionEditorScreen: View {
           if (kind != .transfer && selectedAccount?.kind != .asset
               && selectedAccount?.kind != .liability)
               || needsEnvelopeForTransfer {
-            Picker("Envelope", selection: $envelopeID) {
-              Text("Needs Categorization").tag(nil as UUID?)
-              ForEach(envelopes) { envelope in
-                Text(envelope.name).tag(Optional(envelope.id))
-              }
-            }
+            CategorySelectionField(
+              title: "Category", selection: $envelopeID,
+              envelopes: envelopes, noneTitle: "Needs Categorization"
+            )
           }
           TextField("Notes", text: $notes, axis: .vertical)
             .lineLimit(2...4)

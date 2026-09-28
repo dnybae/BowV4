@@ -33,11 +33,7 @@ struct PayeeRuleEditorScreen: View {
             .textInputAutocapitalization(.words)
         }
         Section("Default Envelope") {
-          Picker("Envelope", selection: $envelopeID) {
-            ForEach(envelopes.sorted { $0.name < $1.name }) { envelope in
-              Text(envelope.name).tag(Optional(envelope.id))
-            }
-          }
+          CategorySelectionField(title: "Category", selection: $envelopeID, envelopes: envelopes)
         }
         if rule != nil {
           Section {

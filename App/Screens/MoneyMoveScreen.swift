@@ -48,24 +48,16 @@ struct MoneyMoveScreen: View {
     NavigationStack {
       Form {
         Section {
-          Picker("From", selection: $source) {
-            Text("Ready to Assign").tag(BudgetBucket.readyToAssign)
-            ForEach(envelopes) { envelope in
-              Text(envelope.name).tag(BudgetBucket.envelope(envelope.id))
-            }
-            ForEach(cardAccounts) { card in
-              Text("\(card.name) Payment").tag(BudgetBucket.cardPayment(card.id))
-            }
-          }
-          Picker("To", selection: $target) {
-            Text("Ready to Assign").tag(BudgetBucket.readyToAssign)
-            ForEach(envelopes) { envelope in
-              Text(envelope.name).tag(BudgetBucket.envelope(envelope.id))
-            }
-            ForEach(cardAccounts) { card in
-              Text("\(card.name) Payment").tag(BudgetBucket.cardPayment(card.id))
-            }
-          }
+          BudgetBucketSelectionField(
+            title: "From", selection: $source,
+            envelopes: envelopes, cardAccounts: cardAccounts,
+            snapshot: snapshot, currencyCode: currencyCode
+          )
+          BudgetBucketSelectionField(
+            title: "To", selection: $target,
+            envelopes: envelopes, cardAccounts: cardAccounts,
+            snapshot: snapshot, currencyCode: currencyCode
+          )
           TextField("Amount", text: $amount)
             .keyboardType(.decimalPad)
         } header: {

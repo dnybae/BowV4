@@ -42,18 +42,11 @@ struct ScheduleEditorScreen: View {
             .textInputAutocapitalization(.words)
           TextField("Expected amount", text: $amount)
             .keyboardType(.decimalPad)
-          Picker("Account", selection: $accountID) {
-            Text("Choose an account").tag(nil as UUID?)
-            ForEach(accounts) { account in
-              Text(account.name).tag(Optional(account.id))
-            }
-          }
-          Picker("Envelope", selection: $envelopeID) {
-            Text("Choose an envelope").tag(nil as UUID?)
-            ForEach(envelopes) { envelope in
-              Text(envelope.name).tag(Optional(envelope.id))
-            }
-          }
+          AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts)
+          CategorySelectionField(
+            title: "Category", selection: $envelopeID,
+            envelopes: envelopes, noneTitle: "No Category"
+          )
         }
         Section("Schedule") {
           DatePicker("First due", selection: $startDate, displayedComponents: .date)

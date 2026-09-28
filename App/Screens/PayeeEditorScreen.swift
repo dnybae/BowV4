@@ -36,14 +36,10 @@ struct PayeeEditorScreen: View {
             .textInputAutocapitalization(.words)
         }
         Section {
-          Picker("Default Envelope", selection: $defaultEnvelopeID) {
-            Text("None").tag(nil as UUID?)
-            ForEach(envelopes.sorted {
-              $0.name.localizedStandardCompare($1.name) == .orderedAscending
-            }) { envelope in
-              Text(envelope.name).tag(Optional(envelope.id))
-            }
-          }
+          CategorySelectionField(
+            title: "Default Category", selection: $defaultEnvelopeID,
+            envelopes: envelopes, noneTitle: "None"
+          )
         } footer: {
           Text("Bow suggests this envelope when you enter this payee on an expense. You can always choose a different one.")
         }

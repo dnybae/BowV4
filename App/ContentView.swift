@@ -69,6 +69,7 @@ private struct BudgetHomeView: View {
   @Query private var schedules: [BudgetSchedule]
   @AppStorage("bow.appearance") private var appearanceRaw = AppAppearance.system.rawValue
   @State private var selectedMonth = Date()
+  @State private var selectedTab: HomeTab = .budget
   @State private var activeSheet: BowSheet?
   @State private var showingSettings = false
   @State private var showingInsights = false
@@ -100,8 +101,17 @@ private struct BudgetHomeView: View {
       if profiles.isEmpty {
         WelcomeScreen()
       } else {
-        TabView {
-          Tab("Budget", systemImage: "square.grid.2x2.fill") {
+        let tabs = TabView(selection: Binding(
+          get: { selectedTab },
+          set: { tab in
+            if tab == .addTransaction {
+              activeSheet = .newTransaction
+            } else {
+              selectedTab = tab
+            }
+          }
+        )) {
+          Tab("Budget", systemImage: "square.grid.2x2.fill", value: .budget) {
             NavigationStack {
               BudgetScreen(
                 currencyCode: currencyCode,
@@ -127,7 +137,7 @@ private struct BudgetHomeView: View {
               }
             }
           }
-          Tab("Transactions", systemImage: "list.bullet.rectangle") {
+          Tab("Transactions", systemImage: "list.bullet.rectangle", value: .transactions) {
             NavigationStack {
               TransactionsScreen(
                 transactions: transactions,
@@ -145,7 +155,7 @@ private struct BudgetHomeView: View {
               }
             }
           }
-          Tab("Calendar", systemImage: "calendar") {
+          Tab("Calendar", systemImage: "calendar", value: .calendar) {
             NavigationStack {
               CalendarScreen(
                 schedules: schedules,
@@ -164,7 +174,7 @@ private struct BudgetHomeView: View {
               }
             }
           }
-          Tab("Accounts", systemImage: "banknote.fill") {
+          Tab("Accounts", systemImage: "banknote.fill", value: .accounts) {
             NavigationStack {
               AccountsScreen(
                 accounts: accounts,
@@ -194,21 +204,32 @@ private struct BudgetHomeView: View {
               }
             }
           }
+          if #available(iOS 27.0, *) {
+            Tab("Add Transaction", systemImage: "plus", value: .addTransaction, role: .prominent) {
+              EmptyView()
+            }
+          }
+        }
+        Group {
+          if #available(iOS 27.0, *) {
+            tabs
+          } else {
+            tabs.tabViewBottomAccessory {
+              HStack {
+                Spacer()
+                Button("Add Transaction", systemImage: "plus") {
+                  activeSheet = .newTransaction
+                }
+                .labelStyle(.iconOnly)
+                .font(.title3.weight(.semibold))
+                .buttonStyle(.glassProminent)
+                .accessibilityLabel("Add Transaction")
+              }
+              .padding(.horizontal, 16)
+            }
+          }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
-        .tabViewBottomAccessory {
-          HStack {
-            Spacer()
-            Button("Add Transaction", systemImage: "plus") {
-              activeSheet = .newTransaction
-            }
-            .labelStyle(.iconOnly)
-            .font(.title3.weight(.semibold))
-            .buttonStyle(.glassProminent)
-            .accessibilityLabel("Add Transaction")
-          }
-          .padding(.horizontal, 16)
-        }
         .tint(Color.accentColor)
         .sheet(isPresented: $showingSettings) {
           SettingsScreen()
@@ -312,4 +333,12 @@ private enum BowSheet: Identifiable {
     case .moveMoney: "moveMoney"
     }
   }
+}
+
+private enum HomeTab: Hashable {
+  case budget
+  case transactions
+  case calendar
+  case accounts
+  case addTransaction
 }

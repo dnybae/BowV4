@@ -10,12 +10,12 @@ struct AccountsScreen: View {
   var onSelectTransaction: (UUID) -> Void
   @State private var editingAccount: BudgetAccount?
 
-  private var onBudgetAccounts: [BudgetAccount] {
-    accounts(for: [.cash, .credit])
+  private var hasOnBudgetAccounts: Bool {
+    accounts.contains { $0.kind == .cash || $0.kind == .credit }
   }
 
-  private var offBudgetAccounts: [BudgetAccount] {
-    accounts(for: [.asset, .liability])
+  private var hasOffBudgetAccounts: Bool {
+    accounts.contains { $0.kind == .asset || $0.kind == .liability }
   }
 
   var body: some View {
@@ -32,19 +32,17 @@ struct AccountsScreen: View {
         Button("View Insights", systemImage: "chart.bar.fill", action: onViewInsights)
       }
 
-      if !onBudgetAccounts.isEmpty {
+      if hasOnBudgetAccounts {
         Section("On Budget") {
-          ForEach(onBudgetAccounts) { account in
-            accountRow(account)
-          }
+          accountGroup(.cash, title: "Cash")
+          accountGroup(.credit, title: "Credit Cards")
         }
       }
 
-      if !offBudgetAccounts.isEmpty {
+      if hasOffBudgetAccounts {
         Section("Off Budget") {
-          ForEach(offBudgetAccounts) { account in
-            accountRow(account)
-          }
+          accountGroup(.asset, title: "Assets")
+          accountGroup(.liability, title: "Liabilities")
         }
       }
 
@@ -58,9 +56,19 @@ struct AccountsScreen: View {
     }
   }
 
-  private func accounts(for kinds: [BudgetAccountKind]) -> [BudgetAccount] {
-    kinds.flatMap { kind in
-      accounts.filter { $0.kind == kind }.sorted { $0.name < $1.name }
+  @ViewBuilder
+  private func accountGroup(_ kind: BudgetAccountKind, title: String) -> some View {
+    let matching = accounts.filter { $0.kind == kind }.sorted { $0.name < $1.name }
+    if !matching.isEmpty {
+      Text(title)
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .accessibilityAddTraits(.isHeader)
+      ForEach(matching) { account in
+        accountRow(account)
+      }
     }
   }
 
@@ -80,12 +88,7 @@ struct AccountsScreen: View {
           .foregroundStyle(.tint)
           .frame(width: 28)
           .accessibilityHidden(true)
-        VStack(alignment: .leading, spacing: 2) {
-          Text(account.name)
-          Text(account.kind.title)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
+        Text(account.name)
         Spacer()
         Text(BudgetMoney.formatted(
           snapshot.accountBalances[account.id, default: 0],

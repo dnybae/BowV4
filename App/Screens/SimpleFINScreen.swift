@@ -68,7 +68,7 @@ struct SimpleFINScreen: View {
           }
           ForEach(links.sorted { $0.name < $1.name }) { link in
             VStack(alignment: .leading, spacing: 4) {
-              Picker(selection: Binding(
+              AccountSelectionField(title: link.name, selection: Binding(
                 get: { link.localAccountID },
                 set: { id in
                   let previousID = link.localAccountID
@@ -83,19 +83,11 @@ struct SimpleFINScreen: View {
                     message = "Account mapping could not be updated: \(error.localizedDescription)"
                   }
                 }
-              )) {
-                Text("Do Not Import").tag(nil as UUID?)
-                ForEach(accounts.filter { account in
+              ), accounts: accounts.filter { account in
                   account.currencyCode == link.currencyCode
                     && (account.id == link.localAccountID
                       || !links.contains { $0.id != link.id && $0.localAccountID == account.id })
-                }) { account in
-                  Text(account.name).tag(Optional(account.id))
-                }
-              } label: {
-                Text(link.name)
-              }
-              .pickerStyle(.menu)
+                }, noneTitle: "Do Not Import")
               if let balance = link.reportedBalance, let date = link.reportedAt {
                 Text("Bank balance: \(balance) \(link.currencyCode) · \(date.formatted(date: .abbreviated, time: .omitted))")
                   .font(.caption)

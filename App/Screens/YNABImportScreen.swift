@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct YNABImportScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
+  @AppStorage("bow.demoMode") private var isDemoMode = false
   var groups: [BudgetGroup]
   var envelopes: [BudgetEnvelope]
   @State private var showingFilePicker = false
@@ -17,6 +18,15 @@ struct YNABImportScreen: View {
         Section {
           Button("Choose YNAB Plan Export", systemImage: "text.document") {
             showingFilePicker = true
+          }
+          if isDemoMode {
+            Button("Use Sample Export", systemImage: "doc.text") {
+              do {
+                preview = try YNABCategoryParser().parse(DemoData.sampleYNABExport)
+              } catch {
+                errorMessage = error.localizedDescription
+              }
+            }
           }
         } header: {
           Text("File")

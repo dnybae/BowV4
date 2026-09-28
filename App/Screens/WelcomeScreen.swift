@@ -3,6 +3,7 @@ import SwiftData
 
 struct WelcomeScreen: View {
   @Environment(\.modelContext) private var modelContext
+  @AppStorage("bow.demoMode") private var isDemoMode = false
   @State private var currencyCode = "USD"
   @State private var withDefaults = false
   @State private var errorMessage: String?
@@ -56,6 +57,14 @@ struct WelcomeScreen: View {
           }
           .frame(maxWidth: .infinity)
           .fontWeight(.semibold)
+        }
+
+        Section {
+          Button("Try Demo Budget", systemImage: "play.rectangle") {
+            isDemoMode = true
+          }
+        } footer: {
+          Text("Explore sample accounts, transactions, scheduled bills, and bank review. Your own budget stays separate.")
         }
       }
       .navigationTitle("Welcome to Bow")

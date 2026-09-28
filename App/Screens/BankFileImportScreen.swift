@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct BankFileImportScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
+  @AppStorage("bow.demoMode") private var isDemoMode = false
   @Query private var accounts: [BudgetAccount]
   @Query private var transactions: [BudgetTransaction]
   @Query private var payees: [BudgetPayee]
@@ -31,6 +32,23 @@ struct BankFileImportScreen: View {
         Section {
           Button("Choose Bank File", systemImage: "doc.text") {
             showingFilePicker = true
+          }
+          if isDemoMode {
+            Button("Use Sample CSV", systemImage: "doc.text") {
+              do {
+                let text = DemoData.sampleBankCSV
+                let table = try BankFileParser().csvTable(text)
+                fileText = text
+                fileName = "Demo Bank Transactions.csv"
+                format = .csv
+                csvTable = table
+                mapping = BankCSVMapping.suggested(for: table.headers)
+                accountID = accounts.first { $0.name == "Everyday Checking" }?.id ?? accounts.first?.id
+                clearPreview()
+              } catch {
+                errorMessage = error.localizedDescription
+              }
+            }
           }
           if let fileName { Text(fileName).foregroundStyle(.secondary) }
         } header: {

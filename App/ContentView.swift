@@ -2,6 +2,61 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+  @AppStorage("bow.demoMode") private var isDemoMode = false
+  @AppStorage("bow.demoResetVersion") private var demoResetVersion = 0
+  @AppStorage("bow.demoScenario") private var demoScenarioRaw = DemoScenario.showcase.rawValue
+  @State private var demoContainer: ModelContainer?
+  @State private var demoError: String?
+
+  var body: some View {
+    Group {
+      if isDemoMode {
+        if let demoContainer {
+          BudgetHomeView(isDemoMode: true)
+            .modelContainer(demoContainer)
+            .id(demoResetVersion)
+        } else if let demoError {
+          ContentUnavailableView {
+            Label("Demo Unavailable", systemImage: "exclamationmark.triangle")
+          } description: {
+            Text(demoError)
+          } actions: {
+            Button("Return to My Budget") { isDemoMode = false }
+          }
+        } else {
+          ProgressView("Preparing demo…")
+        }
+      } else {
+        BudgetHomeView(isDemoMode: false)
+      }
+    }
+    .task(id: isDemoMode) {
+      if isDemoMode && demoContainer == nil { prepareDemo() }
+    }
+    .onChange(of: demoResetVersion) { _, _ in
+      demoContainer = nil
+      if isDemoMode { prepareDemo() }
+    }
+    .onChange(of: demoScenarioRaw) { _, _ in
+      demoContainer = nil
+      if isDemoMode { prepareDemo() }
+    }
+  }
+
+  private func prepareDemo() {
+    do {
+      demoError = nil
+      demoContainer = try DemoData.makeContainer(
+        scenario: DemoScenario(rawValue: demoScenarioRaw) ?? .showcase
+      )
+    } catch {
+      demoError = error.localizedDescription
+    }
+  }
+}
+
+private struct BudgetHomeView: View {
+  var isDemoMode: Bool
   @Environment(\.modelContext) private var modelContext
   @Environment(\.scenePhase) private var scenePhase
   @Query private var profiles: [BudgetProfile]
@@ -217,8 +272,9 @@ struct ContentView: View {
     .preferredColorScheme(
       AppAppearance(rawValue: appearanceRaw)?.colorScheme
     )
-    .task { await refreshSimpleFINIfConnected() }
+    .task { if !isDemoMode { await refreshSimpleFINIfConnected() } }
     .onChange(of: scenePhase) { _, phase in
+      guard !isDemoMode else { return }
       if phase == .active {
         Task { await refreshSimpleFINIfConnected() }
       } else if phase == .background {

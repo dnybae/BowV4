@@ -4,11 +4,15 @@ import SwiftData
 struct SettingsScreen: View {
   @Environment(\.dismiss) private var dismiss
   @AppStorage("bow.appearance") private var appearanceRaw = AppAppearance.system.rawValue
+  @AppStorage("bow.demoMode") private var isDemoMode = false
+  @AppStorage("bow.demoResetVersion") private var demoResetVersion = 0
+  @AppStorage("bow.demoScenario") private var demoScenarioRaw = DemoScenario.showcase.rawValue
   @Query private var groups: [BudgetGroup]
   @Query private var envelopes: [BudgetEnvelope]
   @Query private var simpleFINRecords: [SimpleFINImportRecord]
   @State private var showingYNABImport = false
   @State private var showingBankImport = false
+  @State private var showingResetDemo = false
 
   private var version: String {
     Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
@@ -28,6 +32,30 @@ struct SettingsScreen: View {
           Text("Appearance")
         } footer: {
           Text("System follows your iPhone’s appearance setting.")
+        }
+
+        Section {
+          Toggle("Demo Mode", systemImage: "play.rectangle", isOn: $isDemoMode)
+          if isDemoMode {
+            Picker("Situation", selection: $demoScenarioRaw) {
+              ForEach(DemoScenario.allCases) { scenario in
+                Text(scenario.title).tag(scenario.rawValue)
+              }
+            }
+            .pickerStyle(.menu)
+            Text((DemoScenario(rawValue: demoScenarioRaw) ?? .showcase).explanation)
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+            Button("Reset Demo Data", systemImage: "arrow.counterclockwise", role: .destructive) {
+              showingResetDemo = true
+            }
+          }
+        } header: {
+          Text("Explore Bow")
+        } footer: {
+          Text(isDemoMode
+            ? "Sample data is separate from your budget and resets when the app restarts. Reset here to undo changes made during this session. Bank sync is simulated."
+            : "Try every screen with sample data. Your budget stays separate.")
         }
 
         Section("Categories") {
@@ -71,12 +99,14 @@ struct SettingsScreen: View {
         }
 
         Section {
-          LabeledContent("Storage", value: "On this iPhone")
+          LabeledContent("Storage", value: isDemoMode ? "Temporary demo" : "On this iPhone")
           Label("No Bow account required", systemImage: "lock.shield")
         } header: {
           Text("Data & Privacy")
         } footer: {
-          Text("Your budget is stored on this device. SimpleFIN bank sync is optional and uses a credential stored in this device’s Keychain. iCloud sync is not active yet.")
+          Text(isDemoMode
+            ? "Demo changes stay in this app session. Your personal budget and SimpleFIN connection are separate."
+            : "Your budget is stored on this device. SimpleFIN bank sync is optional and uses a credential stored in this device’s Keychain. iCloud sync is not active yet.")
         }
 
         Section("About") {
@@ -95,6 +125,14 @@ struct SettingsScreen: View {
       }
       .sheet(isPresented: $showingBankImport) {
         BankFileImportScreen()
+      }
+      .confirmationDialog("Reset all demo changes?", isPresented: $showingResetDemo) {
+        Button("Reset Demo Data", role: .destructive) {
+          dismiss()
+          demoResetVersion += 1
+        }
+      } message: {
+        Text("This restores the original sample budget, transactions, schedules, and bank review items.")
       }
     }
   }

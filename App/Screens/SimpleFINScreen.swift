@@ -3,6 +3,7 @@ import SwiftData
 
 struct SimpleFINScreen: View {
   @Environment(\.modelContext) private var modelContext
+  @AppStorage("bow.demoMode") private var isDemoMode = false
   @Query private var connections: [SimpleFINConnection]
   @Query private var links: [SimpleFINAccountLink]
   @Query private var records: [SimpleFINImportRecord]
@@ -21,26 +22,30 @@ struct SimpleFINScreen: View {
     Form {
       if let connection {
         Section {
-          LabeledContent("Status", value: "Connected")
+          LabeledContent("Status", value: isDemoMode ? "Demo connection" : "Connected")
           if let date = connection.lastSuccessfulAt {
             LabeledContent("Last sync", value: date.formatted(date: .abbreviated, time: .shortened))
           }
-          Toggle("Automatic Sync", isOn: Binding(
-            get: { connection.automaticSync },
-            set: { enabled in
-              connection.automaticSync = enabled
-              try? modelContext.save()
-              SimpleFINBackgroundRefresh.schedule(in: modelContext)
+          if !isDemoMode {
+            Toggle("Automatic Sync", isOn: Binding(
+              get: { connection.automaticSync },
+              set: { enabled in
+                connection.automaticSync = enabled
+                try? modelContext.save()
+                SimpleFINBackgroundRefresh.schedule(in: modelContext)
+              }
+            ))
+            Button("Sync Now", systemImage: "arrow.clockwise") {
+              Task { await sync() }
             }
-          ))
-          Button("Sync Now", systemImage: "arrow.clockwise") {
-            Task { await sync() }
+            .disabled(coordinator.isSyncing)
           }
-          .disabled(coordinator.isSyncing)
         } header: {
           Text("Connection")
         } footer: {
-          Text("Bow checks while you use the app and requests background refresh when iOS allows it. SimpleFIN may update a bank only once a day.")
+          Text(isDemoMode
+            ? "This sample connection never contacts a bank. Review the example matches below or change account mappings to test the interface."
+            : "Bow checks while you use the app and requests background refresh when iOS allows it. SimpleFIN may update a bank only once a day.")
         }
 
         if let lastMessage = connection.lastMessage, !lastMessage.isEmpty {
@@ -107,10 +112,20 @@ struct SimpleFINScreen: View {
           }
         }
 
+        if !isDemoMode {
+          Section {
+            Button("Disconnect SimpleFIN", role: .destructive) { showingDisconnect = true }
+          } footer: {
+            Text("Disconnecting stops future imports. Transactions already in Bow remain. You can also revoke access in SimpleFIN.")
+          }
+        }
+      } else if isDemoMode {
         Section {
-          Button("Disconnect SimpleFIN", role: .destructive) { showingDisconnect = true }
-        } footer: {
-          Text("Disconnecting stops future imports. Transactions already in Bow remain. You can also revoke access in SimpleFIN.")
+          ContentUnavailableView(
+            "No Sample Connection",
+            systemImage: "arrow.clockwise",
+            description: Text("Choose Sample Budget in Settings to explore bank mappings and duplicate review.")
+          )
         }
       } else {
         Section {

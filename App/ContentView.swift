@@ -69,8 +69,10 @@ private struct BudgetHomeView: View {
   @Query private var schedules: [BudgetSchedule]
   @AppStorage("bow.appearance") private var appearanceRaw = AppAppearance.system.rawValue
   @State private var selectedMonth = Date()
+  @State private var selectedTab: HomeTab = .budget
   @State private var activeSheet: BowSheet?
   @State private var showingSettings = false
+  @State private var showingInsights = false
 
   private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
 
@@ -99,8 +101,8 @@ private struct BudgetHomeView: View {
       if profiles.isEmpty {
         WelcomeScreen()
       } else {
-        TabView {
-          Tab("Budget", systemImage: "square.grid.2x2.fill") {
+        TabView(selection: $selectedTab) {
+          Tab("Budget", systemImage: "square.grid.2x2.fill", value: .budget) {
             NavigationStack {
               BudgetScreen(
                 currencyCode: currencyCode,
@@ -123,15 +125,11 @@ private struct BudgetHomeView: View {
                     showingSettings = true
                   }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                  Button("Add Transaction", systemImage: "plus") {
-                    activeSheet = .newTransaction
-                  }
-                }
               }
             }
+            .toolbar(.hidden, for: .tabBar)
           }
-          Tab("Transactions", systemImage: "list.bullet.rectangle") {
+          Tab("Transactions", systemImage: "list.bullet.rectangle", value: .transactions) {
             NavigationStack {
               TransactionsScreen(
                 transactions: transactions,
@@ -146,15 +144,11 @@ private struct BudgetHomeView: View {
                     showingSettings = true
                   }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                  Button("Add Transaction", systemImage: "plus") {
-                    activeSheet = .newTransaction
-                  }
-                }
               }
             }
+            .toolbar(.hidden, for: .tabBar)
           }
-          Tab("Calendar", systemImage: "calendar") {
+          Tab("Calendar", systemImage: "calendar", value: .calendar) {
             NavigationStack {
               CalendarScreen(
                 schedules: schedules,
@@ -172,28 +166,9 @@ private struct BudgetHomeView: View {
                 }
               }
             }
+            .toolbar(.hidden, for: .tabBar)
           }
-          Tab("Insights", systemImage: "chart.bar.fill") {
-            NavigationStack {
-              InsightsScreen(
-                groups: groups,
-                envelopes: envelopes,
-                accounts: accounts,
-                allocations: allocations,
-                transactions: transactions,
-                currencyCode: currencyCode
-              )
-              .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                  Button("Settings", systemImage: "gearshape") { showingSettings = true }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                  Button("Add Transaction", systemImage: "plus") { activeSheet = .newTransaction }
-                }
-              }
-            }
-          }
-          Tab("Accounts", systemImage: "banknote.fill") {
+          Tab("Accounts", systemImage: "banknote.fill", value: .accounts) {
             NavigationStack {
               AccountsScreen(
                 accounts: accounts,
@@ -201,21 +176,33 @@ private struct BudgetHomeView: View {
                 snapshot: currentSnapshot,
                 currencyCode: currencyCode,
                 onAddAccount: { activeSheet = .newAccount },
+                onViewInsights: { showingInsights = true },
                 onSelectTransaction: { activeSheet = .editTransaction($0) }
               )
+              .navigationDestination(isPresented: $showingInsights) {
+                InsightsScreen(
+                  groups: groups,
+                  envelopes: envelopes,
+                  accounts: accounts,
+                  allocations: allocations,
+                  transactions: transactions,
+                  currencyCode: currencyCode
+                )
+              }
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                   Button("Settings", systemImage: "gearshape") {
                     showingSettings = true
                   }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                  Button("Add Transaction", systemImage: "plus") {
-                    activeSheet = .newTransaction
-                  }
-                }
               }
             }
+            .toolbar(.hidden, for: .tabBar)
+          }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+          HomeTabBar(selection: $selectedTab) {
+            activeSheet = .newTransaction
           }
         }
         .tint(Color.accentColor)

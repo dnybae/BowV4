@@ -6,6 +6,7 @@ struct AccountsScreen: View {
   var snapshot: BudgetSnapshot
   var currencyCode: String
   var onAddAccount: () -> Void
+  var onViewInsights: () -> Void
   var onSelectTransaction: (UUID) -> Void
   @State private var editingAccount: BudgetAccount?
 
@@ -20,6 +21,7 @@ struct AccountsScreen: View {
             .font(.system(.largeTitle, design: .rounded, weight: .semibold))
         }
         .padding(.vertical, 8)
+        Button("View Insights", systemImage: "chart.bar.fill", action: onViewInsights)
       }
 
       ForEach(BudgetAccountKind.allCases) { kind in

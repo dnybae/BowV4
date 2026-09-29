@@ -93,10 +93,12 @@ struct SettingsScreen: View {
         }
 
         Section("Preferences") {
-          Picker("Appearance", selection: $appearanceRaw) {
+          Picker(selection: $appearanceRaw) {
             ForEach(AppAppearance.allCases) { appearance in
               Text(appearance.title).tag(appearance.rawValue)
             }
+          } label: {
+            Label("Appearance", systemImage: "circle.lefthalf.filled")
           }
           .pickerStyle(.menu)
           NavigationLink {

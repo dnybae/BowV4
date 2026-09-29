@@ -44,7 +44,10 @@ struct TransactionEditorScreen: View {
     self.currencyCode = currencyCode
     self.scheduledDraft = scheduledDraft
     _kind = State(initialValue: transaction?.kind ?? scheduledDraft?.kind ?? .expense)
-    _accountID = State(initialValue: transaction?.accountID ?? scheduledDraft?.accountID ?? accounts.first?.id)
+    _accountID = State(initialValue: transaction?.accountID ?? scheduledDraft?.accountID
+      ?? accounts.first(where: { $0.kind == .cash })?.id
+      ?? accounts.first(where: { $0.kind == .credit })?.id
+      ?? accounts.first?.id)
     _destinationID = State(initialValue: transaction?.transferAccountID ?? scheduledDraft?.transferAccountID)
     _envelopeID = State(initialValue: transaction?.envelopeID ?? scheduledDraft?.envelopeID)
     _amount = State(initialValue: transaction.map { BudgetMoney.editable($0.amountMinor) } ?? scheduledDraft.map { BudgetMoney.editable($0.amountMinor) } ?? "")
@@ -63,6 +66,13 @@ struct TransactionEditorScreen: View {
           let destination = accounts.first(where: { $0.id == destinationID })
     else { return false }
     return destination.kind == .asset || destination.kind == .liability
+  }
+
+  private var categoryNoneTitle: String {
+    if kind == .inflow {
+      return selectedAccount?.kind == .cash ? "Ready to Assign" : "No Category"
+    }
+    return "Needs Categorization"
   }
 
   private var suggestedPayees: [PayeeDirectory.Entry] {
@@ -126,21 +136,6 @@ struct TransactionEditorScreen: View {
           DatePicker(isScheduled ? "First due" : "Date", selection: $date,
                      in: Date.distantPast...Date.distantFuture, displayedComponents: .date)
         }
-        if transaction == nil && scheduledDraft == nil {
-          Section("Schedule") {
-            Toggle("Schedule for later", isOn: $isScheduled)
-            if isScheduled {
-              Picker("Repeats", selection: $recurrence) {
-                ForEach(ScheduleFrequency.allCases) { frequency in
-                  Text(frequency.title).tag(frequency)
-                }
-              }
-              .pickerStyle(.menu)
-              Text("Scheduled entries appear on the calendar and affect balances only when recorded.")
-                .font(.footnote).foregroundStyle(.secondary)
-            }
-          }
-        }
         Section("Details") {
           AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts)
           if kind == .transfer {
@@ -161,16 +156,34 @@ struct TransactionEditorScreen: View {
               }
             }
           }
-          if (kind != .transfer && selectedAccount?.kind != .asset
-              && selectedAccount?.kind != .liability)
-              || needsEnvelopeForTransfer {
+          if kind != .transfer || needsEnvelopeForTransfer {
             CategorySelectionField(
               title: "Category", selection: $envelopeID,
-              envelopes: envelopes, noneTitle: "Needs Categorization"
+              envelopes: envelopes, noneTitle: categoryNoneTitle
             )
+          }
+          if kind != .transfer && (selectedAccount?.kind == .asset || selectedAccount?.kind == .liability) {
+            Text("Categories on tracking accounts are for reference and don't change your budget.")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
           }
           TextField("Notes", text: $notes, axis: .vertical)
             .lineLimit(2...4)
+        }
+        if transaction == nil && scheduledDraft == nil {
+          Section("Schedule") {
+            Toggle("Schedule for later", isOn: $isScheduled)
+            if isScheduled {
+              Picker("Repeats", selection: $recurrence) {
+                ForEach(ScheduleFrequency.allCases) { frequency in
+                  Text(frequency.title).tag(frequency)
+                }
+              }
+              .pickerStyle(.menu)
+              Text("Scheduled entries appear on the calendar and affect balances only when recorded.")
+                .font(.footnote).foregroundStyle(.secondary)
+            }
+          }
         }
 
         if accounts.isEmpty {

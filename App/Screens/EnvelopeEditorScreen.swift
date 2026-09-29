@@ -83,6 +83,10 @@ struct EnvelopeEditorScreen: View {
 
   private func save() {
     guard let groupID else { return }
+    guard groups.contains(where: { $0.id == groupID && !$0.isSystem }) else {
+      errorMessage = "Choose a regular envelope group."
+      return
+    }
     do {
       if let envelope {
         envelope.name = name.trimmingCharacters(in: .whitespacesAndNewlines)

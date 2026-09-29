@@ -240,6 +240,51 @@ struct BudgetCalculatorChecks {
     expect(trackingSnapshot.netWorthMinor == 10_000, "tracking transfer preserves net worth")
     expect(trackingSnapshot.readyToAssignMinor == 0, "tracking transfer cannot fund another envelope")
 
+    let inboundTrackingTransfer = transaction(
+      -1_000, accountID: assetID, envelopeID: nil,
+      kind: .transfer, destinationID: cashID
+    )
+    let inboundSnapshot = calculator.calculate(
+      month: day(1, 15), accounts: [cash, AccountLedgerItem(id: assetID, kind: .asset,
+        openingBalanceMinor: 5_000, openedAt: day(1, 1))],
+      envelopes: envelopes, allocations: startingAllocations,
+      transactions: [inboundTrackingTransfer]
+    )
+    expect(inboundSnapshot.readyToAssignMinor == 1_000, "tracking-to-cash transfer enters Ready to Assign")
+    expect(inboundSnapshot.netWorthMinor == 15_000, "inbound tracking transfer preserves net worth")
+
+    let linkedPaymentEnvelope = EnvelopeLedgerItem(id: UUID(), paymentAccountID: cardID)
+    let linkedSnapshot = calculator.calculate(
+      month: day(1, 15), accounts: [cash, card],
+      envelopes: envelopes + [linkedPaymentEnvelope], allocations: startingAllocations,
+      transactions: [cardPurchase]
+    )
+    expect(linkedSnapshot.cashAvailable[linkedPaymentEnvelope.id] == nil,
+           "card payment envelope uses the card payment bucket, not cash category funds")
+
+    let rolledCredit = calculator.calculate(
+      month: day(2, 15), accounts: [cash, card], envelopes: envelopes,
+      allocations: startingAllocations, transactions: [cardPurchase]
+    )
+    expect(rolledCredit.creditShortfall.isEmpty, "unfunded credit spending stops showing as this month's overspending")
+    expect(rolledCredit.accountBalances[cardID] == -5_000 && rolledCredit.paymentAvailable[cardID] == 2_000,
+           "unfunded credit spending becomes carried debt")
+
+    let thisMonth = calendar.dateInterval(of: .month, for: Date())!.start
+    let futureMonth = calendar.date(byAdding: .month, value: 1, to: thisMonth)!
+    let futureCash = AccountLedgerItem(id: cashID, kind: .cash, openingBalanceMinor: 10_000,
+      openedAt: calendar.date(byAdding: .day, value: -1, to: thisMonth)!)
+    let futureAllocation = AllocationLedgerItem(id: UUID(), date: futureMonth, createdAt: Date(),
+      amountMinor: 4_000, source: .readyToAssign, target: .envelope(groceriesID))
+    let currentPlan = calculator.calculate(month: thisMonth, accounts: [futureCash],
+      envelopes: envelopes, allocations: [futureAllocation], transactions: [])
+    let futurePlan = calculator.calculate(month: futureMonth, accounts: [futureCash],
+      envelopes: envelopes, allocations: [futureAllocation], transactions: [])
+    expect(currentPlan.readyToAssignMinor == 6_000 && currentPlan.assignedInFutureMinor == 4_000,
+           "future assignments reserve current cash")
+    expect(currentPlan.available(for: groceriesID) == 0 && futurePlan.available(for: groceriesID) == 4_000,
+           "future funding appears in its chosen month")
+
     print("Budget calculator checks passed")
   }
 

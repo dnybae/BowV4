@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct BudgetScreen: View {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   var currencyCode: String
   var groups: [BudgetGroup]
   var envelopes: [BudgetEnvelope]
@@ -18,6 +19,12 @@ struct BudgetScreen: View {
   var onSelectTransaction: (UUID) -> Void
   var onEditSchedule: (UUID) -> Void
   @State private var searchText = ""
+  @State private var monthDirection = 1
+
+  private var isPastMonth: Bool {
+    (Calendar.current.dateInterval(of: .month, for: selectedMonth)?.start ?? selectedMonth)
+      < (Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date())
+  }
 
   private var summary: BudgetSummary {
     BudgetSummary(
@@ -26,8 +33,14 @@ struct BudgetScreen: View {
     )
   }
 
+  private var previousSnapshot: BudgetSnapshot? {
+    guard let previous = Calendar.current.date(byAdding: .month, value: -1, to: selectedMonth) else { return nil }
+    return BudgetLedger.snapshot(month: previous, accounts: accounts, envelopes: envelopes,
+                                 allocations: allocations, transactions: transactions)
+  }
+
   private var orderedGroups: [BudgetGroup] {
-    groups.sorted { $0.sortOrder == $1.sortOrder
+    groups.filter { !$0.isSystem }.sorted { $0.sortOrder == $1.sortOrder
       ? $0.name.localizedStandardCompare($1.name) == .orderedAscending
       : $0.sortOrder < $1.sortOrder }
   }
@@ -46,9 +59,10 @@ struct BudgetScreen: View {
           summary: summary,
           currencyCode: currencyCode,
           hasCards: accounts.contains { $0.kind == .credit },
-          canMove: snapshot.readyToAssignMinor > 0
+          canMove: !isPastMonth && (snapshot.readyToAssignMinor > 0
             || envelopes.contains { snapshot.available(for: $0.id) > 0 }
-            || accounts.contains { $0.kind == .credit && snapshot.paymentAvailable[$0.id, default: 0] > 0 },
+            || accounts.contains { $0.kind == .credit && snapshot.paymentAvailable[$0.id, default: 0] > 0 }),
+          isPastMonth: isPastMonth,
           onAssign: assignMoney,
           onShowCards: {
             searchText = ""
@@ -67,6 +81,7 @@ struct BudgetScreen: View {
                 NavigationLink {
                   EnvelopeDetailScreen(
                     envelope: envelope, currencyCode: currencyCode, snapshot: snapshot,
+                    isPastMonth: isPastMonth,
                     accounts: accounts, envelopes: envelopes,
                     allocations: allocations, transactions: transactions, schedules: schedules,
                     onEdit: { onEditEnvelope(envelope.id) },
@@ -78,6 +93,8 @@ struct BudgetScreen: View {
                   EnvelopeBudgetRow(
                     name: envelope.name,
                     availableMinor: snapshot.available(for: envelope.id),
+                    cashOverspentMinor: snapshot.cashShortfall[envelope.id, default: 0],
+                    creditOverspentMinor: snapshot.creditShortfall[envelope.id, default: 0],
                     assignedMinor: snapshot.assigned[envelope.id, default: 0],
                     activityMinor: snapshot.activity[envelope.id, default: 0],
                     currencyCode: currencyCode
@@ -100,6 +117,8 @@ struct BudgetScreen: View {
               NavigationLink {
                 CardPaymentDetailScreen(
                   card: card, currencyCode: currencyCode, snapshot: snapshot,
+                  isPastMonth: isPastMonth,
+                  accounts: accounts,
                   envelopes: envelopes,
                   allocations: allocations, transactions: transactions, schedules: schedules,
                   onMoveMoney: onMoveMoney,
@@ -107,22 +126,27 @@ struct BudgetScreen: View {
                   onEditSchedule: onEditSchedule
                 )
               } label: {
-                CardPaymentRow(card: card, snapshot: snapshot, currencyCode: currencyCode)
+                CardPaymentRow(card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode)
               }
             }
           }
           .id("credit-card-payments")
         }
 
-        if searchText.isEmpty {
+        if searchText.isEmpty && !isPastMonth {
           Section {
             Button("Add Envelope", systemImage: "plus", action: onAddEnvelope)
-              .disabled(groups.isEmpty)
+              .disabled(orderedGroups.isEmpty)
             Button("Add Group", systemImage: "folder.badge.plus", action: onAddGroup)
             Button("Import YNAB Categories", systemImage: "square.and.arrow.down", action: onImportYNAB)
           }
         }
       }
+      .id(Calendar.current.dateInterval(of: .month, for: selectedMonth)?.start ?? selectedMonth)
+      .transition(reduceMotion ? .opacity : .asymmetric(
+        insertion: .opacity.combined(with: .move(edge: monthDirection > 0 ? .trailing : .leading)),
+        removal: .opacity.combined(with: .move(edge: monthDirection > 0 ? .leading : .trailing))
+      ))
       .searchable(text: $searchText, prompt: "Search envelopes or groups")
       .navigationTitle(selectedMonth.formatted(.dateTime.month(.wide).year()))
       .navigationBarTitleDisplayMode(.inline)
@@ -144,14 +168,15 @@ struct BudgetScreen: View {
 
   private func visibleEnvelopes(in group: BudgetGroup) -> [BudgetEnvelope] {
     envelopes.filter {
-      !$0.isHidden && $0.groupID == group.id
+      !$0.isHidden && $0.paymentAccountID == nil && $0.groupID == group.id
         && (searchText.isEmpty || group.name.localizedCaseInsensitiveContains(searchText)
           || $0.name.localizedCaseInsensitiveContains(searchText))
     }.sorted { $0.sortOrder == $1.sortOrder ? $0.name < $1.name : $0.sortOrder < $1.sortOrder }
   }
 
   private func assignMoney() {
-    let first = envelopes.first(where: { !$0.isHidden })
+    guard !isPastMonth else { return }
+    let first = envelopes.first(where: { !$0.isHidden && $0.paymentAccountID == nil })
     if snapshot.readyToAssignMinor > 0 {
       guard let first else { onAddEnvelope(); return }
       onMoveMoney(.readyToAssign, .envelope(first.id))
@@ -177,7 +202,8 @@ struct BudgetScreen: View {
 
   private func changeMonth(_ amount: Int) {
     guard let next = Calendar.current.date(byAdding: .month, value: amount, to: selectedMonth) else { return }
-    withAnimation(.snappy) { selectedMonth = next }
+    monthDirection = amount
+    withAnimation(reduceMotion ? nil : .snappy) { selectedMonth = next }
   }
 }
 
@@ -186,6 +212,7 @@ private struct BudgetOverviewSection: View {
   var currencyCode: String
   var hasCards: Bool
   var canMove: Bool
+  var isPastMonth: Bool
   var onAssign: () -> Void
   var onShowCards: () -> Void
 
@@ -202,7 +229,7 @@ private struct BudgetOverviewSection: View {
           .lineLimit(1)
         Text(summary.readyToAssignMinor < 0
           ? "Move money back or add cash to cover this deficit."
-          : "Cash available to give a job.")
+          : isPastMonth ? "View only · Past budget month" : "Cash available to give a job.")
           .font(.footnote)
           .foregroundStyle(.secondary)
         Button("Move Money", systemImage: "arrow.left.arrow.right", action: onAssign)
@@ -220,11 +247,14 @@ private struct BudgetOverviewSection: View {
       }
       .padding(.vertical, 6)
 
+      LabeledContent("Assigned in future months", value: BudgetMoney.formatted(summary.assignedInFutureMinor, currencyCode: currencyCode))
+        .font(.subheadline)
+
       if hasCards {
         Button(action: onShowCards) {
           HStack {
             VStack(alignment: .leading, spacing: 3) {
-              Text(summary.creditUncoveredMinor == 0 ? "Credit spending covered" : "Credit spending needs funding")
+              Text(summary.creditUncoveredMinor == 0 ? "Credit payments fully funded" : "Credit debt needs funding")
                 .font(.subheadline.weight(.semibold))
               Text(summary.creditUncoveredMinor == 0
                 ? "Payment money is set aside for current debt."
@@ -262,6 +292,8 @@ private struct BudgetOverviewSection: View {
 private struct EnvelopeBudgetRow: View {
   var name: String
   var availableMinor: Int64
+  var cashOverspentMinor: Int64
+  var creditOverspentMinor: Int64
   var assignedMinor: Int64
   var activityMinor: Int64
   var currencyCode: String
@@ -271,7 +303,7 @@ private struct EnvelopeBudgetRow: View {
       VStack(alignment: .leading, spacing: 3) {
         Text(name).foregroundStyle(.primary)
         Text(availableMinor < 0
-          ? "Overspent"
+          ? (cashOverspentMinor > 0 ? "Cash overspent" : creditOverspentMinor > 0 ? "Credit overspent · adds debt" : "Overspent")
           : "Assigned \(BudgetMoney.formatted(assignedMinor, currencyCode: currencyCode)) · Activity \(BudgetMoney.formatted(activityMinor, currencyCode: currencyCode))")
           .font(.caption)
           .foregroundStyle(availableMinor < 0 ? Color.red : Color.secondary)
@@ -290,17 +322,22 @@ private struct EnvelopeBudgetRow: View {
 private struct CardPaymentRow: View {
   var card: BudgetAccount
   var snapshot: BudgetSnapshot
+  var previousSnapshot: BudgetSnapshot?
   var currencyCode: String
 
   var body: some View {
     let owed = max(0, -snapshot.accountBalances[card.id, default: 0])
     let reserved = max(0, snapshot.paymentAvailable[card.id, default: 0])
+    let previousOwed = max(0, -(previousSnapshot?.accountBalances[card.id] ?? 0))
+    let previousReserved = max(0, previousSnapshot?.paymentAvailable[card.id] ?? 0)
     HStack {
       VStack(alignment: .leading, spacing: 3) {
         Text(card.name).foregroundStyle(.primary)
         Text(owed > reserved
-          ? "\(BudgetMoney.formatted(owed - reserved, currencyCode: currencyCode)) uncovered"
-          : "Payment covered")
+          ? (previousOwed > previousReserved
+            ? "Carrying \(BudgetMoney.formatted(owed - reserved, currencyCode: currencyCode)) of debt"
+            : "Credit spending needs funding")
+          : "Ready to pay in full")
           .font(.caption)
           .foregroundStyle(owed > reserved ? Color.orange : Color.secondary)
       }

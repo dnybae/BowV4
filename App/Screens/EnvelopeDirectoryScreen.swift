@@ -53,7 +53,7 @@ struct EnvelopeDirectoryScreen: View {
             LabeledContent("Name", value: suggestion.name)
             Picker("Group", selection: $groupID) {
               Text("New: \(suggestion.groupName)").tag(Optional<UUID>.none)
-              ForEach(groups.sorted { $0.sortOrder < $1.sortOrder }) { group in
+              ForEach(groups.filter { !$0.isSystem }.sorted { $0.sortOrder < $1.sortOrder }) { group in
                 Text(group.name).tag(Optional(group.id))
               }
             }

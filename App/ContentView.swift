@@ -74,10 +74,14 @@ private struct BudgetHomeView: View {
   @State private var selectedMonth = Date()
   @State private var selectedTab: HomeTab = .budget
   @State private var activeSheet: BowSheet?
-  @State private var showingSettings = false
-  @State private var showingInsights = false
+  @State private var showingDrawer = false
+  @State private var drawerPage: BowDrawerPage?
+  @State private var showingRename = false
+  @State private var budgetNameDraft = ""
+  @State private var lastKnownCurrentMonth = Date()
 
   private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
+  private var budgetName: String { profiles.first?.name ?? "My Budget" }
 
   private var accountsTabSymbol: String {
     if #available(iOS 27.0, *) {
@@ -146,8 +150,8 @@ private struct BudgetHomeView: View {
               )
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                  Button("Settings", systemImage: "gearshape") {
-                    showingSettings = true
+                  Button("Open Menu", systemImage: "line.3.horizontal") {
+                    withAnimation(.snappy) { showingDrawer = true }
                   }
                 }
               }
@@ -169,8 +173,8 @@ private struct BudgetHomeView: View {
               )
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                  Button("Settings", systemImage: "gearshape") {
-                    showingSettings = true
+                  Button("Open Menu", systemImage: "line.3.horizontal") {
+                    withAnimation(.snappy) { showingDrawer = true }
                   }
                 }
               }
@@ -191,7 +195,9 @@ private struct BudgetHomeView: View {
               )
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                  Button("Settings", systemImage: "gearshape") { showingSettings = true }
+                  Button("Open Menu", systemImage: "line.3.horizontal") {
+                    withAnimation(.snappy) { showingDrawer = true }
+                  }
                 }
               }
             }
@@ -204,23 +210,12 @@ private struct BudgetHomeView: View {
                 snapshot: currentSnapshot,
                 currencyCode: currencyCode,
                 onAddAccount: { activeSheet = .newAccount },
-                onViewInsights: { showingInsights = true },
                 onSelectTransaction: { activeSheet = .editTransaction($0) }
               )
-              .navigationDestination(isPresented: $showingInsights) {
-                InsightsScreen(
-                  groups: groups,
-                  envelopes: envelopes,
-                  accounts: accounts,
-                  allocations: allocations,
-                  transactions: transactions,
-                  currencyCode: currencyCode
-                )
-              }
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                  Button("Settings", systemImage: "gearshape") {
-                    showingSettings = true
+                  Button("Open Menu", systemImage: "line.3.horizontal") {
+                    withAnimation(.snappy) { showingDrawer = true }
                   }
                 }
               }
@@ -253,8 +248,60 @@ private struct BudgetHomeView: View {
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .tint(Color.accentColor)
-        .sheet(isPresented: $showingSettings) {
-          SettingsScreen()
+        .overlay {
+          if showingDrawer {
+            BowSideDrawer(
+              budgetName: budgetName,
+              onClose: { withAnimation(.snappy) { showingDrawer = false } },
+              onRename: {
+                budgetNameDraft = budgetName
+                showingDrawer = false
+                showingRename = true
+              },
+              onOpen: { page in
+                showingDrawer = false
+                drawerPage = page
+              }
+            )
+            .transition(.opacity)
+          }
+        }
+        .sheet(item: $drawerPage) { page in
+          switch page {
+          case .insights:
+            NavigationStack {
+              InsightsScreen(groups: groups, envelopes: envelopes, accounts: accounts,
+                             allocations: allocations, transactions: transactions, schedules: schedules,
+                             currencyCode: currencyCode)
+                .toolbar { ToolbarItem(placement: .confirmationAction) {
+                  Button("Done") { drawerPage = nil }
+                } }
+            }
+          case .inventory:
+            NavigationStack {
+              SettingsPlaceholderScreen(title: "Home Inventory",
+                description: "A place to track personal items and home supplies is coming soon.",
+                systemImage: "shippingbox")
+                .toolbar { ToolbarItem(placement: .confirmationAction) {
+                  Button("Done") { drawerPage = nil }
+                } }
+            }
+          case .settings:
+            SettingsScreen()
+          }
+        }
+        .alert("Rename Budget", isPresented: $showingRename) {
+          TextField("Budget Name", text: $budgetNameDraft)
+          Button("Cancel", role: .cancel) {}
+          Button("Save") {
+            let name = budgetNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty {
+              profiles.first?.name = name
+              try? modelContext.save()
+            }
+          }
+        } message: {
+          Text("Choose a name for this budget.")
         }
         .sheet(item: $activeSheet) { sheet in
           switch sheet {
@@ -293,10 +340,10 @@ private struct BudgetHomeView: View {
           case .newGroup:
             GroupEditorScreen(nextOrder: groups.count)
           case .newEnvelope:
-            EnvelopeEditorScreen(groups: groups, nextOrder: envelopes.count)
+            EnvelopeEditorScreen(groups: groups.filter { !$0.isSystem }, nextOrder: envelopes.count)
           case .editEnvelope(let id):
             EnvelopeEditorScreen(
-              groups: groups,
+              groups: groups.filter { !$0.isSystem },
               nextOrder: envelopes.count,
               envelope: envelopes.first { $0.id == id }
             )
@@ -320,6 +367,7 @@ private struct BudgetHomeView: View {
       AppAppearance(rawValue: appearanceRaw)?.colorScheme
     )
     .task {
+      try? BudgetCommands.ensureCardPaymentEnvelopes(in: modelContext)
       try? ScheduleReviewPlanner().refresh(in: modelContext)
       if !isDemoMode { await refreshSimpleFINIfConnected() }
     }
@@ -334,6 +382,11 @@ private struct BudgetHomeView: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
       try? ScheduleReviewPlanner().refresh(in: modelContext)
+      let calendar = Calendar.current
+      if calendar.isDate(selectedMonth, equalTo: lastKnownCurrentMonth, toGranularity: .month) {
+        selectedMonth = Date()
+      }
+      lastKnownCurrentMonth = Date()
     }
   }
 

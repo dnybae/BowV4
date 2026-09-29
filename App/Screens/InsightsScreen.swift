@@ -9,6 +9,7 @@ struct InsightsScreen: View {
   var accounts: [BudgetAccount]
   var allocations: [BudgetAllocation]
   var transactions: [BudgetTransaction]
+  var schedules: [BudgetSchedule] = []
   var currencyCode: String
   @State private var selectedBarMonth: Date?
   @State private var selectedSpendingAngle: Double?
@@ -22,6 +23,12 @@ struct InsightsScreen: View {
   }
   private var accountKinds: [UUID: BudgetAccountKind] {
     Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.kind) })
+  }
+  private var forecast: [BowForecastMonth] {
+    let current = BudgetLedger.snapshot(month: Date(), accounts: accounts, envelopes: envelopes,
+                                        allocations: allocations, transactions: transactions)
+    return BowForecast().project(from: Date(), currentNetWorthMinor: current.netWorthMinor,
+                                 transactions: transactions, schedules: schedules)
   }
   private var monthItems: [InsightsMonth] {
     months.map { month in
@@ -137,8 +144,44 @@ struct InsightsScreen: View {
             .foregroundStyle(.secondary)
         }
         .insightCard()
+
+        VStack(alignment: .leading, spacing: 12) {
+          Label("The Arrow", systemImage: "arrow.up.right")
+            .font(.headline)
+          Text("Shooting for financial freedom")
+            .font(.title3.weight(.semibold))
+          Text("Six-month net worth estimate from recent spending, income, and scheduled activity.")
+            .font(.subheadline).foregroundStyle(.secondary)
+          Chart {
+            ForEach(monthItems.suffix(3)) { item in
+              LineMark(x: .value("Month", item.month, unit: .month),
+                       y: .value("Net Worth", Double(item.netWorthMinor) / 100))
+                .foregroundStyle(.tint)
+            }
+            ForEach(forecast) { item in
+              LineMark(x: .value("Month", item.month, unit: .month),
+                       y: .value("Projected Net Worth", Double(item.netWorthMinor) / 100))
+                .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 4]))
+                .foregroundStyle(.orange)
+              PointMark(x: .value("Month", item.month, unit: .month),
+                        y: .value("Projected Net Worth", Double(item.netWorthMinor) / 100))
+                .foregroundStyle(.orange)
+            }
+          }
+          .frame(height: 210)
+          .accessibilityLabel("Net worth forecast for the next six months")
+          if let last = forecast.last {
+            LabeledContent("Projected in six months",
+              value: BudgetMoney.formatted(last.netWorthMinor, currencyCode: currencyCode))
+              .font(.subheadline.weight(.medium))
+          }
+          Text("Estimate only · Transfers between your own accounts do not change net worth.")
+            .font(.caption).foregroundStyle(.secondary)
+        }
+        .insightCard()
       }
       .padding(16)
+      .padding(.bottom, 24)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .navigationTitle("Insights")
@@ -167,6 +210,7 @@ struct InsightsScreen: View {
             editingTransaction = transaction
           } label: {
             HStack {
+              MerchantLogoView(payee: transaction.payee)
               VStack(alignment: .leading) {
                 Text(transaction.payee.isEmpty ? transaction.kind.title : transaction.payee)
                   .foregroundStyle(.primary)

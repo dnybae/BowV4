@@ -63,8 +63,43 @@ struct BudgetCommands {
       note: note.trimmingCharacters(in: .whitespacesAndNewlines)
     )
     context.insert(account)
+    if kind == .credit {
+      try ensureCardPaymentEnvelope(for: account, in: context)
+    }
     try context.save()
     return account
+  }
+
+  static func ensureCardPaymentEnvelopes(in context: ModelContext) throws {
+    for card in try context.fetch(FetchDescriptor<BudgetAccount>()) where card.kind == .credit {
+      try ensureCardPaymentEnvelope(for: card, in: context)
+    }
+    try context.save()
+  }
+
+  static func ensureCardPaymentEnvelope(for card: BudgetAccount, in context: ModelContext) throws {
+    let envelopes = try context.fetch(FetchDescriptor<BudgetEnvelope>())
+    if let existing = envelopes.first(where: {
+      $0.paymentAccountID == card.id || $0.id == card.paymentEnvelopeID
+    }) {
+      card.paymentEnvelopeID = existing.id
+      existing.paymentAccountID = card.id
+      existing.name = card.name + " Payment"
+      return
+    }
+    let groups = try context.fetch(FetchDescriptor<BudgetGroup>())
+    let group: BudgetGroup
+    if let existing = groups.first(where: { $0.isSystem && $0.name == "Credit Card Payments" }) {
+      group = existing
+    } else {
+      group = BudgetGroup(name: "Credit Card Payments", sortOrder: -1)
+      group.isSystem = true
+      context.insert(group)
+    }
+    let payment = BudgetEnvelope(groupID: group.id, name: card.name + " Payment", symbol: "creditcard.fill", sortOrder: envelopes.filter { $0.groupID == group.id }.count)
+    payment.paymentAccountID = card.id
+    card.paymentEnvelopeID = payment.id
+    context.insert(payment)
   }
 
   static func addGroup(name: String, order: Int, in context: ModelContext) throws {
@@ -85,6 +120,9 @@ struct BudgetCommands {
   ) throws {
     guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else { throw BudgetCommandError.missingName }
+    guard try context.fetch(FetchDescriptor<BudgetGroup>()).contains(where: {
+      $0.id == groupID && !$0.isSystem
+    }) else { throw BudgetCommandError.invalidEnvelope }
     let envelope = BudgetEnvelope(
       groupID: groupID,
       name: name.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -110,6 +148,10 @@ struct BudgetCommands {
     scheduledFor: Date? = nil,
     in context: ModelContext
   ) throws {
+    try validateEnvelopeID(envelopeID, in: context)
+    guard Calendar.current.startOfDay(for: date) <= Calendar.current.startOfDay(for: Date()) else {
+      throw BudgetCommandError.futureTransactionNeedsSchedule
+    }
     if let scheduleID, let scheduledFor {
       let calendar = Calendar.current
       let alreadyRecorded = try context.fetch(FetchDescriptor<BudgetTransaction>()).contains {
@@ -143,6 +185,34 @@ struct BudgetCommands {
     try context.save()
   }
 
+  static func addSchedule(
+    kind: BudgetTransactionKind,
+    account: BudgetAccount,
+    destination: BudgetAccount?,
+    envelopeID: UUID?,
+    amountMinor: Int64,
+    startDate: Date,
+    frequency: ScheduleFrequency,
+    payee: String,
+    notes: String,
+    in context: ModelContext
+  ) throws {
+    try validateEnvelopeID(envelopeID, in: context)
+    try validateTransaction(kind: kind, account: account, destination: destination,
+                            envelopeID: envelopeID, amountMinor: amountMinor)
+    let schedule = BudgetSchedule(
+      payee: kind == .transfer && payee.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        ? "Transfer to \(destination?.name ?? "Account")"
+        : payee.trimmingCharacters(in: .whitespacesAndNewlines), amountMinor: amountMinor,
+      accountID: account.id, envelopeID: envelopeID, startDate: startDate,
+      frequency: frequency, notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
+      kind: kind, transferAccountID: kind == .transfer ? destination?.id : nil
+    )
+    context.insert(schedule)
+    try context.save()
+    try? ScheduleReviewPlanner().refresh(in: context)
+  }
+
   static func updateTransaction(
     _ transaction: BudgetTransaction,
     kind: BudgetTransactionKind,
@@ -157,6 +227,10 @@ struct BudgetCommands {
     scheduledFor: Date? = nil,
     in context: ModelContext
   ) throws {
+    try validateEnvelopeID(envelopeID, in: context)
+    guard Calendar.current.startOfDay(for: date) <= Calendar.current.startOfDay(for: Date()) else {
+      throw BudgetCommandError.futureTransactionNeedsSchedule
+    }
     if let scheduleID, let scheduledFor {
       let calendar = Calendar.current
       let alreadyRecorded = try context.fetch(FetchDescriptor<BudgetTransaction>()).contains {
@@ -226,11 +300,21 @@ struct BudgetCommands {
       if account.kind == .credit {
         throw BudgetCommandError.unsupportedCardTransfer
       }
+      if !(account.kind == .cash && (destination.kind == .asset || destination.kind == .liability))
+        && envelopeID != nil {
+        throw BudgetCommandError.invalidEnvelope
+      }
       if account.kind == .cash && (destination.kind == .asset || destination.kind == .liability)
         && envelopeID == nil {
         throw BudgetCommandError.trackingTransferNeedsEnvelope
       }
     }
+  }
+
+  private static func validateEnvelopeID(_ id: UUID?, in context: ModelContext) throws {
+    guard let id else { return }
+    guard let envelope = try context.fetch(FetchDescriptor<BudgetEnvelope>()).first(where: { $0.id == id }),
+          envelope.paymentAccountID == nil else { throw BudgetCommandError.invalidEnvelope }
   }
 
   static func moveMoney(
@@ -241,6 +325,10 @@ struct BudgetCommands {
     in context: ModelContext
   ) throws {
     guard amountMinor > 0 else { throw BudgetCommandError.invalidAmount }
+    let calendar = Calendar.current
+    let targetMonth = calendar.dateInterval(of: .month, for: date)?.start ?? date
+    let currentMonth = calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
+    guard targetMonth >= currentMonth else { throw BudgetCommandError.pastMonthLocked }
     guard source != target else {
       throw BudgetCommandError.invalidTransfer
     }
@@ -248,7 +336,7 @@ struct BudgetCommands {
     let envelopes = try context.fetch(FetchDescriptor<BudgetEnvelope>())
     let allocations = try context.fetch(FetchDescriptor<BudgetAllocation>())
     let transactions = try context.fetch(FetchDescriptor<BudgetTransaction>())
-    let envelopeIDs = Set(envelopes.map(\.id))
+    let envelopeIDs = Set(envelopes.filter { $0.paymentAccountID == nil }.map(\.id))
     let cardIDs = Set(accounts.filter { $0.kind == .credit }.map(\.id))
     for bucket in [source, target] {
       switch bucket {
@@ -307,11 +395,13 @@ struct BudgetCommands {
         throw BudgetCommandError.hiddenOverspending
       }
     }
+    guard envelope.paymentAccountID == nil else { throw BudgetCommandError.cardPaymentEnvelopeProtected }
     envelope.isHidden = hidden
     try context.save()
   }
 
   static func deleteEmptyGroup(_ group: BudgetGroup, in context: ModelContext) throws {
+    guard !group.isSystem else { throw BudgetCommandError.groupNotEmpty }
     let hasEnvelopes = try context.fetch(FetchDescriptor<BudgetEnvelope>()).contains { $0.groupID == group.id }
     guard !hasEnvelopes else { throw BudgetCommandError.groupNotEmpty }
     context.delete(group)
@@ -319,6 +409,7 @@ struct BudgetCommands {
   }
 
   static func deleteUnusedEnvelope(_ envelope: BudgetEnvelope, in context: ModelContext) throws {
+    guard envelope.paymentAccountID == nil else { throw BudgetCommandError.cardPaymentEnvelopeProtected }
     let id = envelope.id
     let hasTransactions = try context.fetch(FetchDescriptor<BudgetTransaction>()).contains { $0.envelopeID == id }
     let hasAllocations = try context.fetch(FetchDescriptor<BudgetAllocation>()).contains {
@@ -345,6 +436,11 @@ enum BudgetCommandError: LocalizedError {
   case duplicateScheduledOccurrence
   case hiddenOverspending
   case groupNotEmpty
+  case pastMonthLocked
+  case cardPaymentEnvelopeProtected
+  case futureTransactionNeedsSchedule
+  case invalidEnvelope
+  case scheduledTransferMustLinkTransfer
 
   var errorDescription: String? {
     switch self {
@@ -359,6 +455,11 @@ enum BudgetCommandError: LocalizedError {
     case .duplicateScheduledOccurrence: "This scheduled bill has already been recorded for that day."
     case .hiddenOverspending: "Cover this envelope’s overspending before hiding it."
     case .groupNotEmpty: "Move or remove the envelopes in this group before deleting it."
+    case .pastMonthLocked: "Past budget months are view only. Choose this month or a future month."
+    case .cardPaymentEnvelopeProtected: "Credit card payment envelopes are managed with their accounts."
+    case .futureTransactionNeedsSchedule: "Schedule future transactions and record them when they occur."
+    case .invalidEnvelope: "Choose a spending envelope. Card payment envelopes are funded automatically or with Move Money."
+    case .scheduledTransferMustLinkTransfer: "Record the scheduled transfer, then link the bank entry to that transfer."
     }
   }
 }

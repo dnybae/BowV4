@@ -17,7 +17,8 @@ struct BudgetCalculator {
     var accountBalances = Dictionary(uniqueKeysWithValues: includedAccounts.map {
       ($0.id, $0.openingBalanceMinor)
     })
-    var cashAvailable = Dictionary(uniqueKeysWithValues: envelopes.map { ($0.id, Int64(0)) })
+    var cashAvailable = Dictionary(uniqueKeysWithValues: envelopes
+      .filter { $0.paymentAccountID == nil }.map { ($0.id, Int64(0)) })
     var cashShortfall: [UUID: Int64] = [:]
     var paymentAvailable = Dictionary(uniqueKeysWithValues: includedAccounts
       .filter { $0.kind == .credit }
@@ -205,6 +206,12 @@ struct BudgetCalculator {
       .reduce(Int64(0)) { $0 + accountBalances[$1.id, default: 0] }
     let envelopeFunds = cashAvailable.values.reduce(Int64(0), +)
     let cardPaymentFunds = paymentAvailable.values.reduce(Int64(0), +)
+    let todayMonth = calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
+    let assignedInFuture = allocations.filter { monthStart >= todayMonth && $0.date >= nextMonth }.reduce(Int64(0)) { total, allocation in
+      let fromReady = allocation.source == .readyToAssign
+      let toReady = allocation.target == .readyToAssign
+      return total + (fromReady ? allocation.amountMinor : 0) - (toReady ? allocation.amountMinor : 0)
+    }
     let creditShortfallByEnvelope = Dictionary(
       creditShortfall.map { ($0.key.envelopeID, $0.value) },
       uniquingKeysWith: +
@@ -218,7 +225,8 @@ struct BudgetCalculator {
       paymentAvailable: paymentAvailable,
       assigned: assigned,
       activity: activity,
-      readyToAssignMinor: cashTotal - envelopeFunds - cardPaymentFunds,
+      readyToAssignMinor: cashTotal - envelopeFunds - cardPaymentFunds - assignedInFuture,
+      assignedInFutureMinor: assignedInFuture,
       cashTotalMinor: cashTotal,
       netWorthMinor: accountBalances.values.reduce(Int64(0), +)
     )
@@ -278,6 +286,7 @@ struct AccountLedgerItem {
 
 struct EnvelopeLedgerItem {
   var id: UUID
+  var paymentAccountID: UUID? = nil
 }
 
 enum BudgetBucket: Hashable {
@@ -316,6 +325,7 @@ struct BudgetSnapshot {
   var assigned: [UUID: Int64]
   var activity: [UUID: Int64]
   var readyToAssignMinor: Int64
+  var assignedInFutureMinor: Int64 = 0
   var cashTotalMinor: Int64
   var netWorthMinor: Int64
 

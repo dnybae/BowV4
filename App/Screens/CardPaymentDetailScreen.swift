@@ -4,6 +4,8 @@ struct CardPaymentDetailScreen: View {
   var card: BudgetAccount
   var currencyCode: String
   var snapshot: BudgetSnapshot
+  var isPastMonth: Bool = false
+  var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
   var allocations: [BudgetAllocation]
   var transactions: [BudgetTransaction]
@@ -16,13 +18,20 @@ struct CardPaymentDetailScreen: View {
 
   private var owed: Int64 { max(0, -snapshot.accountBalances[card.id, default: 0]) }
   private var reserved: Int64 { max(0, snapshot.paymentAvailable[card.id, default: 0]) }
+  private var carriedDebt: Int64 {
+    guard let previous = Calendar.current.date(byAdding: .month, value: -1, to: snapshot.month) else { return 0 }
+    let previousSnapshot = BudgetLedger.snapshot(month: previous, accounts: accounts, envelopes: envelopes, allocations: allocations, transactions: transactions)
+    let previousOwed = max(0, -previousSnapshot.accountBalances[card.id, default: 0])
+    return max(0, previousOwed - max(0, previousSnapshot.paymentAvailable[card.id, default: 0]))
+  }
   private var baseline: Int64 { max(owed, card.debtGoalStartMinor ?? 0) }
   private var debtProgress: Double {
     guard baseline > 0 else { return 1 }
     return min(1, max(0, Double(baseline - owed) / Double(baseline)))
   }
   private var cardTransactions: [BudgetTransaction] {
-    transactions.filter { $0.accountID == card.id || $0.transferAccountID == card.id }
+    let nextMonth = Calendar.current.date(byAdding: .month, value: 1, to: snapshot.month) ?? .distantFuture
+    return transactions.filter { ($0.accountID == card.id || $0.transferAccountID == card.id) && $0.date < nextMonth }
       .sorted { $0.date == $1.date ? $0.createdAt > $1.createdAt : $0.date > $1.date }
   }
   private var cardSchedules: [BudgetSchedule] {
@@ -39,8 +48,8 @@ struct CardPaymentDetailScreen: View {
           Text(snapshot.month.formatted(.dateTime.month(.wide).year()))
             .font(.footnote).foregroundStyle(.secondary)
           Text(owed > reserved
-            ? "\(BudgetMoney.formatted(owed - reserved, currencyCode: currencyCode)) of current debt needs funding."
-            : "Current debt is covered by payment money.")
+            ? (carriedDebt > 0 ? "Carrying debt from a previous month. Fund \(BudgetMoney.formatted(owed - reserved, currencyCode: currencyCode)) to pay in full." : "Current credit spending needs \(BudgetMoney.formatted(owed - reserved, currencyCode: currencyCode)) of funding.")
+            : "Payment money covers the full card balance.")
             .font(.footnote)
             .foregroundStyle(owed > reserved ? Color.orange : Color.secondary)
           Button("Move Money", systemImage: "arrow.left.arrow.right") {
@@ -53,7 +62,7 @@ struct CardPaymentDetailScreen: View {
             }
           }
           .buttonStyle(.borderedProminent)
-          .disabled(snapshot.readyToAssignMinor <= 0 && reserved <= 0
+          .disabled(isPastMonth || snapshot.readyToAssignMinor <= 0 && reserved <= 0
             && !envelopes.contains { snapshot.available(for: $0.id) > 0 })
           .padding(.top, 6)
         }
@@ -85,6 +94,7 @@ struct CardPaymentDetailScreen: View {
           LabeledContent("Target date", value: date.formatted(date: .abbreviated, time: .omitted))
         }
         Button("Edit Payoff Goal", systemImage: "pencil") { showingGoalEditor = true }
+          .disabled(isPastMonth)
       }
 
       Section("Recurring Transactions") {
@@ -99,6 +109,7 @@ struct CardPaymentDetailScreen: View {
                   .font(.caption).foregroundStyle(.secondary)
               }
             }
+            .disabled(isPastMonth)
           }
         }
       }
@@ -115,6 +126,7 @@ struct CardPaymentDetailScreen: View {
               )
             }
             .buttonStyle(.plain)
+            .disabled(isPastMonth)
           }
         }
       }
@@ -136,9 +148,9 @@ struct CardPaymentDetailScreen: View {
     .navigationTitle(card.name + " Payment")
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
-      ToolbarItem(placement: .topBarTrailing) {
+      if !isPastMonth { ToolbarItem(placement: .topBarTrailing) {
         Button("Edit Card", systemImage: "pencil") { showingAccountEditor = true }
-      }
+      } }
     }
     .sheet(isPresented: $showingGoalEditor) {
       CardDebtGoalEditorScreen(card: card, currentDebtMinor: owed, currencyCode: currencyCode)

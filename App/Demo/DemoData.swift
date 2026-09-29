@@ -66,9 +66,10 @@ enum DemoData {
     let savings = insert(BudgetAccount(name: "High-Yield Savings", kind: .cash, currencyCode: "USD", openingBalanceMinor: 375_000))
     let wallet = insert(BudgetAccount(name: "Cash Wallet", kind: .cash, currencyCode: "USD", openingBalanceMinor: 8_000))
     let card = insert(BudgetAccount(name: "Travel Card", kind: .credit, currencyCode: "USD", openingBalanceMinor: -92_000))
+    let floatingCard = insert(BudgetAccount(name: "Everyday Rewards", kind: .credit, currencyCode: "USD", openingBalanceMinor: 0))
     let investments = insert(BudgetAccount(name: "Investment Account", kind: .asset, currencyCode: "USD", openingBalanceMinor: 640_000))
     let loan = insert(BudgetAccount(name: "Auto Loan", kind: .liability, currencyCode: "USD", openingBalanceMinor: -520_000))
-    for account in [everyday, savings, wallet, card, investments, loan] {
+    for account in [everyday, savings, wallet, card, floatingCard, investments, loan] {
       account.openedAt = date(-7, 1)
     }
     savings.lastReconciledAt = date(-1, 28)
@@ -148,6 +149,8 @@ enum DemoData {
     transaction("Savings Transfer", -35_000, .transfer, from: everyday, to: savings, month: -1, day: 25)
     transaction("Car Loan Payment", -31_500, .transfer, from: everyday, to: loan, envelope: carPayment, month: -1, day: 26)
     transaction("Investing", -20_000, .transfer, from: everyday, to: investments, envelope: emergency, month: -1, day: 27)
+    transaction("Unexpected Repair", -42_000, .expense, from: floatingCard, envelope: gifts, month: -1, day: 20)
+    transaction("Rewards Card Payment", -5_000, .transfer, from: everyday, to: floatingCard, month: 0, day: 14)
     let gift = transaction("Birthday Gift", -5_800, .expense, from: wallet, envelope: gifts, month: 0, day: 12, cleared: false)
     gift.notes = "Cash purchase to categorize and fund"
     transaction("Riverside Restaurant", -65_000, .expense, from: card, envelope: dining, month: 0, day: 17, cleared: false)
@@ -213,6 +216,8 @@ enum DemoData {
     if scenario == .deficit {
       insert(BudgetAllocation(date: today, amountMinor: 1_500_000, targetEnvelopeID: emergency.id))
     }
+
+    try BudgetCommands.ensureCardPaymentEnvelopes(in: context)
 
     try context.save()
   }

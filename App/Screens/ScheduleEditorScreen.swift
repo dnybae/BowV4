@@ -12,6 +12,8 @@ struct ScheduleEditorScreen: View {
   @State private var payee: String
   @State private var amount: String
   @State private var accountID: UUID?
+  @State private var destinationID: UUID?
+  @State private var kind: BudgetTransactionKind
   @State private var envelopeID: UUID?
   @State private var startDate: Date
   @State private var frequency: ScheduleFrequency
@@ -28,6 +30,8 @@ struct ScheduleEditorScreen: View {
     _payee = State(initialValue: schedule?.payee ?? "")
     _amount = State(initialValue: schedule.map { BudgetMoney.editable($0.amountMinor) } ?? "")
     _accountID = State(initialValue: schedule?.accountID ?? accounts.first?.id)
+    _destinationID = State(initialValue: schedule?.transferAccountID)
+    _kind = State(initialValue: schedule?.kind ?? .expense)
     _envelopeID = State(initialValue: schedule?.envelopeID)
     _startDate = State(initialValue: schedule?.startDate ?? Date())
     _frequency = State(initialValue: schedule?.frequency ?? .monthly)
@@ -38,16 +42,30 @@ struct ScheduleEditorScreen: View {
   var body: some View {
     NavigationStack {
       Form {
-        Section("Payment") {
-          TextField("Payee", text: $payee)
-            .textInputAutocapitalization(.words)
+        Section("Transaction") {
+          Picker("Type", selection: $kind) {
+            ForEach(BudgetTransactionKind.allCases) { option in
+              Text(option.title).tag(option)
+            }
+          }
+          .pickerStyle(.segmented)
+          if kind != .transfer {
+            TextField("Payee", text: $payee)
+              .textInputAutocapitalization(.words)
+          }
           TextField("Expected amount", text: $amount)
             .keyboardType(.decimalPad)
           AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts)
-          CategorySelectionField(
-            title: "Category", selection: $envelopeID,
-            envelopes: envelopes, noneTitle: "No Category"
-          )
+          if kind == .transfer {
+            AccountSelectionField(title: "To Account", selection: $destinationID, accounts: accounts, excludingID: accountID)
+          }
+          if kind != .transfer || (accounts.first { $0.id == accountID }?.kind == .cash &&
+              [.asset, .liability].contains(accounts.first { $0.id == destinationID }?.kind)) {
+            CategorySelectionField(
+              title: "Category", selection: $envelopeID,
+              envelopes: envelopes, noneTitle: "No Category"
+            )
+          }
         }
         Section("Schedule") {
           DatePicker("First due", selection: $startDate, displayedComponents: .date)
@@ -71,7 +89,7 @@ struct ScheduleEditorScreen: View {
           }
         }
       }
-      .navigationTitle(schedule == nil ? "New Scheduled Bill" : "Edit Scheduled Bill")
+      .navigationTitle("Edit Schedule")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -95,9 +113,25 @@ struct ScheduleEditorScreen: View {
 
   private func save() {
     guard let minor = BudgetMoney.parseMinor(amount), minor > 0,
-          !payee.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+          kind == .transfer || !payee.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       errorMessage = "Enter a payee and an expected amount greater than zero."
       return
+    }
+    guard let source = accounts.first(where: { $0.id == accountID }) else {
+      errorMessage = "Choose an account."
+      return
+    }
+    if kind == .transfer {
+      guard let destination = accounts.first(where: { $0.id == destinationID }),
+            destination.id != source.id, destination.currencyCode == source.currencyCode,
+            source.kind != .credit else {
+        errorMessage = "Choose a valid transfer destination. Pay credit cards from a cash account."
+        return
+      }
+      if source.kind == .cash && [.asset, .liability].contains(destination.kind) && envelopeID == nil {
+        errorMessage = "Choose an envelope for a transfer to a tracking account."
+        return
+      }
     }
     let item = schedule ?? BudgetSchedule(
       payee: payee,
@@ -112,10 +146,16 @@ struct ScheduleEditorScreen: View {
       !Calendar.current.isDate(item.startDate, inSameDayAs: startDate)
         || item.frequency != frequency || (!isActive && item.isActive)
     )
-    item.payee = payee.trimmingCharacters(in: .whitespacesAndNewlines)
+    item.payee = kind == .transfer
+      ? "Transfer to \(accounts.first(where: { $0.id == destinationID })?.name ?? "Account")"
+      : payee.trimmingCharacters(in: .whitespacesAndNewlines)
     item.amountMinor = minor
     item.accountID = accountID
-    item.envelopeID = envelopeID
+    item.transferAccountID = kind == .transfer ? destinationID : nil
+    item.kindRaw = kind.rawValue
+    let needsEnvelope = kind != .transfer || (source.kind == .cash &&
+      [.asset, .liability].contains(accounts.first { $0.id == destinationID }?.kind))
+    item.envelopeID = needsEnvelope ? envelopeID : nil
     item.startDate = startDate
     item.frequencyRaw = frequency.rawValue
     item.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -14,7 +14,6 @@ struct CalendarScreen: View {
   var onSelectTransaction: (UUID) -> Void
   @State private var selectedDate = Date()
   @State private var visibleMonth = Date()
-  @State private var showingNewSchedule = false
   @State private var editingSchedule: BudgetSchedule?
 
   private var calendar: Calendar { .current }
@@ -125,17 +124,22 @@ struct CalendarScreen: View {
           }
         }
         .frame(maxWidth: .infinity)
+        .padding(.bottom, 24)
       }
     }
     .navigationTitle("Calendar")
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
-        Button("Add Scheduled Bill", systemImage: "plus") { showingNewSchedule = true }
+        if !calendar.isDateInToday(selectedDate) {
+          Button("Today") {
+            withAnimation(.snappy) {
+              selectedDate = Date()
+              visibleMonth = Date()
+            }
+          }
+        }
       }
-    }
-    .sheet(isPresented: $showingNewSchedule) {
-      ScheduleEditorScreen(schedule: nil, accounts: accounts, envelopes: envelopes, currencyCode: currencyCode)
     }
     .sheet(item: $editingSchedule) { schedule in
       ScheduleEditorScreen(schedule: schedule, accounts: accounts, envelopes: envelopes, currencyCode: currencyCode)
@@ -305,7 +309,10 @@ private struct CalendarScheduleRow: View {
           }
           .font(.subheadline)
         }
-        if schedule.envelopeID == nil {
+        if schedule.kind == .transfer && schedule.envelopeID == nil {
+          Text("This transfer does not spend an envelope")
+            .font(.caption).foregroundStyle(.secondary)
+        } else if schedule.envelopeID == nil {
           Text("Choose an envelope to check funding")
             .font(.caption).foregroundStyle(.orange)
         } else if shortfall > 0 {
@@ -313,10 +320,11 @@ private struct CalendarScheduleRow: View {
             .font(.caption).foregroundStyle(.orange)
         }
         if selectedDate <= Date(), schedule.accountID != nil {
-          Button("Record Payment", systemImage: "plus") {
+          Button(schedule.kind == .transfer ? "Record Transfer" : "Record Transaction", systemImage: "plus") {
             onRecord(ScheduledTransactionDraft(
               scheduleID: schedule.id, scheduledFor: selectedDate,
-              accountID: schedule.accountID, envelopeID: schedule.envelopeID,
+              accountID: schedule.accountID, transferAccountID: schedule.transferAccountID,
+              envelopeID: schedule.envelopeID, kind: schedule.kind,
               amountMinor: schedule.amountMinor, payee: schedule.payee,
               notes: schedule.notes, date: selectedDate
             ))

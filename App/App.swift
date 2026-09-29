@@ -4,7 +4,23 @@ import SwiftData
 @main
 struct AppDefinition: App {
   private var modelContainer: ModelContainer = {
-    try! ModelContainer(for:
+    try! BowModelStore.makeContainer()
+  }()
+
+  var body: some Scene {
+    WindowGroup {
+      ContentView()
+    }
+    .modelContainer(modelContainer)
+    .backgroundTask(.appRefresh(SimpleFINBackgroundRefresh.identifier)) {
+      await SimpleFINBackgroundRefresh.run(container: modelContainer)
+    }
+  }
+}
+
+enum BowModelStore {
+  static func makeContainer() throws -> ModelContainer {
+    try ModelContainer(for:
       BudgetProfile.self,
       BudgetAccount.self,
       BudgetGroup.self,
@@ -18,15 +34,5 @@ struct AppDefinition: App {
       SimpleFINAccountLink.self,
       SimpleFINImportRecord.self
     )
-  }()
-
-  var body: some Scene {
-    WindowGroup {
-      ContentView()
-    }
-    .modelContainer(modelContainer)
-    .backgroundTask(.appRefresh(SimpleFINBackgroundRefresh.identifier)) {
-      await SimpleFINBackgroundRefresh.run(container: modelContainer)
-    }
   }
 }

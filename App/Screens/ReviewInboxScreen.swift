@@ -44,7 +44,13 @@ struct ReviewInboxScreen: View {
             }
           case .bankRecord(let record, let related):
             NavigationLink {
-              SimpleFINReviewScreen(record: record, relatedOccurrence: related)
+              SimpleFINReviewScreen(
+                record: record, relatedOccurrence: related,
+                relatedSchedule: related.flatMap { occurrence in
+                  schedules.first { $0.id == occurrence.scheduleID }
+                },
+                onRecordScheduledTransfer: onRecord
+              )
             } label: {
               reviewRow(
                 title: record.payee.isEmpty ? "Bank transaction" : record.payee,
@@ -65,7 +71,9 @@ struct ReviewInboxScreen: View {
                     scheduleID: schedule.id,
                     scheduledFor: occurrence.scheduledFor,
                     accountID: schedule.accountID,
+                    transferAccountID: schedule.transferAccountID,
                     envelopeID: schedule.envelopeID,
+                    kind: schedule.kind,
                     amountMinor: schedule.amountMinor,
                     payee: schedule.payee,
                     notes: schedule.notes,

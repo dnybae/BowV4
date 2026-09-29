@@ -130,6 +130,9 @@ struct AccountEditorScreen: View {
           account.lastReconciledAt = nil
           account.lastReconciledBalanceMinor = nil
         }
+        if account.kind == .credit {
+          try BudgetCommands.ensureCardPaymentEnvelope(for: account, in: modelContext)
+        }
         try modelContext.save()
         saved = account
       } else {

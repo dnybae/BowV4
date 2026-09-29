@@ -80,7 +80,7 @@ struct BudgetBucketSelectionSheet: View {
         }
         ForEach(groups.sorted { $0.sortOrder < $1.sortOrder }) { group in
           let matching = envelopes.filter {
-            $0.groupID == group.id && !$0.isHidden
+            $0.groupID == group.id && $0.paymentAccountID == nil && !$0.isHidden
               && (searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText))
           }.sorted { $0.sortOrder < $1.sortOrder }
           if !matching.isEmpty {
@@ -90,7 +90,7 @@ struct BudgetBucketSelectionSheet: View {
           }
         }
         let ungrouped = envelopes.filter { envelope in
-          !groups.contains(where: { $0.id == envelope.groupID }) && !envelope.isHidden
+          !groups.contains(where: { $0.id == envelope.groupID }) && envelope.paymentAccountID == nil && !envelope.isHidden
             && (searchText.isEmpty || envelope.name.localizedCaseInsensitiveContains(searchText))
         }.sorted { $0.sortOrder < $1.sortOrder }
         if !ungrouped.isEmpty {
@@ -99,7 +99,7 @@ struct BudgetBucketSelectionSheet: View {
           }
         }
         let hidden = envelopes.filter {
-          $0.isHidden && (searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText))
+          $0.paymentAccountID == nil && $0.isHidden && (searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText))
         }.sorted { $0.name < $1.name }
         if !hidden.isEmpty {
           Section("Hidden Envelopes") {

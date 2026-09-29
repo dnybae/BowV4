@@ -8,6 +8,7 @@ struct EnvelopeDetailScreen: View {
   var envelope: BudgetEnvelope
   var currencyCode: String
   var snapshot: BudgetSnapshot
+  var isPastMonth: Bool = false
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
   var allocations: [BudgetAllocation]
@@ -22,7 +23,7 @@ struct EnvelopeDetailScreen: View {
   @State private var message: String?
 
   private var envelopeTransactions: [BudgetTransaction] {
-    transactions.filter { $0.envelopeID == envelope.id }
+    transactions.filter { $0.envelopeID == envelope.id && $0.date < (Calendar.current.date(byAdding: .month, value: 1, to: snapshot.month) ?? .distantFuture) }
       .sorted { $0.date == $1.date ? $0.createdAt > $1.createdAt : $0.date > $1.date }
   }
 
@@ -39,6 +40,12 @@ struct EnvelopeDetailScreen: View {
   private var hasHistory: Bool {
     !envelopeTransactions.isEmpty || !envelopeAllocations.isEmpty || !envelopeSchedules.isEmpty
       || payees.contains { $0.defaultEnvelopeID == envelope.id }
+  }
+
+  private var suggestedTarget: Int64? {
+    EnvelopeFundingAdvisor().suggestedMonthlyMinor(
+      envelopeID: envelope.id, transactions: transactions
+    )
   }
 
   var body: some View {
@@ -79,7 +86,7 @@ struct EnvelopeDetailScreen: View {
             }
           }
           .buttonStyle(.borderedProminent)
-          .disabled(snapshot.readyToAssignMinor <= 0
+          .disabled(isPastMonth || snapshot.readyToAssignMinor <= 0
             && snapshot.available(for: envelope.id) <= 0
             && !envelopes.contains { $0.id != envelope.id && snapshot.available(for: $0.id) > 0 }
             && !accounts.contains { $0.kind == .credit && snapshot.paymentAvailable[$0.id, default: 0] > 0 })
@@ -90,6 +97,17 @@ struct EnvelopeDetailScreen: View {
       }
 
       Section("Funding Target") {
+        if let suggestedTarget {
+          LabeledContent("Suggested from spending", value: BudgetMoney.formatted(suggestedTarget, currencyCode: currencyCode))
+          Text("Average monthly spending across up to six completed months.")
+            .font(.footnote).foregroundStyle(.secondary)
+          if envelope.targetMinor != suggestedTarget && !isPastMonth {
+            Button("Use Suggested Target", systemImage: "target") {
+              envelope.targetMinor = suggestedTarget
+              do { try modelContext.save() } catch { message = error.localizedDescription }
+            }
+          }
+        }
         if let target = envelope.targetMinor {
           LabeledContent("Fund each month", value: BudgetMoney.formatted(target, currencyCode: currencyCode))
           if let date = envelope.targetDate {
@@ -106,6 +124,7 @@ struct EnvelopeDetailScreen: View {
             .foregroundStyle(.secondary)
         }
         Button("Edit Target", systemImage: "pencil", action: onEdit)
+          .disabled(isPastMonth)
       }
 
       Section("Recurring Transactions") {
@@ -122,6 +141,7 @@ struct EnvelopeDetailScreen: View {
                   .foregroundStyle(.secondary)
               }
             }
+            .disabled(isPastMonth)
           }
         }
       }
@@ -142,6 +162,7 @@ struct EnvelopeDetailScreen: View {
               )
             }
             .buttonStyle(.plain)
+            .disabled(isPastMonth)
           }
         }
       }
@@ -161,7 +182,7 @@ struct EnvelopeDetailScreen: View {
         }
       }
 
-      Section {
+      if !isPastMonth { Section {
         Button(envelope.isHidden ? "Unhide Envelope" : "Hide Envelope",
                systemImage: envelope.isHidden ? "eye" : "eye.slash") {
           if !envelope.isHidden && snapshot.available(for: envelope.id) > 0 {
@@ -177,14 +198,14 @@ struct EnvelopeDetailScreen: View {
         if hasHistory {
           Text("Hiding keeps this envelope’s balance and history. You can unhide it in Budget Settings.")
         }
-      }
+      } }
     }
     .navigationTitle(envelope.name)
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
-      ToolbarItem(placement: .topBarTrailing) {
+      if !isPastMonth { ToolbarItem(placement: .topBarTrailing) {
         Button("Edit Envelope", systemImage: "pencil", action: onEdit)
-      }
+      } }
     }
     .confirmationDialog("Delete this unused envelope?", isPresented: $showingDelete) {
       Button("Delete Envelope", role: .destructive) {

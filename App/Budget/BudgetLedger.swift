@@ -18,7 +18,7 @@ struct BudgetLedger {
           openedAt: $0.openedAt
         )
       },
-      envelopes: envelopes.map { EnvelopeLedgerItem(id: $0.id) },
+      envelopes: envelopes.map { EnvelopeLedgerItem(id: $0.id, paymentAccountID: $0.paymentAccountID) },
       allocations: allocations.compactMap { allocation in
         let target: BudgetBucket
         if let envelopeID = allocation.targetEnvelopeID {

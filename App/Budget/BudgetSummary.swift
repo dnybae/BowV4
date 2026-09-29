@@ -3,6 +3,7 @@ import Foundation
 struct BudgetSummary {
   var readyToAssignMinor: Int64
   var assignedThisMonthMinor: Int64
+  var assignedInFutureMinor: Int64
   var overspentMinor: Int64
   var creditOwedMinor: Int64
   var creditReservedMinor: Int64
@@ -16,7 +17,8 @@ struct BudgetSummary {
     calendar: Calendar = .current
   ) {
     readyToAssignMinor = snapshot.readyToAssignMinor
-    overspentMinor = envelopes.reduce(0) { total, envelope in
+    assignedInFutureMinor = snapshot.assignedInFutureMinor
+    overspentMinor = envelopes.filter { $0.paymentAccountID == nil }.reduce(0) { total, envelope in
       total + max(0, -snapshot.available(for: envelope.id))
     }
     let interval = calendar.dateInterval(of: .month, for: snapshot.month)

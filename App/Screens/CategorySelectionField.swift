@@ -178,7 +178,7 @@ struct CategorySelectionSheet: View {
 
   private func matchingEnvelopes(in groupID: UUID?) -> [BudgetEnvelope] {
     envelopes.filter { envelope in
-      (groupID == nil
+      envelope.paymentAccountID == nil && (groupID == nil
         ? !groups.contains(where: { group in group.id == envelope.groupID })
         : envelope.groupID == groupID)
         && (!envelope.isHidden || envelope.id == selectedID)

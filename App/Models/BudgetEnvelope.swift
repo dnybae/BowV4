@@ -11,6 +11,7 @@ final class BudgetEnvelope {
   var targetMinor: Int64? = nil
   var targetDate: Date? = nil
   var isHidden: Bool = false
+  var paymentAccountID: UUID? = nil
 
   init(groupID: UUID, name: String, symbol: String, sortOrder: Int) {
     self.groupID = groupID

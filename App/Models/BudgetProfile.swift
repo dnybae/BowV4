@@ -5,6 +5,7 @@ import SwiftData
 final class BudgetProfile {
   var id: UUID = UUID()
   var currencyCode: String = "USD"
+  var name: String = "My Budget"
   var createdAt: Date = Date()
 
   init(currencyCode: String) {

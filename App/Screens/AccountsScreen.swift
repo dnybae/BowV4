@@ -6,7 +6,6 @@ struct AccountsScreen: View {
   var snapshot: BudgetSnapshot
   var currencyCode: String
   var onAddAccount: () -> Void
-  var onViewInsights: () -> Void
   var onSelectTransaction: (UUID) -> Void
   @AppStorage("bow.collapsedAccountGroups") private var collapsedAccountGroups = ""
   @State private var editingAccount: BudgetAccount?
@@ -141,12 +140,12 @@ struct AccountsScreen: View {
   }
 
   private var netWorthCard: some View {
-    Button(action: onViewInsights) {
+    HStack(spacing: 12) {
       HStack(spacing: 12) {
         VStack(alignment: .leading, spacing: 4) {
           Text("Net Worth")
             .font(.headline)
-          Text("View Insights")
+          Text("Includes all tracked accounts")
             .font(.subheadline)
             .foregroundStyle(.secondary)
         }
@@ -154,10 +153,6 @@ struct AccountsScreen: View {
         Text(BudgetMoney.formatted(snapshot.netWorthMinor, currencyCode: currencyCode))
           .font(.headline)
           .monospacedDigit()
-        Image(systemName: "chevron.right")
-          .font(.caption.weight(.semibold))
-          .foregroundStyle(.tertiary)
-          .accessibilityHidden(true)
       }
       .foregroundStyle(.primary)
       .padding(18)
@@ -165,8 +160,7 @@ struct AccountsScreen: View {
       .background(Color(uiColor: .secondarySystemGroupedBackground),
                   in: RoundedRectangle(cornerRadius: 24))
     }
-    .buttonStyle(.plain)
-    .accessibilityLabel("Net Worth, \(BudgetMoney.formatted(snapshot.netWorthMinor, currencyCode: currencyCode)). View Insights")
+    .accessibilityElement(children: .combine)
   }
 
   private func toggleGroup(_ kind: BudgetAccountKind) {

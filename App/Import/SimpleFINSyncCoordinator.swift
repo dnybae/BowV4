@@ -114,16 +114,33 @@ final class SimpleFINSyncCoordinator {
   ) throws {
     guard record.status == .review else { return }
     if let scheduleID, let scheduledFor {
+      let linkedSchedule = try context.fetch(FetchDescriptor<BudgetSchedule>()).first { $0.id == scheduleID }
+      if linkedSchedule?.kind == .transfer {
+        switch decision {
+        case .importNew: throw BudgetCommandError.scheduledTransferMustLinkTransfer
+        case .link(let id):
+          guard try context.fetch(FetchDescriptor<BudgetTransaction>()).contains(where: {
+            $0.id == id && $0.kind == .transfer
+          }) else { throw BudgetCommandError.scheduledTransferMustLinkTransfer }
+        case .ignore: break
+        }
+      }
       switch decision {
       case .ignore:
         break
       case .importNew, .link:
         let calendar = Calendar.current
-        let recorded = try context.fetch(FetchDescriptor<BudgetTransaction>()).contains {
+        let recorded = try context.fetch(FetchDescriptor<BudgetTransaction>()).first {
           $0.scheduleID == scheduleID
             && $0.scheduledFor.map { calendar.isDate($0, inSameDayAs: scheduledFor) } == true
         }
-        guard !recorded else { throw BudgetCommandError.duplicateScheduledOccurrence }
+        if let recorded {
+          if case .link(let id) = decision, id == recorded.id {
+            // Linking a bank leg to the already recorded transfer is valid.
+          } else {
+            throw BudgetCommandError.duplicateScheduledOccurrence
+          }
+        }
       }
     }
     switch decision {
@@ -266,6 +283,7 @@ final class SimpleFINSyncCoordinator {
     let localAccounts = try context.fetch(FetchDescriptor<BudgetAccount>())
     var transactions = try context.fetch(FetchDescriptor<BudgetTransaction>())
     let records = try context.fetch(FetchDescriptor<SimpleFINImportRecord>())
+    let schedules = try context.fetch(FetchDescriptor<BudgetSchedule>())
     var knownKeys = Set(records.map(\.remoteKey))
     knownKeys.formUnion(transactions.compactMap(\.externalKey))
     var summary = SimpleFINSyncSummary()
@@ -313,8 +331,15 @@ final class SimpleFINSyncCoordinator {
           isPossibleMatch($0, for: record)
             && ($0.kind == .transfer || $0.sourceRaw != "manual")
         }
+        let scheduledTransferPossible = schedules.contains { schedule in
+          guard schedule.isActive && schedule.kind == .transfer,
+                ScheduleRecurrence().occurs(starting: schedule.startDate,
+                                            frequency: schedule.frequency, on: item.date) else { return false }
+          return (schedule.accountID == localID && amount == -schedule.amountMinor)
+            || (schedule.transferAccountID == localID && amount == schedule.amountMinor)
+        }
         switch decision {
-        case .linkManual(let id) where !otherPossible:
+        case .linkManual(let id) where !otherPossible && !scheduledTransferPossible:
           if let transaction = transactions.first(where: { $0.id == id }) {
             transaction.isCleared = true
             transaction.needsApproval = true
@@ -324,7 +349,7 @@ final class SimpleFINSyncCoordinator {
             record.status = .linked
             summary.linked += 1
           }
-        case .createNew where !otherPossible:
+        case .createNew where !otherPossible && !scheduledTransferPossible:
           let transaction = makeTransaction(
             account: account, date: item.date,
             amount: amount, payee: payee, in: context

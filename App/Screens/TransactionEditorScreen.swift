@@ -20,6 +20,8 @@ struct TransactionEditorScreen: View {
   @State private var payee: String
   @State private var notes: String
   @State private var date: Date
+  @State private var isScheduled = false
+  @State private var recurrence: ScheduleFrequency = .once
   @State private var errorMessage: String?
   @State private var showingDeleteConfirmation = false
   @State private var possibleImportedMatchIDs: [UUID] = []
@@ -41,9 +43,9 @@ struct TransactionEditorScreen: View {
     self.payees = payees
     self.currencyCode = currencyCode
     self.scheduledDraft = scheduledDraft
-    _kind = State(initialValue: transaction?.kind ?? .expense)
+    _kind = State(initialValue: transaction?.kind ?? scheduledDraft?.kind ?? .expense)
     _accountID = State(initialValue: transaction?.accountID ?? scheduledDraft?.accountID ?? accounts.first?.id)
-    _destinationID = State(initialValue: transaction?.transferAccountID)
+    _destinationID = State(initialValue: transaction?.transferAccountID ?? scheduledDraft?.transferAccountID)
     _envelopeID = State(initialValue: transaction?.envelopeID ?? scheduledDraft?.envelopeID)
     _amount = State(initialValue: transaction.map { BudgetMoney.editable($0.amountMinor) } ?? scheduledDraft.map { BudgetMoney.editable($0.amountMinor) } ?? "")
     _payee = State(initialValue: transaction?.payee ?? scheduledDraft?.payee ?? "")
@@ -121,7 +123,23 @@ struct TransactionEditorScreen: View {
           .pickerStyle(.segmented)
           TextField("Amount", text: $amount)
             .keyboardType(.decimalPad)
-          DatePicker("Date", selection: $date, in: ...Date(), displayedComponents: .date)
+          DatePicker(isScheduled ? "First due" : "Date", selection: $date,
+                     in: Date.distantPast...Date.distantFuture, displayedComponents: .date)
+        }
+        if transaction == nil && scheduledDraft == nil {
+          Section("Schedule") {
+            Toggle("Schedule for later", isOn: $isScheduled)
+            if isScheduled {
+              Picker("Repeats", selection: $recurrence) {
+                ForEach(ScheduleFrequency.allCases) { frequency in
+                  Text(frequency.title).tag(frequency)
+                }
+              }
+              .pickerStyle(.menu)
+              Text("Scheduled entries appear on the calendar and affect balances only when recorded.")
+                .font(.footnote).foregroundStyle(.secondary)
+            }
+          }
         }
         Section("Details") {
           AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts)
@@ -173,7 +191,7 @@ struct TransactionEditorScreen: View {
           }
         }
       }
-      .navigationTitle(transaction == nil ? (scheduledDraft == nil ? "Add Transaction" : "Record Payment") : "Edit Transaction")
+      .navigationTitle(transaction == nil ? (scheduledDraft == nil ? "Add Transaction" : "Record Scheduled Transaction") : "Edit Transaction")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -238,7 +256,7 @@ struct TransactionEditorScreen: View {
       let matcher = PayeeRuleMatcher()
       let rules = PayeeDirectory.ruleItems(
         payees: payees,
-        validEnvelopeIDs: Set(envelopes.filter { !$0.isHidden }.map(\.id))
+        validEnvelopeIDs: Set(envelopes.filter { !$0.isHidden && $0.paymentAccountID == nil }.map(\.id))
       )
       nextEnvelopeID = matcher.envelopeID(for: payee, rules: rules)
     } else {
@@ -257,12 +275,31 @@ struct TransactionEditorScreen: View {
       return
     }
     let destination = accounts.first { $0.id == destinationID }
+    if !isScheduled && Calendar.current.startOfDay(for: date) > Calendar.current.startOfDay(for: Date()) {
+      errorMessage = "Turn on Schedule for later to plan a future transaction."
+      return
+    }
+    if isScheduled && Calendar.current.startOfDay(for: date) < Calendar.current.startOfDay(for: Date()) {
+      errorMessage = "Choose today or a future date for a scheduled transaction."
+      return
+    }
     let chosenEnvelopeID = kind == .transfer && !needsEnvelopeForTransfer
       ? nil : envelopeID
     let linkedScheduleID = scheduledDraft?.scheduleID
       ?? (linkScheduledBill ? matchingSchedule?.id : nil)
     let linkedScheduledFor = scheduledDraft?.scheduledFor
       ?? (linkScheduledBill && matchingSchedule != nil ? date : nil)
+    if isScheduled && transaction == nil && scheduledDraft == nil {
+      do {
+        try BudgetCommands.addSchedule(
+          kind: kind, account: account, destination: destination,
+          envelopeID: chosenEnvelopeID, amountMinor: minor, startDate: date,
+          frequency: recurrence, payee: payee, notes: notes, in: modelContext
+        )
+        dismiss()
+      } catch { errorMessage = error.localizedDescription }
+      return
+    }
     if transaction == nil && importedID == nil && !allowSeparate && kind != .transfer {
       let signedAmount = kind == .inflow ? minor : -minor
       possibleImportedMatchIDs = existingTransactions.filter {
@@ -327,7 +364,9 @@ struct ScheduledTransactionDraft {
   var scheduleID: UUID
   var scheduledFor: Date
   var accountID: UUID?
+  var transferAccountID: UUID? = nil
   var envelopeID: UUID?
+  var kind: BudgetTransactionKind = .expense
   var amountMinor: Int64
   var payee: String
   var notes: String

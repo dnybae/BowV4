@@ -21,7 +21,7 @@ struct PayeeRuleEditorScreen: View {
     self.envelopes = envelopes
     _name = State(initialValue: rule?.name ?? "")
     _matchText = State(initialValue: rule?.exactMatchText ?? "")
-    _envelopeID = State(initialValue: rule?.defaultEnvelopeID ?? envelopes.first(where: { !$0.isHidden })?.id)
+    _envelopeID = State(initialValue: rule?.defaultEnvelopeID ?? envelopes.first(where: { !$0.isHidden && $0.paymentAccountID == nil })?.id)
   }
 
   var body: some View {

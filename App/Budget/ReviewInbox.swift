@@ -48,9 +48,16 @@ struct ReviewInbox {
     for record in unresolved {
       let related = pending.first { occurrence in
         guard let schedule = scheduleByID[occurrence.scheduleID] else { return false }
+        let sameDay = calendar.isDate(record.date, inSameDayAs: occurrence.scheduledFor)
+        if schedule.kind == .transfer {
+          return sameDay && (
+            (schedule.accountID == record.localAccountID && record.amountMinor == -schedule.amountMinor)
+            || (schedule.transferAccountID == record.localAccountID && record.amountMinor == schedule.amountMinor)
+          )
+        }
         return schedule.accountID == record.localAccountID
           && record.amountMinor == -schedule.amountMinor
-          && calendar.isDate(record.date, inSameDayAs: occurrence.scheduledFor)
+          && sameDay
           && schedule.payee.trimmingCharacters(in: .whitespacesAndNewlines)
             .localizedCaseInsensitiveCompare(record.payee.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
       }

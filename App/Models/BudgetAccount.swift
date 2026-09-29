@@ -16,6 +16,7 @@ final class BudgetAccount {
   var debtGoalStartMinor: Int64? = nil
   var debtGoalDate: Date? = nil
   var debtMonthlyTargetMinor: Int64? = nil
+  var paymentEnvelopeID: UUID? = nil
 
   var kind: BudgetAccountKind {
     BudgetAccountKind(rawValue: kindRaw) ?? .cash

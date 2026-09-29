@@ -35,6 +35,11 @@ struct BudgetWorkflowChecks {
     context.insert(food)
     context.insert(travel)
     try context.save()
+    try BudgetCommands.ensureCardPaymentEnvelopes(in: context)
+    try BudgetCommands.ensureCardPaymentEnvelopes(in: context)
+    let paymentEnvelopes = try context.fetch(FetchDescriptor<BudgetEnvelope>()).filter { $0.paymentAccountID != nil }
+    precondition(paymentEnvelopes.count == 2 && card.paymentEnvelopeID != nil && extraCard.paymentEnvelopeID != nil,
+                 "each card has exactly one persistent payment envelope")
 
     func snapshot() throws -> BudgetSnapshot {
       BudgetLedger.snapshot(
@@ -158,6 +163,29 @@ struct BudgetWorkflowChecks {
       )
       preconditionFailure("the same occurrence cannot be recorded twice")
     } catch BudgetCommandError.duplicateScheduledOccurrence {
+      // Expected.
+    }
+    let beforeFuture = try snapshot()
+    let futureMonth = Calendar.current.date(byAdding: .month, value: 1,
+      to: Calendar.current.dateInterval(of: .month, for: now)!.start)!
+    try BudgetCommands.moveMoney(amountMinor: 500, from: .readyToAssign,
+      to: .envelope(travel.id), date: futureMonth, in: context)
+    let currentAfterFuture = try snapshot()
+    let futureSnapshot = BudgetLedger.snapshot(month: futureMonth,
+      accounts: try context.fetch(FetchDescriptor<BudgetAccount>()),
+      envelopes: try context.fetch(FetchDescriptor<BudgetEnvelope>()),
+      allocations: try context.fetch(FetchDescriptor<BudgetAllocation>()),
+      transactions: try context.fetch(FetchDescriptor<BudgetTransaction>()))
+    precondition(currentAfterFuture.readyToAssignMinor == beforeFuture.readyToAssignMinor - 500,
+      "future funding reserves Ready to Assign now")
+    precondition(futureSnapshot.available(for: travel.id) == beforeFuture.available(for: travel.id) + 500,
+      "future month can be funded")
+    let previousMonth = Calendar.current.date(byAdding: .month, value: -1, to: now)!
+    do {
+      try BudgetCommands.moveMoney(amountMinor: 100, from: .readyToAssign,
+        to: .envelope(travel.id), date: previousMonth, in: context)
+      preconditionFailure("past budget months must be read only")
+    } catch BudgetCommandError.pastMonthLocked {
       // Expected.
     }
     print("Budget workflow checks passed")

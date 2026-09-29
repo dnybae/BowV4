@@ -9,12 +9,15 @@ struct SimpleFINReviewScreen: View {
   @Query private var accounts: [BudgetAccount]
   var record: SimpleFINImportRecord
   var relatedOccurrence: BudgetScheduleOccurrence? = nil
+  var relatedSchedule: BudgetSchedule? = nil
+  var onRecordScheduledTransfer: ((ScheduledTransactionDraft) -> Void)? = nil
   @State private var selectedID: UUID?
   @State private var message: String?
 
   private var account: BudgetAccount? { accounts.first { $0.id == record.localAccountID } }
   private var candidates: [BudgetTransaction] {
-    SimpleFINSyncCoordinator.shared.possibleMatches(for: record, among: transactions, records: records)
+    let matches = SimpleFINSyncCoordinator.shared.possibleMatches(for: record, among: transactions, records: records)
+    return relatedSchedule?.kind == .transfer ? matches.filter { $0.kind == .transfer } : matches
   }
 
   var body: some View {
@@ -66,13 +69,31 @@ struct SimpleFINReviewScreen: View {
       }
 
       Section {
+        if relatedSchedule?.kind == .transfer {
+          Text("This bank entry belongs to a scheduled transfer. Record the transfer, then link this bank entry to it.")
+            .font(.footnote).foregroundStyle(.secondary)
+          if let relatedOccurrence, let relatedSchedule {
+            Button("Record Scheduled Transfer", systemImage: "arrow.left.arrow.right") {
+              onRecordScheduledTransfer?(ScheduledTransactionDraft(
+                scheduleID: relatedSchedule.id, scheduledFor: relatedOccurrence.scheduledFor,
+                accountID: relatedSchedule.accountID,
+                transferAccountID: relatedSchedule.transferAccountID,
+                envelopeID: relatedSchedule.envelopeID, kind: .transfer,
+                amountMinor: relatedSchedule.amountMinor, payee: relatedSchedule.payee,
+                notes: relatedSchedule.notes, date: relatedOccurrence.scheduledFor
+              ))
+            }
+          }
+        }
         Button("Link Selected Transaction", systemImage: "link") {
           guard let selectedID else { return }
           resolve(.link(selectedID))
         }
         .disabled(selectedID == nil)
-        Button("Import as New Transaction", systemImage: "plus") {
-          resolve(.importNew)
+        if relatedSchedule?.kind != .transfer {
+          Button("Import as New Transaction", systemImage: "plus") {
+            resolve(.importNew)
+          }
         }
         Button("Ignore Bank Transaction", role: .destructive) {
           resolve(.ignore)

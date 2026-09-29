@@ -25,12 +25,12 @@ struct CategoryManagementScreen: View {
     )
   }
   private var orderedGroups: [BudgetGroup] {
-    groups.sorted {
+    groups.filter { !$0.isSystem }.sorted {
       $0.sortOrder == $1.sortOrder ? $0.name < $1.name : $0.sortOrder < $1.sortOrder
     }
   }
   private var hiddenEnvelopes: [BudgetEnvelope] {
-    envelopes.filter(\.isHidden).sorted { $0.name < $1.name }
+    envelopes.filter { $0.isHidden && $0.paymentAccountID == nil }.sorted { $0.name < $1.name }
   }
 
   private var showHideConfirmation: Binding<Bool> {
@@ -46,7 +46,7 @@ struct CategoryManagementScreen: View {
   }
 
   private func activeEnvelopes(in group: BudgetGroup) -> [BudgetEnvelope] {
-    envelopes.filter { $0.groupID == group.id && !$0.isHidden }
+    envelopes.filter { $0.groupID == group.id && $0.paymentAccountID == nil && !$0.isHidden }
       .sorted { $0.sortOrder == $1.sortOrder
         ? $0.name < $1.name : $0.sortOrder < $1.sortOrder }
   }
@@ -62,7 +62,7 @@ struct CategoryManagementScreen: View {
         Button("Create Custom Envelope", systemImage: "plus") {
           editor = .newEnvelope
         }
-        .disabled(groups.isEmpty)
+        .disabled(orderedGroups.isEmpty)
         Button("Create Group", systemImage: "folder.badge.plus") {
           editor = .newGroup
         }
@@ -111,9 +111,9 @@ struct CategoryManagementScreen: View {
       case .editGroup(let group):
         GroupEditorScreen(nextOrder: groups.count, group: group)
       case .newEnvelope:
-        EnvelopeEditorScreen(groups: groups, nextOrder: envelopes.count)
+        EnvelopeEditorScreen(groups: orderedGroups, nextOrder: envelopes.count)
       case .editEnvelope(let envelope):
-        EnvelopeEditorScreen(groups: groups, nextOrder: envelopes.count, envelope: envelope)
+        EnvelopeEditorScreen(groups: orderedGroups, nextOrder: envelopes.count, envelope: envelope)
       }
     }
     .sheet(item: $movingEnvelope) { envelope in

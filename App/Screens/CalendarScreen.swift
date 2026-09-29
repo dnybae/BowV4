@@ -324,76 +324,80 @@ private struct CalendarDayMarkLoadKey: Hashable {
   var refreshVersion: Int
 }
 
-private struct CalendarTimelineMonth: View {
-  @Environment(\.modelContext) private var modelContext
-  var month: Date
+private struct CalendarWeekdayHeader: View {
+  var calendar: Calendar
+
+  var body: some View {
+    HStack(spacing: 0) {
+      ForEach(0..<7, id: \.self) { index in
+        Text(calendar.veryShortStandaloneWeekdaySymbols[
+          (calendar.firstWeekday - 1 + index) % 7
+        ])
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity)
+        .accessibilityHidden(true)
+      }
+    }
+    .padding(.horizontal, 16)
+    .frame(height: 30)
+  }
+}
+
+private struct CalendarTimelineGrid: View {
+  var days: [CalendarDaySlot]
   @Binding var selectedDate: Date
   var schedules: [BudgetSchedule]
-  @State private var transactionDays: Set<Date> = []
+  var recordedDays: Set<Date>
+  var calendar: Calendar
 
-  private var calendar: Calendar { .current }
-  private var days: [CalendarDayCell] {
-    let leading = (calendar.component(.weekday, from: month) - calendar.firstWeekday + 7) % 7
-    let count = calendar.range(of: .day, in: .month, for: month)?.count ?? 30
-    let key = month.timeIntervalSince1970
-    var result = (0..<leading).map { CalendarDayCell(id: "\(key)-lead-\($0)", date: nil) }
-    result += (0..<count).compactMap { offset in
-      calendar.date(byAdding: .day, value: offset, to: month).map {
-        CalendarDayCell(id: "\($0.timeIntervalSince1970)", date: $0)
-      }
-    }
-    result += (0..<(7 - result.count % 7) % 7)
-      .map { CalendarDayCell(id: "\(key)-trail-\($0)", date: nil) }
-    return result
-  }
-  private var scheduleCounts: [Date: Int] {
-    let recurrence = ScheduleRecurrence(calendar: calendar)
-    var counts: [Date: Int] = [:]
-    for day in days.compactMap(\.date) {
-      counts[day] = schedules.reduce(0) { count, schedule in
-        count + (schedule.isActive && recurrence.occurs(
-          starting: schedule.startDate, frequency: schedule.frequency, on: day
-        ) ? 1 : 0)
-      }
-    }
-    return counts
-  }
   var body: some View {
-    let counts = scheduleCounts
-    let recorded = transactionDays
-    VStack(alignment: .leading, spacing: 8) {
-      Text(month.formatted(.dateTime.month(.wide).year()))
-        .font(.title2.weight(.semibold))
-        .padding(.horizontal, 20)
-        .padding(.top, 18)
-        .accessibilityAddTraits(.isHeader)
-      LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 0) {
-        ForEach(days) { cell in
-          if let day = cell.date {
-            dayButton(day, scheduled: counts[day, default: 0], recorded: recorded.contains(day))
-          } else {
-            Color.clear.frame(height: 44)
+    let recurrence = ScheduleRecurrence(calendar: calendar)
+    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 0) {
+      ForEach(days) { slot in
+        if let day = slot.date {
+          let scheduled = schedules.reduce(0) { count, schedule in
+            count + (schedule.isActive && recurrence.occurs(
+              starting: schedule.startDate, frequency: schedule.frequency, on: day
+            ) ? 1 : 0)
           }
+          CalendarTimelineDayButton(
+            day: day,
+            selectedDate: $selectedDate,
+            scheduledCount: scheduled,
+            recorded: recordedDays.contains(day),
+            calendar: calendar
+          )
+          .background {
+            GeometryReader { geometry in
+              Color.clear.preference(
+                key: CalendarDayFramesKey.self,
+                value: [day: geometry.frame(in: .named("calendarViewport"))]
+              )
+            }
+          }
+        } else {
+          Color.clear.frame(height: 44).accessibilityHidden(true)
         }
       }
-      .padding(.horizontal, 16)
-      .padding(.bottom, 16)
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .task(id: month) {
-      let next = calendar.date(byAdding: .month, value: 1, to: month) ?? .distantFuture
-      let predicate = #Predicate<BudgetTransaction> { $0.date >= month && $0.date < next }
-      var descriptor = FetchDescriptor<BudgetTransaction>(predicate: predicate)
-      descriptor.propertiesToFetch = [\.date]
-      let dates = (try? modelContext.fetch(descriptor))?.map(\.date) ?? []
-      transactionDays = Set(dates.map { calendar.startOfDay(for: $0) })
-    }
+    .scrollTargetLayout()
+    .padding(.horizontal, 16)
+    .frame(maxWidth: .infinity)
   }
+}
 
-  private func dayButton(_ day: Date, scheduled: Int, recorded: Bool) -> some View {
+private struct CalendarTimelineDayButton: View {
+  var day: Date
+  @Binding var selectedDate: Date
+  var scheduledCount: Int
+  var recorded: Bool
+  var calendar: Calendar
+
+  var body: some View {
     let isSelected = calendar.isDate(day, inSameDayAs: selectedDate)
     let isToday = calendar.isDateInToday(day)
-    return Button {
+    Button {
       selectedDate = day
     } label: {
       VStack(spacing: 3) {
@@ -405,7 +409,7 @@ private struct CalendarTimelineMonth: View {
             if isSelected { Circle().fill(Color.primary) }
           }
         Circle()
-          .fill(scheduled > 0 || recorded ? Color.accentColor : Color.clear)
+          .fill(scheduledCount > 0 || recorded ? Color.accentColor : Color.clear)
           .frame(width: 5, height: 5)
       }
       .frame(maxWidth: .infinity)
@@ -413,35 +417,24 @@ private struct CalendarTimelineMonth: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .accessibilityLabel("\(day.formatted(date: .complete, time: .omitted)), \(scheduled) scheduled bills\(recorded ? ", recorded transactions" : "")")
+    .accessibilityLabel("\(day.formatted(date: .complete, time: .omitted)), \(scheduledCount) scheduled bills\(recorded ? ", recorded transactions" : "")")
     .accessibilityAddTraits(isSelected ? .isSelected : [])
   }
 }
 
-private struct CalendarDayCell: Identifiable {
-  var id: String
-  var date: Date?
+private struct CalendarDayFramesKey: PreferenceKey {
+  static var defaultValue: [Date: CGRect] { [:] }
+
+  static func reduce(value: inout [Date: CGRect], nextValue: () -> [Date: CGRect]) {
+    value.merge(nextValue()) { _, new in new }
+  }
 }
 
-private enum CalendarTimelineWindow {
-  static func months(around date: Date, calendar: Calendar = .current) -> [Date] {
-    let center = calendar.dateInterval(of: .month, for: date)?.start ?? date
-    return (-6...6).compactMap { calendar.date(byAdding: .month, value: $0, to: center) }
-  }
+private struct CalendarViewportSizeKey: PreferenceKey {
+  static var defaultValue: CGSize { .zero }
 
-  static func extend(_ months: inout [Date], near visible: Date, calendar: Calendar) {
-    guard let index = months.firstIndex(of: visible), !months.isEmpty else { return }
-    if index <= 2, let first = months.first {
-      let earlier = (1...6).reversed().compactMap {
-        calendar.date(byAdding: .month, value: -$0, to: first)
-      }
-      months.insert(contentsOf: earlier, at: 0)
-      if months.count > 31 { months.removeLast(min(earlier.count, months.count - 31)) }
-    } else if index >= months.count - 3, let last = months.last {
-      let later = (1...6).compactMap { calendar.date(byAdding: .month, value: $0, to: last) }
-      months.append(contentsOf: later)
-      if months.count > 31 { months.removeFirst(min(later.count, months.count - 31)) }
-    }
+  static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+    value = nextValue()
   }
 }
 

@@ -18,8 +18,10 @@ struct PayeeEditorScreen: View {
   @State private var selectedPhoto: PhotosPickerItem?
   @State private var defaultEnvelopeID: UUID?
   @State private var errorMessage: String?
+  @State private var errorTitle = "Couldn’t Save Payee"
   @State private var showingDelete = false
   @State private var isSaving = false
+  @State private var isImportingLogo = false
   @State private var showingFiles = false
   @State private var showingFindLogo = false
 
@@ -69,6 +71,9 @@ struct PayeeEditorScreen: View {
           PhotosPicker(selection: $selectedPhoto, matching: .images) {
             Label("Choose Photo", systemImage: "photo")
           }
+          if isImportingLogo {
+            ProgressView("Loading image…")
+          }
           Button("Choose File", systemImage: "folder") { showingFiles = true }
           Button("Find Logo", systemImage: "magnifyingglass") { showingFindLogo = true }
             .disabled(trimmedName.isEmpty)
@@ -111,7 +116,7 @@ struct PayeeEditorScreen: View {
         }
         ToolbarItem(placement: .confirmationAction) {
           Button("Save") { Task { await save() } }
-            .disabled(trimmedName.isEmpty || isSaving)
+            .disabled(trimmedName.isEmpty || isSaving || isImportingLogo)
         }
       }
       .confirmationDialog("Delete this payee?", isPresented: $showingDelete) {
@@ -119,7 +124,7 @@ struct PayeeEditorScreen: View {
       } message: {
         Text("This removes the saved payee and its matching settings.")
       }
-      .alert("Couldn’t Save Payee", isPresented: Binding(
+      .alert(errorTitle, isPresented: Binding(
         get: { errorMessage != nil },
         set: { if !$0 { errorMessage = nil } }
       )) {
@@ -137,6 +142,7 @@ struct PayeeEditorScreen: View {
           customLogoData = try PayeeLogoImage.preparedData(from: Data(contentsOf: url))
           logoSource = .custom
         } catch {
+          errorTitle = "Couldn’t Load Image"
           errorMessage = error.localizedDescription
         }
       }
@@ -148,7 +154,12 @@ struct PayeeEditorScreen: View {
       }
       .onChange(of: selectedPhoto) { _, photo in
         guard let photo else { return }
+        isImportingLogo = true
         Task {
+          defer {
+            isImportingLogo = false
+            selectedPhoto = nil
+          }
           do {
             guard let data = try await photo.loadTransferable(type: Data.self) else {
               throw PayeeLogoImage.ImportError.invalidImage
@@ -156,9 +167,9 @@ struct PayeeEditorScreen: View {
             customLogoData = try PayeeLogoImage.preparedData(from: data)
             logoSource = .custom
           } catch {
+            errorTitle = "Couldn’t Load Image"
             errorMessage = error.localizedDescription
           }
-          selectedPhoto = nil
         }
       }
     }
@@ -166,6 +177,7 @@ struct PayeeEditorScreen: View {
 
   private func save() async {
     guard !isSaving else { return }
+    errorTitle = "Couldn’t Save Payee"
     isSaving = true
     defer { isSaving = false }
     let newKey = PayeeDirectory.key(trimmedName)
@@ -255,6 +267,7 @@ struct PayeeEditorScreen: View {
       dismiss()
       onSaved()
     } catch {
+      errorTitle = "Couldn’t Delete Payee"
       errorMessage = error.localizedDescription
     }
   }

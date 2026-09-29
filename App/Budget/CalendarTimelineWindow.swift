@@ -1,7 +1,7 @@
 import Foundation
 
 struct CalendarTimelineWindow {
-  enum Direction {
+  enum Direction: Equatable {
     case earlier
     case later
   }

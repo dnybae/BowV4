@@ -73,7 +73,7 @@ struct PayeeEditorScreen: View {
           Button("Find Logo", systemImage: "magnifyingglass") { showingFindLogo = true }
             .disabled(trimmedName.isEmpty)
           if logoSource != .system {
-            Button("Use Default Icon", systemImage: "storefront") {
+            Button("Use Default Icon", systemImage: "storefront.fill") {
               logoSource = .system
             }
           }

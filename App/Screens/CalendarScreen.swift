@@ -22,7 +22,6 @@ struct CalendarScreen: View {
   @State private var hasPlacedInitialScroll = false
   @State private var isCalendarScrolling = false
   @State private var isExtendingTimeline = false
-  @State private var pendingExtension: CalendarTimelineWindow.Direction?
   @State private var editingSchedule: BudgetSchedule?
   @State private var recordedDays: Set<Date> = []
   @State private var monthTransactions: [BudgetTransaction] = []
@@ -89,8 +88,8 @@ struct CalendarScreen: View {
         }
         .onScrollPhaseChange { _, phase in
           isCalendarScrolling = phase.isScrolling
-          if !phase.isScrolling, let pendingExtension {
-            extendTimeline(pendingExtension, using: scrollProxy)
+          if !phase.isScrolling {
+            updateVisibleDays(using: dayFrames, scrollProxy: scrollProxy)
           }
         }
         Divider()

@@ -15,11 +15,15 @@ struct CalendarScreen: View {
   var onRecord: (ScheduledTransactionDraft) -> Void
   var onSelectTransaction: (UUID) -> Void
   @State private var timeline = CalendarTimelineWindow(centeredOn: Date())
-  @State private var scrollDay: CalendarDaySlot.ID?
+  @State private var calendarScrollID = UUID()
+  @State private var scrollDay: CalendarDaySlot.ID? = .day(
+    Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
+  )
   @State private var visibleMonth = Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
-  @State private var viewportSize: CGSize = .zero
-  @State private var dayFrames: [Date: CGRect] = [:]
+  @State private var calendarVisibleRect: CGRect = .zero
   @State private var hasPlacedInitialScroll = false
+  @State private var isPlacingInitialScroll = false
+  @State private var isTodayVisible = true
   @State private var isCalendarScrolling = false
   @State private var isExtendingTimeline = false
   @State private var editingSchedule: BudgetSchedule?
@@ -30,9 +34,6 @@ struct CalendarScreen: View {
   @State private var refreshVersion = 0
   @State private var isLoadingMonth = false
 
-  private var currentMonth: Date {
-    calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
-  }
   private var selectedSchedules: [BudgetSchedule] {
     schedules.filter {
       $0.isActive && ScheduleRecurrence(calendar: calendar).occurs(
@@ -67,29 +68,33 @@ struct CalendarScreen: View {
             calendar: calendar
           )
         }
-        .coordinateSpace(name: "calendarViewport")
-        .background {
-          GeometryReader { geometry in
-            Color.clear.preference(key: CalendarViewportSizeKey.self, value: geometry.size)
-          }
-        }
+        .id(calendarScrollID)
         .scrollTargetBehavior(.viewAligned)
         .scrollPosition(id: $scrollDay, anchor: .top)
-        .onPreferenceChange(CalendarViewportSizeKey.self) { size in
-          viewportSize = size
-          updateVisibleDays(using: dayFrames, scrollProxy: scrollProxy)
-        }
-        .onPreferenceChange(CalendarDayFramesKey.self) { frames in
-          dayFrames = frames
-          updateVisibleDays(using: frames, scrollProxy: scrollProxy)
+        .onScrollGeometryChange(for: CalendarScrollMetrics.self) { geometry in
+          CalendarScrollMetrics(
+            visibleRect: geometry.visibleRect,
+            contentHeight: geometry.contentSize.height
+          )
+        } action: { _, metrics in
+          calendarVisibleRect = metrics.visibleRect
+          if !hasPlacedInitialScroll,
+             metrics.contentHeight > metrics.visibleRect.height {
+            placeInitialScroll(using: scrollProxy)
+          } else {
+            updateVisibleDays(in: metrics.visibleRect, scrollProxy: scrollProxy)
+          }
         }
         .onAppear {
-          placeInitialScroll(using: scrollProxy)
+          if !timeline.contains(selectedDate) {
+            timeline = CalendarTimelineWindow(centeredOn: selectedDate, calendar: calendar)
+          }
+          visibleMonth = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
         }
         .onScrollPhaseChange { _, phase in
           isCalendarScrolling = phase.isScrolling
           if !phase.isScrolling {
-            updateVisibleDays(using: dayFrames, scrollProxy: scrollProxy)
+            updateVisibleDays(in: calendarVisibleRect, scrollProxy: scrollProxy)
           }
         }
         Divider()
@@ -100,7 +105,7 @@ struct CalendarScreen: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
-          if !calendar.isDateInToday(selectedDate) || visibleMonth != currentMonth {
+          if !calendar.isDateInToday(selectedDate) || !isTodayVisible {
             Button("Today") { returnToToday(using: scrollProxy) }
           }
         }
@@ -206,17 +211,18 @@ struct CalendarScreen: View {
   }
 
   private func placeInitialScroll(using proxy: ScrollViewProxy) {
-    if !timeline.contains(selectedDate) {
-      timeline = CalendarTimelineWindow(centeredOn: selectedDate, calendar: calendar)
-    }
+    guard !hasPlacedInitialScroll, !isPlacingInitialScroll else { return }
+    isPlacingInitialScroll = true
     let month = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
     visibleMonth = month
     Task { @MainActor in
-      await Task.yield()
+      try? await Task.sleep(nanoseconds: 120_000_000)
       let target = CalendarDaySlot.ID.day(month)
       scrollDay = target
       proxy.scrollTo(target, anchor: .top)
       hasPlacedInitialScroll = true
+      isPlacingInitialScroll = false
+      updateVisibleDays(in: calendarVisibleRect, scrollProxy: proxy)
     }
   }
 
@@ -225,16 +231,15 @@ struct CalendarScreen: View {
     let month = calendar.dateInterval(of: .month, for: today)?.start ?? today
     selectedDate = today
     visibleMonth = month
+    isTodayVisible = true
     let target = CalendarDaySlot.ID.day(month)
     if !timeline.contains(today) {
       hasPlacedInitialScroll = false
+      isPlacingInitialScroll = false
+      calendarVisibleRect = .zero
       timeline = CalendarTimelineWindow(centeredOn: today, calendar: calendar)
-      Task { @MainActor in
-        await Task.yield()
-        scrollDay = target
-        proxy.scrollTo(target, anchor: .top)
-        hasPlacedInitialScroll = true
-      }
+      scrollDay = target
+      calendarScrollID = UUID()
     } else {
       withAnimation(reduceMotion ? nil : .snappy) {
         scrollDay = target
@@ -243,44 +248,56 @@ struct CalendarScreen: View {
     }
   }
 
-  private func updateVisibleDays(using frames: [Date: CGRect], scrollProxy: ScrollViewProxy) {
-    guard hasPlacedInitialScroll, viewportSize.width > 0, viewportSize.height > 0 else { return }
-    let viewport = CGRect(origin: .zero, size: viewportSize)
-    var visible: [(date: Date, frame: CGRect)] = []
+  private func updateVisibleDays(in rect: CGRect, scrollProxy: ScrollViewProxy) {
+    guard hasPlacedInitialScroll, rect.width > 0, rect.height > 0, !timeline.days.isEmpty else { return }
+    let rowHeight = CalendarGridMetrics.rowHeight
+    let rowCount = (timeline.days.count + 6) / 7
+    let firstRow = max(0, Int(floor(rect.minY / rowHeight)))
+    let lastRow = min(rowCount - 1, Int(ceil(rect.maxY / rowHeight)) - 1)
+    guard firstRow <= lastRow else { return }
+    var first: Date?
+    var last: Date?
     var monthAreas: [Date: CGFloat] = [:]
-    for (date, frame) in frames {
-      let intersection = frame.intersection(viewport)
-      guard !intersection.isNull, intersection.width > 0, intersection.height > 0 else { continue }
-      visible.append((date: date, frame: intersection))
-      let month = calendar.dateInterval(of: .month, for: date)?.start ?? date
-      monthAreas[month, default: 0] += intersection.width * intersection.height
+    for row in firstRow...lastRow {
+      let rowTop = CGFloat(row) * rowHeight
+      let visibleHeight = max(0, min(rowTop + rowHeight, rect.maxY) - max(rowTop, rect.minY))
+      guard visibleHeight > 0 else { continue }
+      for index in (row * 7)..<min(row * 7 + 7, timeline.days.count) {
+        guard let date = timeline.days[index].date else { continue }
+        if first == nil { first = date }
+        last = date
+        let month = calendar.dateInterval(of: .month, for: date)?.start ?? date
+        monthAreas[month, default: 0] += visibleHeight
+      }
     }
-    guard !visible.isEmpty else { return }
+    guard let first, let last else { return }
+    let today = calendar.startOfDay(for: Date())
+    isTodayVisible = first <= today && today <= last
     if let largest = monthAreas.max(by: { $0.value < $1.value }),
        largest.value > monthAreas[visibleMonth, default: 0] + 1 {
       visibleMonth = largest.key
     }
     guard !isCalendarScrolling, !isExtendingTimeline else { return }
-    let first = visible.min(by: { $0.frame.minY < $1.frame.minY })?.date
-    let last = visible.max(by: { $0.frame.maxY < $1.frame.maxY })?.date
-    if let first, let direction = timeline.directionToExtend(near: first), direction == .earlier {
-      extendTimeline(.earlier, using: scrollProxy)
-    } else if let last, let direction = timeline.directionToExtend(near: last), direction == .later {
-      extendTimeline(.later, using: scrollProxy)
+    if let direction = timeline.directionToExtend(near: first), direction == .earlier {
+      extendTimeline(.earlier, anchoredAt: first, using: scrollProxy)
+    } else if let direction = timeline.directionToExtend(near: last), direction == .later {
+      extendTimeline(.later, anchoredAt: first, using: scrollProxy)
     }
   }
 
-  private func extendTimeline(_ direction: CalendarTimelineWindow.Direction, using proxy: ScrollViewProxy) {
+  private func extendTimeline(
+    _ direction: CalendarTimelineWindow.Direction,
+    anchoredAt visibleDate: Date,
+    using proxy: ScrollViewProxy
+  ) {
     isExtendingTimeline = true
-    let anchor = scrollDay
+    let anchor = CalendarDaySlot.ID.day(visibleDate)
     Task { @MainActor in
       await Task.yield()
       timeline.extend(direction)
       await Task.yield()
-      if let anchor {
-        scrollDay = anchor
-        proxy.scrollTo(anchor, anchor: .top)
-      }
+      scrollDay = anchor
+      proxy.scrollTo(anchor, anchor: .top)
       isExtendingTimeline = false
     }
   }
@@ -368,16 +385,8 @@ private struct CalendarTimelineGrid: View {
             recorded: recordedDays.contains(day),
             calendar: calendar
           )
-          .background {
-            GeometryReader { geometry in
-              Color.clear.preference(
-                key: CalendarDayFramesKey.self,
-                value: [day: geometry.frame(in: .named("calendarViewport"))]
-              )
-            }
-          }
         } else {
-          Color.clear.frame(height: 44).accessibilityHidden(true)
+          Color.clear.frame(height: CalendarGridMetrics.rowHeight).accessibilityHidden(true)
         }
       }
     }
@@ -413,7 +422,7 @@ private struct CalendarTimelineDayButton: View {
           .frame(width: 5, height: 5)
       }
       .frame(maxWidth: .infinity)
-      .frame(height: 44)
+      .frame(height: CalendarGridMetrics.rowHeight)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -422,20 +431,13 @@ private struct CalendarTimelineDayButton: View {
   }
 }
 
-private struct CalendarDayFramesKey: PreferenceKey {
-  static var defaultValue: [Date: CGRect] { [:] }
-
-  static func reduce(value: inout [Date: CGRect], nextValue: () -> [Date: CGRect]) {
-    value.merge(nextValue()) { _, new in new }
-  }
+private enum CalendarGridMetrics {
+  static let rowHeight: CGFloat = 44
 }
 
-private struct CalendarViewportSizeKey: PreferenceKey {
-  static var defaultValue: CGSize { .zero }
-
-  static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
-    value = nextValue()
-  }
+private struct CalendarScrollMetrics: Equatable {
+  var visibleRect: CGRect
+  var contentHeight: CGFloat
 }
 
 private struct CalendarScheduleRow: View {

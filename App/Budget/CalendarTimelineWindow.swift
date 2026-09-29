@@ -65,8 +65,10 @@ struct CalendarTimelineWindow {
     var date = start
     while date < end {
       result.append(CalendarDaySlot(id: .day(date), date: date))
-      guard let next = calendar.date(byAdding: .day, value: 1, to: date), next > date else { break }
-      date = next
+      guard let next = calendar.date(byAdding: .day, value: 1, to: date) else { break }
+      let nextDay = calendar.startOfDay(for: next)
+      guard nextDay > date else { break }
+      date = nextDay
     }
     return result
   }

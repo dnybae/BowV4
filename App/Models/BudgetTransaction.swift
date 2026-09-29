@@ -3,6 +3,14 @@ import SwiftData
 
 @Model
 final class BudgetTransaction {
+  #Index<BudgetTransaction>(
+    [\.date, \.createdAt],
+    [\.accountID, \.date],
+    [\.transferAccountID, \.date],
+    [\.envelopeID, \.date],
+    [\.externalKey],
+    [\.scheduleID, \.scheduledFor]
+  )
   var id: UUID = UUID()
   var accountID: UUID = UUID()
   var transferAccountID: UUID? = nil

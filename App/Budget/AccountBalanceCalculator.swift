@@ -82,13 +82,13 @@ struct AccountBalanceCalculator {
   }
 }
 
-struct AccountBalanceReport {
+struct AccountBalanceReport: Sendable {
   var balances: [UUID: Int64]
   var netWorthMinor: Int64?
   var issues: [AccountBalanceIssue]
 }
 
-enum AccountBalanceIssue: Equatable {
+enum AccountBalanceIssue: Equatable, Sendable {
   case currencyMismatch(UUID)
   case mixedCurrencies
   case missingAccount(UUID)

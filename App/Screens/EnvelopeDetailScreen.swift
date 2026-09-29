@@ -12,7 +12,6 @@ struct EnvelopeDetailScreen: View {
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
   var allocations: [BudgetAllocation]
-  var transactions: [BudgetTransaction]
   var schedules: [BudgetSchedule]
   var onEdit: () -> Void
   var onMoveMoney: (BudgetBucket, BudgetBucket) -> Void
@@ -21,11 +20,9 @@ struct EnvelopeDetailScreen: View {
   @State private var showingDelete = false
   @State private var showingHideWithBalance = false
   @State private var message: String?
-
-  private var envelopeTransactions: [BudgetTransaction] {
-    transactions.filter { $0.envelopeID == envelope.id && $0.date < (Calendar.current.date(byAdding: .month, value: 1, to: snapshot.month) ?? .distantFuture) }
-      .sorted { $0.date == $1.date ? $0.createdAt > $1.createdAt : $0.date > $1.date }
-  }
+  @State private var feed = TransactionFeedModel()
+  @State private var hasTransactionHistory = true
+  @State private var recentTransactions: [BudgetTransaction] = []
 
   private var envelopeAllocations: [BudgetAllocation] {
     allocations.filter { $0.sourceEnvelopeID == envelope.id || $0.targetEnvelopeID == envelope.id }
@@ -38,13 +35,13 @@ struct EnvelopeDetailScreen: View {
   }
 
   private var hasHistory: Bool {
-    !envelopeTransactions.isEmpty || !envelopeAllocations.isEmpty || !envelopeSchedules.isEmpty
+    hasTransactionHistory || !envelopeAllocations.isEmpty || !envelopeSchedules.isEmpty
       || payees.contains { $0.defaultEnvelopeID == envelope.id }
   }
 
   private var suggestedTarget: Int64? {
     EnvelopeFundingAdvisor().suggestedMonthlyMinor(
-      envelopeID: envelope.id, transactions: transactions
+      envelopeID: envelope.id, transactions: recentTransactions
     )
   }
 
@@ -147,22 +144,26 @@ struct EnvelopeDetailScreen: View {
       }
 
       Section("Transactions") {
-        if envelopeTransactions.isEmpty {
+        if feed.items.isEmpty && !feed.isLoading {
           Text("No transactions yet")
             .foregroundStyle(.secondary)
         } else {
-          ForEach(envelopeTransactions) { transaction in
+          ForEach(feed.items) { transaction in
             Button {
               onSelectTransaction(transaction.id)
             } label: {
-              TransactionRow(
+              TransactionSummaryRow(
                 transaction: transaction,
-                accountName: accounts.first { $0.id == transaction.accountID }?.name ?? "Account",
-                envelopeName: nil, currencyCode: currencyCode
+                currencyCode: currencyCode
               )
             }
             .buttonStyle(.plain)
             .disabled(isPastMonth)
+          }
+          if feed.hasMore {
+            ProgressView("Loading more…")
+              .frame(maxWidth: .infinity)
+              .onAppear { Task { await feed.loadNext() } }
           }
         }
       }
@@ -201,6 +202,19 @@ struct EnvelopeDetailScreen: View {
       } }
     }
     .navigationTitle(envelope.name)
+    .task(id: envelope.id) {
+      let nextMonth = Calendar.current.date(byAdding: .month, value: 1, to: snapshot.month) ?? .distantFuture
+      await feed.reload(container: modelContext.container, searchText: "", filter: TransactionFilter(),
+                        scopedEnvelopeID: envelope.id, upperBound: nextMonth,
+                        includeUncategorizedCount: false)
+      if feed.errorMessage == nil { hasTransactionHistory = !feed.items.isEmpty }
+      let sixMonthsAgo = Calendar.current.date(byAdding: .month, value: -6, to: snapshot.month) ?? .distantPast
+      let envelopeID = envelope.id
+      let predicate = #Predicate<BudgetTransaction> {
+        $0.envelopeID == envelopeID && $0.date >= sixMonthsAgo && $0.date < nextMonth
+      }
+      recentTransactions = (try? modelContext.fetch(FetchDescriptor(predicate: predicate))) ?? []
+    }
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       if !isPastMonth { ToolbarItem(placement: .topBarTrailing) {

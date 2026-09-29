@@ -4,7 +4,6 @@ import SwiftData
 struct TransactionEditorScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
-  @Query private var existingTransactions: [BudgetTransaction]
   @Query private var schedules: [BudgetSchedule]
   var transaction: BudgetTransaction?
   var accounts: [BudgetAccount]
@@ -27,6 +26,7 @@ struct TransactionEditorScreen: View {
   @State private var possibleImportedMatchIDs: [UUID] = []
   @State private var autoAssignedEnvelopeID: UUID?
   @State private var linkScheduledBill = true
+  @State private var payeeEntries: [PayeeDirectory.Entry] = []
   @FocusState private var payeeFocused: Bool
 
   init(
@@ -77,7 +77,7 @@ struct TransactionEditorScreen: View {
 
   private var suggestedPayees: [PayeeDirectory.Entry] {
     let search = payee.trimmingCharacters(in: .whitespacesAndNewlines)
-    return PayeeDirectory.entries(payees: payees, transactions: existingTransactions, schedules: [])
+    return payeeEntries
       .filter {
         !$0.isTransferOnly
           && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search))
@@ -101,10 +101,9 @@ struct TransactionEditorScreen: View {
         && ScheduleRecurrence().occurs(
           starting: schedule.startDate, frequency: schedule.frequency, on: date
         )
-        && !existingTransactions.contains {
-          $0.id != transaction.id && $0.scheduleID == schedule.id
-            && $0.scheduledFor.map { Calendar.current.isDate($0, inSameDayAs: date) } == true
-        }
+        && (try? BudgetTransactionLookup.scheduled(
+          scheduleID: schedule.id, on: date, excluding: transaction.id, in: modelContext
+        )) == nil
     }
     return matches.count == 1 ? matches.first : nil
   }
@@ -260,6 +259,9 @@ struct TransactionEditorScreen: View {
       .onChange(of: accountID) { _, newAccountID in
         if destinationID == newAccountID { destinationID = nil }
       }
+      .task {
+        payeeEntries = (try? await PayeeDirectoryRepository(modelContainer: modelContext.container).entries()) ?? []
+      }
     }
   }
 
@@ -315,7 +317,10 @@ struct TransactionEditorScreen: View {
     }
     if transaction == nil && importedID == nil && !allowSeparate && kind != .transfer {
       let signedAmount = kind == .inflow ? minor : -minor
-      possibleImportedMatchIDs = existingTransactions.filter {
+      possibleImportedMatchIDs = ((try? BudgetTransactionLookup.near(
+        accountID: account.id, date: date, days: scheduledDraft == nil ? 10 : 3,
+        in: modelContext
+      )) ?? []).filter {
         ($0.sourceRaw == "simplefin" || $0.sourceRaw == "bankFile")
           && $0.accountID == account.id
           && $0.amountMinor == signedAmount
@@ -326,7 +331,7 @@ struct TransactionEditorScreen: View {
       if !possibleImportedMatchIDs.isEmpty { return }
     }
     do {
-      if let transaction = transaction ?? existingTransactions.first(where: { $0.id == importedID }) {
+      if let transaction = transaction ?? importedID.flatMap({ try? BudgetTransactionLookup.byID($0, in: modelContext) }) {
         try BudgetCommands.updateTransaction(
           transaction,
           kind: kind,

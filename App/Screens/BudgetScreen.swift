@@ -7,9 +7,9 @@ struct BudgetScreen: View {
   var envelopes: [BudgetEnvelope]
   var accounts: [BudgetAccount]
   var allocations: [BudgetAllocation]
-  var transactions: [BudgetTransaction]
   var schedules: [BudgetSchedule]
   var snapshot: BudgetSnapshot
+  var previousSnapshot: BudgetSnapshot? = nil
   @Binding var selectedMonth: Date
   var returnToPresentRequest: Int = 0
   var onAddGroup: () -> Void
@@ -43,12 +43,6 @@ struct BudgetScreen: View {
     BudgetMonthAccessPolicy().lastAccessibleMonth(
       today: Date(), funding: allocations.map(\.monthFundingItem)
     )
-  }
-
-  private var previousSnapshot: BudgetSnapshot? {
-    guard let previous = Calendar.current.date(byAdding: .month, value: -1, to: selectedMonth) else { return nil }
-    return BudgetLedger.snapshot(month: previous, accounts: accounts, envelopes: envelopes,
-                                 allocations: allocations, transactions: transactions)
   }
 
   private var orderedGroups: [BudgetGroup] {
@@ -159,7 +153,7 @@ struct BudgetScreen: View {
               envelope: envelope, currencyCode: currencyCode, snapshot: snapshot,
               isPastMonth: isPastMonth,
               accounts: accounts, envelopes: envelopes,
-              allocations: allocations, transactions: transactions, schedules: schedules,
+              allocations: allocations, schedules: schedules,
               onEdit: { onEditEnvelope(envelope.id) },
               onMoveMoney: onMoveMoney,
               onSelectTransaction: onSelectTransaction,
@@ -170,10 +164,11 @@ struct BudgetScreen: View {
           if let card = accounts.first(where: { $0.id == id }) {
             CardPaymentDetailScreen(
               card: card, currencyCode: currencyCode, snapshot: snapshot,
+              previousSnapshot: previousSnapshot,
               isPastMonth: isPastMonth,
               accounts: accounts,
               envelopes: envelopes,
-              allocations: allocations, transactions: transactions, schedules: schedules,
+              allocations: allocations, schedules: schedules,
               onMoveMoney: onMoveMoney,
               onSelectTransaction: onSelectTransaction,
               onEditSchedule: onEditSchedule

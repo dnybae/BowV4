@@ -1,26 +1,28 @@
 import SwiftUI
+import SwiftData
 
 struct CardPaymentDetailScreen: View {
+  @Environment(\.modelContext) private var modelContext
   var card: BudgetAccount
   var currencyCode: String
   var snapshot: BudgetSnapshot
+  var previousSnapshot: BudgetSnapshot? = nil
   var isPastMonth: Bool = false
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
   var allocations: [BudgetAllocation]
-  var transactions: [BudgetTransaction]
   var schedules: [BudgetSchedule]
   var onMoveMoney: (BudgetBucket, BudgetBucket) -> Void
   var onSelectTransaction: (UUID) -> Void
   var onEditSchedule: (UUID) -> Void
   @State private var showingGoalEditor = false
   @State private var showingAccountEditor = false
+  @State private var feed = TransactionFeedModel()
 
   private var owed: Int64 { max(0, -snapshot.accountBalances[card.id, default: 0]) }
   private var reserved: Int64 { max(0, snapshot.paymentAvailable[card.id, default: 0]) }
   private var carriedDebt: Int64 {
-    guard let previous = Calendar.current.date(byAdding: .month, value: -1, to: snapshot.month) else { return 0 }
-    let previousSnapshot = BudgetLedger.snapshot(month: previous, accounts: accounts, envelopes: envelopes, allocations: allocations, transactions: transactions)
+    guard let previousSnapshot else { return 0 }
     let previousOwed = max(0, -previousSnapshot.accountBalances[card.id, default: 0])
     return max(0, previousOwed - max(0, previousSnapshot.paymentAvailable[card.id, default: 0]))
   }
@@ -28,11 +30,6 @@ struct CardPaymentDetailScreen: View {
   private var debtProgress: Double {
     guard baseline > 0 else { return 1 }
     return min(1, max(0, Double(baseline - owed) / Double(baseline)))
-  }
-  private var cardTransactions: [BudgetTransaction] {
-    let nextMonth = Calendar.current.date(byAdding: .month, value: 1, to: snapshot.month) ?? .distantFuture
-    return transactions.filter { ($0.accountID == card.id || $0.transferAccountID == card.id) && $0.date < nextMonth }
-      .sorted { $0.date == $1.date ? $0.createdAt > $1.createdAt : $0.date > $1.date }
   }
   private var cardSchedules: [BudgetSchedule] {
     schedules.filter { $0.accountID == card.id }.sorted { $0.payee < $1.payee }
@@ -115,18 +112,20 @@ struct CardPaymentDetailScreen: View {
       }
 
       Section("Card Activity") {
-        if cardTransactions.isEmpty {
+        if feed.items.isEmpty && !feed.isLoading {
           Text("No transactions yet").foregroundStyle(.secondary)
         } else {
-          ForEach(cardTransactions) { transaction in
+          ForEach(feed.items) { transaction in
             Button { onSelectTransaction(transaction.id) } label: {
-              TransactionRow(
-                transaction: transaction, accountName: card.name,
-                envelopeName: nil, currencyCode: currencyCode
-              )
+              TransactionSummaryRow(transaction: transaction, currencyCode: currencyCode)
             }
             .buttonStyle(.plain)
             .disabled(isPastMonth)
+          }
+          if feed.hasMore {
+            ProgressView("Loading more…")
+              .frame(maxWidth: .infinity)
+              .onAppear { Task { await feed.loadNext() } }
           }
         }
       }
@@ -146,6 +145,12 @@ struct CardPaymentDetailScreen: View {
       }
     }
     .navigationTitle(card.name + " Payment")
+    .task(id: snapshot.month) {
+      let nextMonth = Calendar.current.date(byAdding: .month, value: 1, to: snapshot.month) ?? .distantFuture
+      await feed.reload(container: modelContext.container, searchText: "", filter: TransactionFilter(),
+                        scopedAccountID: card.id, upperBound: nextMonth,
+                        includeUncategorizedCount: false)
+    }
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       if !isPastMonth { ToolbarItem(placement: .topBarTrailing) {

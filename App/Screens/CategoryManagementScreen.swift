@@ -3,12 +3,12 @@ import SwiftData
 
 struct CategoryManagementScreen: View {
   @Environment(\.modelContext) private var modelContext
+  @Environment(\.budgetSnapshotRepository) private var sharedRepository
   @Query private var profiles: [BudgetProfile]
   @Query private var groups: [BudgetGroup]
   @Query private var envelopes: [BudgetEnvelope]
   @Query private var accounts: [BudgetAccount]
   @Query private var allocations: [BudgetAllocation]
-  @Query private var transactions: [BudgetTransaction]
   @Query private var schedules: [BudgetSchedule]
   @Query private var payees: [BudgetPayee]
   @State private var editor: CategoryEditor?
@@ -16,14 +16,12 @@ struct CategoryManagementScreen: View {
   @State private var pendingDelete: BudgetEnvelope?
   @State private var movingEnvelope: BudgetEnvelope?
   @State private var message: String?
+  @State private var snapshot: BudgetSnapshot?
+  @State private var usedEnvelopeIDs: Set<UUID> = []
+  @State private var historyLoaded = false
+  @State private var refreshVersion = 0
 
   private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
-  private var snapshot: BudgetSnapshot {
-    BudgetLedger.snapshot(
-      month: Date(), accounts: accounts, envelopes: envelopes,
-      allocations: allocations, transactions: transactions
-    )
-  }
   private var orderedGroups: [BudgetGroup] {
     groups.filter { !$0.isSystem }.sorted {
       $0.sortOrder == $1.sortOrder ? $0.name < $1.name : $0.sortOrder < $1.sortOrder
@@ -103,6 +101,22 @@ struct CategoryManagementScreen: View {
       }
     }
     .navigationTitle("Manage Groups & Envelopes")
+    .task(id: refreshVersion) {
+      let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
+      snapshot = try? await repository.snapshot(month: Date())
+      let transactionRepository = TransactionPageRepository(modelContainer: modelContext.container)
+      var used: Set<UUID> = []
+      for envelope in envelopes {
+        if (try? await transactionRepository.hasTransaction(inEnvelope: envelope.id)) == true {
+          used.insert(envelope.id)
+        }
+      }
+      usedEnvelopeIDs = used
+      historyLoaded = true
+    }
+    .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+      refreshVersion += 1
+    }
     .navigationBarTitleDisplayMode(.inline)
     .sheet(item: $editor) { selection in
       switch selection {
@@ -133,7 +147,7 @@ struct CategoryManagementScreen: View {
       }
     } message: {
       if let pendingHide {
-        Text("\(BudgetMoney.formatted(snapshot.available(for: pendingHide.id), currencyCode: currencyCode)) will remain in this hidden envelope and in your budget.")
+        Text("\(BudgetMoney.formatted(snapshot?.available(for: pendingHide.id) ?? 0, currencyCode: currencyCode)) will remain in this hidden envelope and in your budget.")
       }
     }
     .confirmationDialog("Delete unused envelope?", isPresented: showDeleteConfirmation) {
@@ -168,13 +182,13 @@ struct CategoryManagementScreen: View {
           }
         }
         Spacer()
-        Text(BudgetMoney.formatted(snapshot.available(for: envelope.id), currencyCode: currencyCode))
+        Text(snapshot.map { BudgetMoney.formatted($0.available(for: envelope.id), currencyCode: currencyCode) } ?? "…")
           .font(.subheadline)
           .foregroundStyle(.secondary)
       }
     }
     .swipeActions {
-      if snapshot.available(for: envelope.id) > 0 {
+      if snapshot?.available(for: envelope.id) ?? 0 > 0 {
         Button("Move Money", systemImage: "arrow.left.arrow.right") {
           movingEnvelope = envelope
         }
@@ -183,7 +197,7 @@ struct CategoryManagementScreen: View {
         Button("Unhide", systemImage: "eye") { setHidden(envelope, false) }
       } else {
         Button("Hide", systemImage: "eye.slash") {
-          if snapshot.available(for: envelope.id) > 0 {
+          if snapshot?.available(for: envelope.id) ?? 0 > 0 {
             pendingHide = envelope
           } else {
             setHidden(envelope, true)
@@ -200,7 +214,7 @@ struct CategoryManagementScreen: View {
   }
 
   private func hasHistory(_ envelope: BudgetEnvelope) -> Bool {
-    transactions.contains { $0.envelopeID == envelope.id }
+    !historyLoaded || usedEnvelopeIDs.contains(envelope.id)
       || allocations.contains { $0.sourceEnvelopeID == envelope.id || $0.targetEnvelopeID == envelope.id }
       || schedules.contains { $0.envelopeID == envelope.id }
       || payees.contains { $0.defaultEnvelopeID == envelope.id }

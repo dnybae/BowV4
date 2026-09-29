@@ -4,16 +4,17 @@ import SwiftData
 struct MoneyMoveScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
+  @Environment(\.budgetSnapshotRepository) private var sharedRepository
   @Query private var currentAccounts: [BudgetAccount]
   @Query private var currentEnvelopes: [BudgetEnvelope]
-  @Query private var currentAllocations: [BudgetAllocation]
-  @Query private var currentTransactions: [BudgetTransaction]
   var currencyCode: String
   var month: Date
   @State private var source: BudgetBucket
   @State private var target: BudgetBucket
   @State private var amount = ""
   @State private var errorMessage: String?
+  @State private var snapshot: BudgetSnapshot?
+  @State private var refreshVersion = 0
 
   init(
     currencyCode: String,
@@ -27,13 +28,6 @@ struct MoneyMoveScreen: View {
     _target = State(initialValue: target)
   }
 
-  private var snapshot: BudgetSnapshot {
-    BudgetLedger.snapshot(
-      month: month, accounts: currentAccounts, envelopes: currentEnvelopes,
-      allocations: currentAllocations, transactions: currentTransactions
-    )
-  }
-
   private var cardAccounts: [BudgetAccount] {
     currentAccounts.filter { $0.kind == .credit }.sorted { $0.name < $1.name }
   }
@@ -41,7 +35,8 @@ struct MoneyMoveScreen: View {
   private var sourceAvailable: Int64 { balance(of: source) }
   private var enteredMinor: Int64? { BudgetMoney.parseMinor(amount) }
   private var isValid: Bool {
-    source != target && (enteredMinor ?? 0) > 0 && (enteredMinor ?? 0) <= max(0, sourceAvailable)
+    snapshot != nil && source != target && (enteredMinor ?? 0) > 0
+      && (enteredMinor ?? 0) <= max(0, sourceAvailable)
   }
 
   var body: some View {
@@ -61,7 +56,7 @@ struct MoneyMoveScreen: View {
           .accessibilityElement(children: .combine)
         }
 
-        Section {
+        if let snapshot { Section {
           BudgetBucketSelectionField(
             title: "From", selection: $source,
             envelopes: currentEnvelopes, cardAccounts: cardAccounts,
@@ -83,6 +78,8 @@ struct MoneyMoveScreen: View {
           Text("Move Between")
         } footer: {
           Text("Choose the money’s current location and where it should go.")
+        } } else {
+          Section { ProgressView("Calculating balances…") }
         }
 
         Section("Amount") {
@@ -113,6 +110,13 @@ struct MoneyMoveScreen: View {
 
       }
       .navigationTitle("Move Money")
+      .task(id: refreshVersion) {
+        let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
+        snapshot = try? await repository.snapshot(month: month)
+      }
+      .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+        refreshVersion += 1
+      }
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -143,10 +147,11 @@ struct MoneyMoveScreen: View {
   }
 
   private func balance(of bucket: BudgetBucket) -> Int64 {
+    guard let snapshot else { return 0 }
     switch bucket {
-    case .readyToAssign: snapshot.readyToAssignMinor
-    case .envelope(let id): snapshot.available(for: id)
-    case .cardPayment(let id): snapshot.paymentAvailable[id, default: 0]
+    case .readyToAssign: return snapshot.readyToAssignMinor
+    case .envelope(let id): return snapshot.available(for: id)
+    case .cardPayment(let id): return snapshot.paymentAvailable[id, default: 0]
     }
   }
 

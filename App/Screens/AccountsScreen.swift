@@ -1,8 +1,8 @@
 import SwiftUI
+import SwiftData
 
 struct AccountsScreen: View {
   var accounts: [BudgetAccount]
-  var transactions: [BudgetTransaction]
   var balanceReport: AccountBalanceReport
   var currencyCode: String
   var onAddAccount: () -> Void
@@ -73,7 +73,6 @@ struct AccountsScreen: View {
       if let account = accounts.first(where: { $0.id == route.id }) {
         AccountDetailScreen(
           account: account,
-          transactions: transactions,
           balanceMinor: balances[account.id, default: 0],
           currencyCode: currencyCode,
           onSelectTransaction: onSelectTransaction,
@@ -238,19 +237,14 @@ struct AccountRoute: Hashable {
 }
 
 private struct AccountDetailScreen: View {
+  @Environment(\.modelContext) private var modelContext
   var account: BudgetAccount
-  var transactions: [BudgetTransaction]
   var balanceMinor: Int64
   var currencyCode: String
   var onSelectTransaction: (UUID) -> Void
   var onEditAccount: () -> Void
   @State private var showingReconciliation = false
-
-  private var accountTransactions: [BudgetTransaction] {
-    transactions
-      .filter { $0.accountID == account.id || $0.transferAccountID == account.id }
-      .sorted { $0.date > $1.date }
-  }
+  @State private var feed = TransactionFeedModel()
 
   var body: some View {
     List {
@@ -277,15 +271,13 @@ private struct AccountDetailScreen: View {
         }
       }
       Section("Ledger") {
-        if accountTransactions.isEmpty {
+        if feed.items.isEmpty && !feed.isLoading {
           ContentUnavailableView("No transactions yet", systemImage: "list.bullet.rectangle")
         } else {
-          ForEach(accountTransactions) { transaction in
+          ForEach(feed.items) { transaction in
             if transaction.isBalanceAdjustment {
-              TransactionRow(
+              TransactionSummaryRow(
                 transaction: transaction,
-                accountName: account.name,
-                envelopeName: nil,
                 currencyCode: currencyCode,
                 displayAmountMinor: transaction.transferAccountID == account.id
                   ? -transaction.amountMinor : transaction.amountMinor
@@ -294,10 +286,8 @@ private struct AccountDetailScreen: View {
               Button {
                 onSelectTransaction(transaction.id)
               } label: {
-                TransactionRow(
+                TransactionSummaryRow(
                   transaction: transaction,
-                  accountName: account.name,
-                  envelopeName: nil,
                   currencyCode: currencyCode,
                   displayAmountMinor: transaction.transferAccountID == account.id
                     ? -transaction.amountMinor : transaction.amountMinor
@@ -306,17 +296,27 @@ private struct AccountDetailScreen: View {
               .buttonStyle(.plain)
             }
           }
+          if feed.hasMore {
+            ProgressView("Loading more…")
+              .frame(maxWidth: .infinity)
+              .onAppear { Task { await feed.loadNext() } }
+          }
         }
       }
     }
     .navigationTitle(account.name)
+    .task(id: account.id) {
+      await feed.reload(container: modelContext.container, searchText: "", filter: TransactionFilter(),
+                        scopedAccountID: account.id, includeUncategorizedCount: false,
+                        includesBalanceAdjustments: true)
+    }
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
         Button("Edit Account", systemImage: "pencil", action: onEditAccount)
       }
     }
     .sheet(isPresented: $showingReconciliation) {
-      ReconciliationScreen(account: account, transactions: accountTransactions, currencyCode: currencyCode)
+      ReconciliationScreen(account: account, currencyCode: currencyCode)
     }
   }
 }

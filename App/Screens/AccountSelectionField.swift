@@ -49,10 +49,9 @@ struct AccountSelectionField: View {
 
 struct AccountSelectionSheet: View {
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.modelContext) private var modelContext
+  @Environment(\.budgetSnapshotRepository) private var sharedRepository
   @Query private var accounts: [BudgetAccount]
-  @Query private var envelopes: [BudgetEnvelope]
-  @Query private var allocations: [BudgetAllocation]
-  @Query private var transactions: [BudgetTransaction]
   var title: String
   var selectedID: UUID?
   var allowedIDs: Set<UUID>
@@ -60,13 +59,7 @@ struct AccountSelectionSheet: View {
   var noneTitle: String? = nil
   var onSelect: (UUID?) -> Void
   @State private var searchText = ""
-
-  private var snapshot: BudgetSnapshot {
-    BudgetLedger.snapshot(
-      month: Date(), accounts: accounts, envelopes: envelopes,
-      allocations: allocations, transactions: transactions
-    )
-  }
+  @State private var snapshot: BudgetSnapshot?
 
   var body: some View {
     NavigationStack {
@@ -95,10 +88,10 @@ struct AccountSelectionSheet: View {
                 } label: {
                   SelectionRow(
                     title: account.name,
-                    balance: BudgetMoney.formatted(
-                      currentSnapshot.accountBalances[account.id, default: 0],
+                    balance: currentSnapshot.map { BudgetMoney.formatted(
+                      $0.accountBalances[account.id, default: 0],
                       currencyCode: account.currencyCode
-                    ),
+                    ) },
                     isSelected: selectedID == account.id
                   )
                 }
@@ -118,5 +111,9 @@ struct AccountSelectionSheet: View {
       }
     }
     .presentationDetents([.large])
+    .task {
+      let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
+      snapshot = try? await repository.snapshot(month: Date())
+    }
   }
 }

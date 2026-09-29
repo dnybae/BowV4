@@ -5,33 +5,19 @@ struct ReconciliationScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
   var account: BudgetAccount
-  var transactions: [BudgetTransaction]
   var currencyCode: String
+  @State private var transactions: [BudgetTransaction] = []
+  @State private var entries: [ReconciliationEntry] = []
+  @State private var payeeNames: [UUID: String] = [:]
+  @State private var clearedBalanceMinor: Int64 = 0
   @State private var statementDate = Date()
   @State private var statementBalance = ""
   @State private var selectedIDs: Set<UUID> = []
-  @State private var didLoad = false
   @State private var errorMessage: String?
 
   private var calculator: ReconciliationCalculator { ReconciliationCalculator() }
-  private var entries: [ReconciliationEntry] {
-    calculator.entries(accountID: account.id, transactions: transactions.map {
-      ReconciliationLedgerItem(
-        id: $0.id,
-        date: $0.date,
-        amountMinor: $0.amountMinor,
-        accountID: $0.accountID,
-        transferAccountID: $0.transferAccountID,
-        isCleared: $0.isCleared,
-        destinationIsCleared: $0.destinationIsCleared
-      )
-    }, through: statementDate)
-  }
   private var enteredBalance: Int64? { BudgetMoney.parseMinor(statementBalance) }
-  private var clearedBalance: Int64 {
-    calculator.clearedBalance(openingBalanceMinor: account.openingBalanceMinor, entries: entries, selectedIDs: selectedIDs)
-  }
-  private var difference: Int64? { enteredBalance.map { $0 - clearedBalance } }
+  private var difference: Int64? { enteredBalance.map { $0 - clearedBalanceMinor } }
 
   var body: some View {
     NavigationStack {
@@ -46,7 +32,7 @@ struct ReconciliationScreen: View {
           Text("Enter the balance shown by your bank on the statement date.")
         }
         Section("Difference") {
-          LabeledContent("Cleared balance", value: BudgetMoney.formatted(clearedBalance, currencyCode: currencyCode))
+          LabeledContent("Cleared balance", value: BudgetMoney.formatted(clearedBalanceMinor, currencyCode: currencyCode))
           if let difference {
             LabeledContent("Difference", value: BudgetMoney.formatted(difference, currencyCode: currencyCode))
               .foregroundStyle(difference == 0 ? .green : .orange)
@@ -61,15 +47,19 @@ struct ReconciliationScreen: View {
           } else {
             ForEach(entries) { entry in
               Button {
-                if !selectedIDs.insert(entry.id).inserted { selectedIDs.remove(entry.id) }
+                if selectedIDs.insert(entry.id).inserted {
+                  clearedBalanceMinor += entry.amountMinor
+                } else {
+                  selectedIDs.remove(entry.id)
+                  clearedBalanceMinor -= entry.amountMinor
+                }
               } label: {
                 HStack(spacing: 12) {
                   Image(systemName: selectedIDs.contains(entry.id) ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(selectedIDs.contains(entry.id) ? Color.accentColor : Color.secondary)
                     .font(.title3)
                   VStack(alignment: .leading) {
-                    Text(transactions.first(where: { $0.id == entry.id })?.payee.isEmpty == false
-                      ? transactions.first(where: { $0.id == entry.id })!.payee : "Transfer")
+                    Text(payeeNames[entry.id].flatMap { $0.isEmpty ? nil : $0 } ?? "Transfer")
                       .foregroundStyle(.primary)
                     Text(entry.date, style: .date)
                       .font(.caption)
@@ -82,14 +72,20 @@ struct ReconciliationScreen: View {
                 .contentShape(Rectangle())
               }
               .buttonStyle(.plain)
-              .accessibilityLabel("\(transactions.first(where: { $0.id == entry.id })?.payee ?? "Transfer"), \(BudgetMoney.formatted(entry.amountMinor, currencyCode: currencyCode)), \(selectedIDs.contains(entry.id) ? "cleared" : "uncleared")")
+              .accessibilityLabel("\(payeeNames[entry.id] ?? "Transfer"), \(BudgetMoney.formatted(entry.amountMinor, currencyCode: currencyCode)), \(selectedIDs.contains(entry.id) ? "cleared" : "uncleared")")
             }
           }
         } header: {
           HStack {
             Text("Transactions")
             Spacer()
-            Button("Select All") { selectedIDs = Set(entries.map(\.id)) }
+            Button("Select All") {
+              selectedIDs = Set(entries.map(\.id))
+              clearedBalanceMinor = calculator.clearedBalance(
+                openingBalanceMinor: account.openingBalanceMinor,
+                entries: entries, selectedIDs: selectedIDs
+              )
+            }
               .textCase(nil)
           }
         } footer: {
@@ -105,14 +101,8 @@ struct ReconciliationScreen: View {
             .disabled(difference != 0)
         }
       }
-      .onAppear {
-        if !didLoad {
-          selectedIDs = Set(entries.filter(\.isCleared).map(\.id))
-          didLoad = true
-        }
-      }
-      .onChange(of: statementDate) { _, _ in
-        selectedIDs = Set(entries.filter(\.isCleared).map(\.id))
+      .task(id: statementDate) {
+        loadEntries()
       }
       .alert("Couldn’t Reconcile", isPresented: Binding(
         get: { errorMessage != nil },
@@ -126,7 +116,7 @@ struct ReconciliationScreen: View {
   }
 
   private func finish() {
-    guard let enteredBalance, enteredBalance == clearedBalance else { return }
+    guard let enteredBalance, enteredBalance == clearedBalanceMinor else { return }
     let now = Date()
     for transaction in transactions where entries.contains(where: { $0.id == transaction.id }) {
       let selected = selectedIDs.contains(transaction.id)
@@ -144,5 +134,28 @@ struct ReconciliationScreen: View {
       try modelContext.save()
       dismiss()
     } catch { errorMessage = error.localizedDescription }
+  }
+
+  private func loadEntries() {
+    let accountID = account.id
+    let nextDay = Calendar.current.date(byAdding: .day, value: 1,
+      to: Calendar.current.startOfDay(for: statementDate)) ?? statementDate
+    let predicate = #Predicate<BudgetTransaction> {
+      $0.date < nextDay && ($0.accountID == accountID || $0.transferAccountID == accountID)
+    }
+    transactions = (try? modelContext.fetch(FetchDescriptor(predicate: predicate))) ?? []
+    payeeNames = Dictionary(uniqueKeysWithValues: transactions.map { ($0.id, $0.payee) })
+    entries = calculator.entries(accountID: accountID, transactions: transactions.map {
+      ReconciliationLedgerItem(
+        id: $0.id, date: $0.date, amountMinor: $0.amountMinor,
+        accountID: $0.accountID, transferAccountID: $0.transferAccountID,
+        isCleared: $0.isCleared, destinationIsCleared: $0.destinationIsCleared
+      )
+    }, through: statementDate)
+    selectedIDs = Set(entries.filter(\.isCleared).map(\.id))
+    clearedBalanceMinor = calculator.clearedBalance(
+      openingBalanceMinor: account.openingBalanceMinor,
+      entries: entries, selectedIDs: selectedIDs
+    )
   }
 }

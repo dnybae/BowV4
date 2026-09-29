@@ -3,6 +3,7 @@ import SwiftData
 
 @Model
 final class SimpleFINAccountLink {
+  #Index<SimpleFINAccountLink>([\.remoteKey], [\.localAccountID])
   var id: UUID = UUID()
   var remoteKey: String = ""
   var name: String = ""

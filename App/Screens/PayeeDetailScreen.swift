@@ -3,8 +3,8 @@ import SwiftData
 
 struct PayeeDetailScreen: View {
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.modelContext) private var modelContext
   @Query private var payees: [BudgetPayee]
-  @Query private var transactions: [BudgetTransaction]
   @Query private var schedules: [BudgetSchedule]
   @Query private var accounts: [BudgetAccount]
   @Query private var envelopes: [BudgetEnvelope]
@@ -13,17 +13,8 @@ struct PayeeDetailScreen: View {
   @State private var showingEdit = false
   @State private var selectedTransaction: BudgetTransaction?
   @State private var selectedSchedule: BudgetSchedule?
-
-  private var entry: PayeeDirectory.Entry? {
-    PayeeDirectory.entries(payees: payees, transactions: transactions, schedules: schedules)
-      .first { $0.key == payeeKey }
-  }
-
-  private var matchingTransactions: [BudgetTransaction] {
-    transactions.filter {
-      PayeeDirectory.canonicalKey(for: $0.payee, payees: payees) == payeeKey
-    }.sorted { $0.date == $1.date ? $0.createdAt > $1.createdAt : $0.date > $1.date }
-  }
+  @State private var entry: PayeeDirectory.Entry?
+  @State private var feed = TransactionFeedModel()
 
   private var matchingSchedules: [BudgetSchedule] {
     schedules.filter {
@@ -32,7 +23,7 @@ struct PayeeDetailScreen: View {
   }
 
   private var transactionDays: [Date] {
-    Array(Set(matchingTransactions.map { Calendar.current.startOfDay(for: $0.date) }))
+    Array(Set(feed.items.map { Calendar.current.startOfDay(for: $0.date) }))
       .sorted(by: >)
   }
 
@@ -68,7 +59,7 @@ struct PayeeDetailScreen: View {
             }
           }
         }
-        if matchingTransactions.isEmpty {
+        if feed.items.isEmpty && !feed.isLoading {
           ContentUnavailableView(
             "No transactions yet",
             systemImage: "list.bullet.rectangle",
@@ -77,28 +68,37 @@ struct PayeeDetailScreen: View {
         } else {
           ForEach(transactionDays, id: \.self) { day in
             Section(day.formatted(date: .complete, time: .omitted)) {
-              ForEach(matchingTransactions.filter {
+              ForEach(feed.items.filter {
                 Calendar.current.isDate($0.date, inSameDayAs: day)
               }) { transaction in
                 Button {
-                  selectedTransaction = transaction
+                  let id = transaction.id
+                  let predicate = #Predicate<BudgetTransaction> { $0.id == id }
+                  selectedTransaction = try? modelContext.fetch(FetchDescriptor(predicate: predicate)).first
                 } label: {
-                  TransactionRow(
-                    transaction: transaction,
-                    accountName: accounts.first { $0.id == transaction.accountID }?.name ?? "Account",
-                    envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name,
-                    currencyCode: currencyCode
-                  )
+                  TransactionSummaryRow(transaction: transaction, currencyCode: currencyCode)
                 }
                 .buttonStyle(.plain)
                 .accessibilityHint("Open transaction")
               }
             }
           }
+          if feed.hasMore {
+            ProgressView("Loading more…")
+              .frame(maxWidth: .infinity)
+              .onAppear { Task { await feed.loadNext() } }
+          }
         }
       }
     }
     .navigationTitle(entry?.name ?? "Payee")
+    .task(id: payeeKey) {
+      let repository = PayeeDirectoryRepository(modelContainer: modelContext.container)
+      entry = (try? await repository.entries())?.first { $0.key == payeeKey }
+      await feed.reload(container: modelContext.container, searchText: "",
+                        filter: TransactionFilter(), scopedPayeeKey: payeeKey,
+                        includeUncategorizedCount: false)
+    }
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {

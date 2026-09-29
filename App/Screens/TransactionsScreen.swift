@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct TransactionsScreen: View {
-  var transactions: [BudgetTransaction]
+  @Environment(\.modelContext) private var modelContext
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
   var schedules: [BudgetSchedule]
@@ -15,38 +15,19 @@ struct TransactionsScreen: View {
   @State private var searchText = ""
   @State private var filter = TransactionFilter()
   @State private var showingFilters = false
+  @State private var feed = TransactionFeedModel()
+  @State private var scheduledRecords: [BudgetTransaction] = []
+  @State private var refreshVersion = 0
 
   private var reviewCount: Int {
-    ReviewInbox(
-      transactions: transactions, records: simpleFINRecords,
+    let other = ReviewInbox(
+      transactions: scheduledRecords, records: simpleFINRecords,
       occurrences: occurrences, schedules: schedules
-    ).items.count
-  }
-
-  private var visibleTransactions: [BudgetTransaction] {
-    transactions
-      .filter { transaction in
-        !transaction.isBalanceAdjustment
-          && filter.includes(TransactionFilterItem(
-          accountID: transaction.accountID,
-          transferAccountID: transaction.transferAccountID,
-          envelopeID: transaction.envelopeID,
-          date: transaction.date,
-          amountMinor: transaction.amountMinor,
-          isUncategorizedExpense: transaction.kind == .expense
-            && transaction.envelopeID == nil,
-          needsApproval: transaction.needsApproval
-        )) && (searchText.isEmpty
-          || transaction.payee.localizedCaseInsensitiveContains(searchText)
-          || transaction.notes.localizedCaseInsensitiveContains(searchText)
-          || accounts.first(where: { $0.id == transaction.accountID })?.name
-            .localizedCaseInsensitiveContains(searchText) == true
-          || envelopes.first(where: { $0.id == transaction.envelopeID })?.name
-            .localizedCaseInsensitiveContains(searchText) == true)
-      }
-      .sorted {
-        $0.date == $1.date ? $0.createdAt > $1.createdAt : $0.date > $1.date
-      }
+    ).items.filter {
+      if case .transaction = $0 { return false }
+      return true
+    }.count
+    return feed.approvalCount + other
   }
 
   var body: some View {
@@ -67,12 +48,9 @@ struct TransactionsScreen: View {
           .listRowBackground(Color.accentColor.opacity(0.10))
         }
       }
-      let uncategorizedCount = transactions.filter {
-        $0.kind == .expense && $0.envelopeID == nil && !$0.isBalanceAdjustment
-      }.count
-      if uncategorizedCount > 0 {
+      if feed.uncategorizedCount > 0 {
         Section("Needs Attention") {
-          Button("Categorize \(uncategorizedCount) transactions", systemImage: "tag") {
+          Button("Categorize \(feed.uncategorizedCount) transactions", systemImage: "tag") {
             searchText = ""
             filter = TransactionFilter(envelopeScope: .uncategorized)
           }
@@ -87,7 +65,10 @@ struct TransactionsScreen: View {
           }
         }
       }
-      if visibleTransactions.isEmpty {
+      if feed.items.isEmpty && feed.isLoading {
+        ProgressView("Loading transactions…")
+          .frame(maxWidth: .infinity)
+      } else if feed.items.isEmpty {
         ContentUnavailableView(
           searchText.isEmpty && !filter.isActive ? "No transactions yet" : "No matches",
           systemImage: "list.bullet.rectangle",
@@ -96,28 +77,51 @@ struct TransactionsScreen: View {
             : "Try a different search or clear your filters.")
         )
       } else {
-        ForEach(visibleTransactions) { transaction in
+        if feed.didTrim {
+          Button("Jump to Newest", systemImage: "arrow.up.to.line") {
+            Task { await feed.returnToNewest(searchText: searchText, filter: filter) }
+          }
+        }
+        ForEach(feed.items) { transaction in
           Button {
             onSelect(transaction.id)
           } label: {
-            TransactionRow(
+            TransactionSummaryRow(
               transaction: transaction,
-              accountName: accounts.first { $0.id == transaction.accountID }?.name ?? "Account",
-              envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name,
               currencyCode: currencyCode
             )
           }
           .buttonStyle(.plain)
         }
+        if feed.hasMore {
+          ProgressView("Loading more…")
+            .frame(maxWidth: .infinity)
+            .onAppear { Task { await feed.loadNext() } }
+        }
       }
     }
     .searchable(text: $searchText, prompt: "Payee, note, account, or envelope")
+    .task(id: TransactionFeedKey(searchText: searchText, filter: filter,
+                                 refreshVersion: refreshVersion)) {
+      if !searchText.isEmpty {
+        try? await Task.sleep(for: .milliseconds(250))
+      }
+      guard !Task.isCancelled else { return }
+      scheduledRecords = (try? ScheduledRecordLookup().transactions(
+        for: occurrences, in: modelContext
+      )) ?? []
+      await feed.reload(container: modelContext.container, searchText: searchText,
+                        filter: filter, includeApprovalCount: true)
+    }
+    .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+      refreshVersion += 1
+    }
     .navigationTitle("Spending")
     .navigationDestination(for: SpendingRoute.self) { route in
       switch route {
       case .reviewInbox:
         ReviewInboxScreen(
-          transactions: transactions, records: simpleFINRecords,
+          scheduledRecords: scheduledRecords, records: simpleFINRecords,
           occurrences: occurrences, schedules: schedules,
           accounts: accounts, currencyCode: currencyCode,
           onSelectTransaction: onSelect, onRecord: onRecord,
@@ -143,6 +147,49 @@ struct TransactionsScreen: View {
         currencyCode: currencyCode
       )
     }
+  }
+}
+
+private struct TransactionFeedKey: Hashable {
+  var searchText: String
+  var filter: TransactionFilter
+  var refreshVersion: Int
+}
+
+struct TransactionSummaryRow: View {
+  var transaction: TransactionListItem
+  var currencyCode: String
+  var displayAmountMinor: Int64? = nil
+
+  var body: some View {
+    HStack(spacing: 12) {
+      MerchantLogoView(
+        merchantName: transaction.kind == .transfer ? "" : transaction.payee,
+        domain: transaction.kind == .transfer ? nil : transaction.merchantDomain
+      )
+      VStack(alignment: .leading, spacing: 3) {
+        Text(transaction.kind == .transfer ? "Transfer" :
+          transaction.payee.isEmpty ? "Transaction" : transaction.payee)
+          .foregroundStyle(.primary)
+        Text("\(transaction.accountName) · \(transaction.date.formatted(date: .abbreviated, time: .omitted))")
+          .font(.caption).foregroundStyle(.secondary)
+        if transaction.needsApproval {
+          Text("Needs approval").font(.caption).foregroundStyle(.orange)
+        }
+        if transaction.envelopeID == nil && transaction.kind == .expense {
+          Text("Needs categorization").font(.caption).foregroundStyle(.orange)
+        } else if let envelopeName = transaction.envelopeName {
+          Text(envelopeName).font(.caption).foregroundStyle(.secondary)
+        }
+      }
+      Spacer(minLength: 8)
+      Text(BudgetMoney.formatted(displayAmountMinor ?? transaction.amountMinor, currencyCode: currencyCode))
+        .fontWeight(.medium)
+        .foregroundStyle((displayAmountMinor ?? transaction.amountMinor) < 0 ? Color.primary : Color.accentColor)
+    }
+    .padding(.vertical, 4)
+    .contentShape(Rectangle())
+    .accessibilityElement(children: .combine)
   }
 }
 

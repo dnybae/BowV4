@@ -1,7 +1,7 @@
 import Foundation
 
 struct PayeeDirectory {
-  struct Entry: Identifiable {
+  struct Entry: Identifiable, Sendable {
     var name: String
     var key: String
     var ruleID: UUID?

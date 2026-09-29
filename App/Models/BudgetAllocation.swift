@@ -3,6 +3,13 @@ import SwiftData
 
 @Model
 final class BudgetAllocation {
+  #Index<BudgetAllocation>(
+    [\.date, \.createdAt],
+    [\.sourceEnvelopeID, \.date],
+    [\.targetEnvelopeID, \.date],
+    [\.sourceCardID, \.date],
+    [\.targetCardID, \.date]
+  )
   var id: UUID = UUID()
   var date: Date = Date()
   var createdAt: Date = Date()

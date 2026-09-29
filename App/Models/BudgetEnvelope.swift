@@ -3,6 +3,7 @@ import SwiftData
 
 @Model
 final class BudgetEnvelope {
+  #Index<BudgetEnvelope>([\.groupID, \.sortOrder])
   var id: UUID = UUID()
   var groupID: UUID = UUID()
   var name: String = ""

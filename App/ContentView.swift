@@ -66,10 +66,14 @@ private struct BudgetHomeView: View {
   @Query private var envelopes: [BudgetEnvelope]
   @Query private var payees: [BudgetPayee]
   @Query private var allocations: [BudgetAllocation]
-  @Query private var transactions: [BudgetTransaction]
   @Query private var schedules: [BudgetSchedule]
   @Query private var scheduleOccurrences: [BudgetScheduleOccurrence]
   @Query private var simpleFINRecords: [SimpleFINImportRecord]
+  @State private var snapshotRepository: BudgetSnapshotRepository?
+  @State private var loadedSnapshot: BudgetSnapshot?
+  @State private var loadedPreviousSnapshot: BudgetSnapshot?
+  @State private var loadedAccountReport: AccountBalanceReport?
+  @State private var ledgerError: String?
   @AppStorage("bow.appearance") private var appearanceRaw = AppAppearance.system.rawValue
   @State private var selectedMonth = Date()
   @State private var selectedCalendarDate = Date()
@@ -92,24 +96,6 @@ private struct BudgetHomeView: View {
     } else {
       "building.columns.fill"
     }
-  }
-
-  private var snapshot: BudgetSnapshot {
-    BudgetLedger.snapshot(
-      month: selectedMonth,
-      accounts: accounts,
-      envelopes: envelopes,
-      allocations: allocations,
-      transactions: transactions
-    )
-  }
-
-  private var currentAccountReport: AccountBalanceReport {
-    BudgetLedger.accountBalanceReport(
-      before: Date(), inclusive: true,
-      accounts: accounts, transactions: transactions,
-      currencyCode: currencyCode
-    )
   }
 
   var body: some View {
@@ -139,15 +125,18 @@ private struct BudgetHomeView: View {
         )) {
           Tab("Budget", systemImage: "square.grid.2x2.fill", value: .budget) {
             NavigationStack(path: $budgetPath) {
-              BudgetScreen(
+              Group {
+              if let snapshot = loadedSnapshot,
+                 Calendar.current.isDate(snapshot.month, equalTo: selectedMonth, toGranularity: .month) {
+                BudgetScreen(
                 currencyCode: currencyCode,
                 groups: groups,
                 envelopes: envelopes,
                 accounts: accounts,
                 allocations: allocations,
-                transactions: transactions,
                 schedules: schedules,
                 snapshot: snapshot,
+                previousSnapshot: loadedPreviousSnapshot,
                 selectedMonth: $selectedMonth,
                 returnToPresentRequest: budgetReturnToPresentRequest,
                 onAddGroup: { activeSheet = .newGroup },
@@ -160,7 +149,16 @@ private struct BudgetHomeView: View {
                 },
                 onSelectTransaction: { activeSheet = .editTransaction($0) },
                 onEditSchedule: { activeSheet = .editSchedule($0) }
-              )
+                )
+              } else {
+                if let ledgerError {
+                  ContentUnavailableView("Budget Unavailable", systemImage: "exclamationmark.triangle",
+                                         description: Text(ledgerError))
+                } else {
+                  ProgressView("Calculating budget…")
+                }
+              }
+              }
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                   Button("Settings", systemImage: "gearshape") { showingSettings = true }
@@ -171,7 +169,6 @@ private struct BudgetHomeView: View {
           Tab("Spending", systemImage: "list.bullet.rectangle", value: .transactions) {
             NavigationStack(path: $spendingPath) {
               TransactionsScreen(
-                transactions: transactions,
                 accounts: accounts,
                 envelopes: envelopes,
                 schedules: schedules,
@@ -194,10 +191,8 @@ private struct BudgetHomeView: View {
               CalendarScreen(
                 schedules: schedules,
                 occurrences: scheduleOccurrences,
-                transactions: transactions,
                 accounts: accounts,
                 envelopes: envelopes,
-                allocations: allocations,
                 currencyCode: currencyCode,
                 selectedDate: $selectedCalendarDate,
                 returnToTodayRequest: calendarReturnToTodayRequest,
@@ -213,21 +208,27 @@ private struct BudgetHomeView: View {
           }
           Tab("Accounts", systemImage: accountsTabSymbol, value: .accounts) {
             NavigationStack(path: $accountsPath) {
-              AccountsScreen(
+              Group {
+              if let currentAccountReport = loadedAccountReport {
+                AccountsScreen(
                 accounts: accounts,
-                transactions: transactions,
                 balanceReport: currentAccountReport,
                 currencyCode: currencyCode,
                 onAddAccount: { activeSheet = .newAccount },
                 onViewInsights: { showingInsights = true },
                 onSelectTransaction: { activeSheet = .editTransaction($0) }
-              )
-              .navigationDestination(isPresented: $showingInsights) {
-                InsightsScreen(
-                  groups: groups, envelopes: envelopes, accounts: accounts,
-                  allocations: allocations, transactions: transactions, schedules: schedules,
-                  currencyCode: currencyCode
                 )
+              } else {
+                if let ledgerError {
+                  ContentUnavailableView("Balances Unavailable", systemImage: "exclamationmark.triangle",
+                                         description: Text(ledgerError))
+                } else {
+                  ProgressView("Calculating balances…")
+                }
+              }
+              }
+              .navigationDestination(isPresented: $showingInsights) {
+                insightsDestination
               }
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -278,7 +279,7 @@ private struct BudgetHomeView: View {
             )
           case .editTransaction(let id):
             TransactionEditorScreen(
-              transaction: transactions.first { $0.id == id },
+              transaction: transaction(for: id),
               accounts: accounts,
               envelopes: envelopes,
               payees: payees,
@@ -326,10 +327,17 @@ private struct BudgetHomeView: View {
     .preferredColorScheme(
       AppAppearance(rawValue: appearanceRaw)?.colorScheme
     )
+    .environment(\.budgetSnapshotRepository, snapshotRepository)
     .task {
       try? BudgetCommands.ensureCardPaymentEnvelopes(in: modelContext)
       try? ScheduleReviewPlanner().refresh(in: modelContext)
       if !isDemoMode { await refreshSimpleFINIfConnected() }
+    }
+    .task(id: Calendar.current.dateInterval(of: .month, for: selectedMonth)?.start ?? selectedMonth) {
+      await refreshLedger()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+      Task { await refreshLedger(invalidate: true) }
     }
     .onChange(of: scenePhase) { _, phase in
       guard !isDemoMode else { return }
@@ -357,6 +365,49 @@ private struct BudgetHomeView: View {
   private func refreshSimpleFINIfConnected() async {
     guard (try? SimpleFINCredentialStore().load()) != nil else { return }
     _ = try? await SimpleFINSyncCoordinator.shared.sync(in: modelContext)
+  }
+
+  private func transaction(for id: UUID) -> BudgetTransaction? {
+    let predicate = #Predicate<BudgetTransaction> { $0.id == id }
+    var descriptor = FetchDescriptor<BudgetTransaction>(predicate: predicate)
+    descriptor.fetchLimit = 1
+    return try? modelContext.fetch(descriptor).first
+  }
+
+  @ViewBuilder
+  private var insightsDestination: some View {
+    if let loadedAccountReport, let snapshotRepository {
+      InsightsScreen(
+        groups: groups, envelopes: envelopes, accounts: accounts,
+        currentNetWorth: loadedAccountReport,
+        snapshotRepository: snapshotRepository, schedules: schedules,
+        currencyCode: currencyCode
+      )
+    } else {
+      ProgressView("Preparing insights…")
+    }
+  }
+
+  private func refreshLedger(invalidate: Bool = false) async {
+    if snapshotRepository == nil {
+      snapshotRepository = BudgetSnapshotRepository(modelContainer: modelContext.container)
+    }
+    guard let snapshotRepository else { return }
+    if invalidate { await snapshotRepository.invalidate() }
+    let month = selectedMonth
+    do {
+      let result = try await snapshotRepository.bundle(month: month, currencyCode: currencyCode)
+      guard !Task.isCancelled,
+            Calendar.current.isDate(month, equalTo: selectedMonth, toGranularity: .month) else { return }
+      loadedSnapshot = result.current
+      loadedPreviousSnapshot = result.previous
+      loadedAccountReport = result.accountReport
+      ledgerError = nil
+    } catch is CancellationError {
+      return
+    } catch {
+      ledgerError = error.localizedDescription
+    }
   }
 }
 

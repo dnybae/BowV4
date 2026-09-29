@@ -4,8 +4,6 @@ import SwiftData
 struct SimpleFINReviewScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
-  @Query private var transactions: [BudgetTransaction]
-  @Query private var records: [SimpleFINImportRecord]
   @Query private var accounts: [BudgetAccount]
   var record: SimpleFINImportRecord
   var relatedOccurrence: BudgetScheduleOccurrence? = nil
@@ -13,13 +11,9 @@ struct SimpleFINReviewScreen: View {
   var onRecordScheduledTransfer: ((ScheduledTransactionDraft) -> Void)? = nil
   @State private var selectedID: UUID?
   @State private var message: String?
+  @State private var candidates: [BudgetTransaction] = []
 
   private var account: BudgetAccount? { accounts.first { $0.id == record.localAccountID } }
-  private var candidates: [BudgetTransaction] {
-    let matches = SimpleFINSyncCoordinator.shared.possibleMatches(for: record, among: transactions, records: records)
-    return relatedSchedule?.kind == .transfer ? matches.filter { $0.kind == .transfer } : matches
-  }
-
   var body: some View {
     Form {
       Section("Bank Transaction") {
@@ -101,6 +95,29 @@ struct SimpleFINReviewScreen: View {
       }
     }
     .navigationTitle("Review Match")
+    .task(id: record.id) {
+      do {
+        let nearby = try BudgetTransactionLookup.near(
+          accountID: record.localAccountID, date: record.date, days: 10, in: modelContext
+        )
+        let matches = try nearby.filter { transaction in
+          let id = transaction.id
+          let accountID = record.localAccountID
+          let ignored = SimpleFINImportStatus.ignored.rawValue
+          let other = FetchDescriptor<SimpleFINImportRecord>(predicate: #Predicate {
+            $0.transactionID == id && $0.localAccountID == accountID
+              && $0.statusRaw != ignored
+          })
+          let used = try modelContext.fetch(other).contains { $0.id != record.id }
+          return !used && SimpleFINSyncCoordinator.shared.isPossibleMatch(transaction, for: record)
+        }
+        candidates = (relatedSchedule?.kind == .transfer
+          ? matches.filter { $0.kind == .transfer } : matches)
+          .sorted { abs($0.date.timeIntervalSince(record.date)) < abs($1.date.timeIntervalSince(record.date)) }
+      } catch {
+        message = error.localizedDescription
+      }
+    }
     .alert("Could Not Resolve Match", isPresented: Binding(
       get: { message != nil }, set: { if !$0 { message = nil } }
     )) {

@@ -4,8 +4,7 @@ import SwiftData
 struct AccountEditorScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
-  @Query private var allAccounts: [BudgetAccount]
-  @Query private var allTransactions: [BudgetTransaction]
+  @Environment(\.budgetSnapshotRepository) private var sharedRepository
   var currencyCode: String
   var account: BudgetAccount?
   var onSaved: ((BudgetAccount) -> Void)?
@@ -81,13 +80,14 @@ struct AccountEditorScreen: View {
       }
     }
     .navigationTitle(account == nil ? "Private Account" : "Edit Account")
-    .onAppear {
+    .task {
       guard let account, !loadedCurrentBalance else { return }
-      let report = BudgetLedger.accountBalanceReport(
-        before: Date(), inclusive: true,
-        accounts: allAccounts, transactions: allTransactions
-      )
-      openingBalance = BudgetMoney.editableSigned(report.balances[account.id] ?? account.openingBalanceMinor)
+      let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
+      if let report = try? await repository.accountReport(at: Date(), currencyCode: currencyCode) {
+        openingBalance = BudgetMoney.editableSigned(
+          report.balances[account.id] ?? account.openingBalanceMinor
+        )
+      }
       loadedCurrentBalance = true
     }
     .navigationBarTitleDisplayMode(.inline)

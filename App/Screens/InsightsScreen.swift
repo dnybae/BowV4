@@ -3,18 +3,22 @@ import Charts
 import SwiftData
 
 struct InsightsScreen: View {
+  @Environment(\.modelContext) private var modelContext
   @Query private var payees: [BudgetPayee]
   var groups: [BudgetGroup]
   var envelopes: [BudgetEnvelope]
   var accounts: [BudgetAccount]
-  var allocations: [BudgetAllocation]
-  var transactions: [BudgetTransaction]
+  var currentNetWorth: AccountBalanceReport
+  var snapshotRepository: BudgetSnapshotRepository
   var schedules: [BudgetSchedule] = []
   var currencyCode: String
   @State private var selectedBarMonth: Date?
   @State private var selectedSpendingAngle: Double?
   @State private var detail: InsightsDetail?
   @State private var editingTransaction: BudgetTransaction?
+  @State private var transactions: [BudgetTransaction] = []
+  @State private var monthlyNetWorth: [Date: Int64] = [:]
+  @State private var refreshVersion = 0
 
   private var calendar: Calendar { .current }
   private var months: [Date] {
@@ -23,13 +27,6 @@ struct InsightsScreen: View {
   }
   private var accountKinds: [UUID: BudgetAccountKind] {
     Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.kind) })
-  }
-  private var currentNetWorth: AccountBalanceReport {
-    BudgetLedger.accountBalanceReport(
-      before: Date(), inclusive: true,
-      accounts: accounts, transactions: transactions,
-      currencyCode: currencyCode
-    )
   }
   private var netWorthIssueDescription: String {
     guard let issue = currentNetWorth.issues.first else { return "Review your account balances." }
@@ -67,14 +64,8 @@ struct InsightsScreen: View {
           && accountKinds[transaction.accountID] == .cash
           && [.asset, .liability].contains(accountKinds[transaction.transferAccountID ?? UUID()]))
       }.reduce(Int64(0)) { $0 + max(0, -$1.amountMinor) }
-      let next = calendar.date(byAdding: .month, value: 1, to: month) ?? Date()
       let isCurrent = calendar.isDate(month, equalTo: Date(), toGranularity: .month)
-      let netWorth = BudgetLedger.accountBalanceReport(
-        before: isCurrent ? Date() : next,
-        inclusive: isCurrent,
-        accounts: accounts, transactions: transactions,
-        currencyCode: currencyCode
-      ).netWorthMinor
+      let netWorth = isCurrent ? currentNetWorth.netWorthMinor : monthlyNetWorth[month]
       return InsightsMonth(month: month, incomeMinor: income, expenseMinor: expenses, netWorthMinor: netWorth)
     }
   }
@@ -227,6 +218,23 @@ struct InsightsScreen: View {
       .padding(16)
       .padding(.bottom, 24)
       .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .task(id: refreshVersion) {
+      let first = months.first ?? Date()
+      let next = Calendar.current.date(byAdding: .month, value: 1, to: months.last ?? Date()) ?? Date()
+      let predicate = #Predicate<BudgetTransaction> { $0.date >= first && $0.date < next }
+      transactions = (try? modelContext.fetch(FetchDescriptor(predicate: predicate))) ?? []
+      var values: [Date: Int64] = [:]
+      for month in months.dropLast() {
+        if let value = try? await snapshotRepository.snapshot(month: month).netWorthMinor {
+          values[month] = value
+        }
+      }
+      monthlyNetWorth = values
+    }
+    .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+      Task { await snapshotRepository.invalidate() }
+      refreshVersion += 1
     }
     .navigationTitle("Insights")
     .onChange(of: selectedBarMonth) { _, value in

@@ -3,7 +3,7 @@ import SwiftData
 
 struct ReviewInboxScreen: View {
   @Environment(\.modelContext) private var modelContext
-  var transactions: [BudgetTransaction]
+  var scheduledRecords: [BudgetTransaction]
   var records: [SimpleFINImportRecord]
   var occurrences: [BudgetScheduleOccurrence]
   var schedules: [BudgetSchedule]
@@ -14,23 +14,46 @@ struct ReviewInboxScreen: View {
   var onEditSchedule: (UUID) -> Void
   @State private var pendingSkip: BudgetScheduleOccurrence?
   @State private var message: String?
+  @State private var feed = TransactionFeedModel()
+  @State private var refreshVersion = 0
 
-  private var inbox: ReviewInbox {
+  private var otherItems: [ReviewEntry] {
     ReviewInbox(
-      transactions: transactions, records: records,
+      transactions: scheduledRecords, records: records,
       occurrences: occurrences, schedules: schedules
-    )
+    ).items.filter {
+      if case .transaction = $0 { return false }
+      return true
+    }
   }
 
   var body: some View {
     List {
-      if inbox.items.isEmpty {
+      if feed.items.isEmpty && otherItems.isEmpty && !feed.isLoading {
         ContentUnavailableView(
           "All Caught Up", systemImage: "checkmark",
           description: Text("No transactions or scheduled bills need review.")
         )
       } else {
-        ForEach(inbox.items) { item in
+        ForEach(feed.items) { transaction in
+          Button {
+            onSelectTransaction(transaction.id)
+          } label: {
+            reviewRow(
+              title: transaction.payee.isEmpty ? "Transaction" : transaction.payee,
+              subtitle: "Review imported transaction · \(transaction.date.formatted(date: .abbreviated, time: .omitted))",
+              amount: transaction.amountMinor,
+              merchantName: transaction.kind == .transfer ? "" : transaction.payee,
+              merchantDomain: transaction.kind == .transfer ? nil : transaction.merchantDomain
+            )
+          }
+        }
+        if feed.hasMore {
+          ProgressView("Loading more…")
+            .frame(maxWidth: .infinity)
+            .onAppear { Task { await feed.loadNext() } }
+        }
+        ForEach(otherItems) { item in
           switch item {
           case .transaction(let transaction):
             Button {
@@ -99,6 +122,14 @@ struct ReviewInboxScreen: View {
       }
     }
     .navigationTitle("Needs Approval")
+    .task(id: refreshVersion) {
+      await feed.reload(container: modelContext.container, searchText: "",
+                        filter: TransactionFilter(needsApprovalOnly: true),
+                        includeUncategorizedCount: false)
+    }
+    .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+      refreshVersion += 1
+    }
     .navigationBarTitleDisplayMode(.inline)
     .confirmationDialog("Skip this scheduled occurrence?", isPresented: Binding(
       get: { pendingSkip != nil }, set: { if !$0 { pendingSkip = nil } }

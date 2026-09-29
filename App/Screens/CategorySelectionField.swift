@@ -95,11 +95,10 @@ struct CategoryScopeSelectionField: View {
 
 struct CategorySelectionSheet: View {
   @Environment(\.dismiss) private var dismiss
-  @Query private var accounts: [BudgetAccount]
+  @Environment(\.modelContext) private var modelContext
+  @Environment(\.budgetSnapshotRepository) private var sharedRepository
   @Query private var envelopes: [BudgetEnvelope]
   @Query private var groups: [BudgetGroup]
-  @Query private var allocations: [BudgetAllocation]
-  @Query private var transactions: [BudgetTransaction]
   @Query private var profiles: [BudgetProfile]
   var selectedID: UUID?
   var noneTitle: String? = nil
@@ -108,13 +107,7 @@ struct CategorySelectionSheet: View {
   var onSelect: (UUID?) -> Void
   var onSelectUncategorized: (() -> Void)? = nil
   @State private var searchText = ""
-
-  private var snapshot: BudgetSnapshot {
-    BudgetLedger.snapshot(
-      month: Date(), accounts: accounts, envelopes: envelopes,
-      allocations: allocations, transactions: transactions
-    )
-  }
+  @State private var snapshot: BudgetSnapshot?
 
   private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
 
@@ -174,6 +167,10 @@ struct CategorySelectionSheet: View {
       }
     }
     .presentationDetents([.large])
+    .task {
+      let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
+      snapshot = try? await repository.snapshot(month: Date())
+    }
   }
 
   private func matchingEnvelopes(in groupID: UUID?) -> [BudgetEnvelope] {
@@ -186,13 +183,13 @@ struct CategorySelectionSheet: View {
     }.sorted { $0.sortOrder < $1.sortOrder }
   }
 
-  private func categoryButton(_ envelope: BudgetEnvelope, snapshot: BudgetSnapshot) -> some View {
+  private func categoryButton(_ envelope: BudgetEnvelope, snapshot: BudgetSnapshot?) -> some View {
     Button {
       onSelect(envelope.id)
     } label: {
       SelectionRow(
         title: envelope.name,
-        balance: BudgetMoney.formatted(snapshot.available(for: envelope.id), currencyCode: currencyCode),
+        balance: snapshot.map { BudgetMoney.formatted($0.available(for: envelope.id), currencyCode: currencyCode) },
         isSelected: selectedID == envelope.id && !isUncategorizedSelected
       )
     }

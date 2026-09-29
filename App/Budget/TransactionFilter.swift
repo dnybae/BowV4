@@ -1,6 +1,6 @@
 import Foundation
 
-struct TransactionFilter: Equatable {
+struct TransactionFilter: Hashable, Sendable {
   var accountID: UUID?
   var envelopeScope: TransactionEnvelopeScope = .all
   var needsApprovalOnly = false
@@ -56,7 +56,7 @@ struct TransactionFilter: Equatable {
   }
 }
 
-enum TransactionEnvelopeScope: Hashable {
+enum TransactionEnvelopeScope: Hashable, Sendable {
   case all
   case uncategorized
   case envelope(UUID)

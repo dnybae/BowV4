@@ -2,15 +2,17 @@ import SwiftUI
 import SwiftData
 
 struct ManagePayeesScreen: View {
-  @Query private var payees: [BudgetPayee]
-  @Query private var transactions: [BudgetTransaction]
-  @Query private var schedules: [BudgetSchedule]
+  @Environment(\.modelContext) private var modelContext
   @State private var searchText = ""
   @State private var showingAdd = false
+  @State private var directoryEntries: [PayeeDirectory.Entry] = []
+  @State private var isLoading = true
+  @State private var refreshVersion = 0
 
   private var entries: [PayeeDirectory.Entry] {
-    PayeeDirectory.entries(payees: payees, transactions: transactions, schedules: schedules)
-      .filter { searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText) }
+    directoryEntries.filter {
+      searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText)
+    }
   }
 
   private var transferEntries: [PayeeDirectory.Entry] {
@@ -52,7 +54,10 @@ struct ManagePayeesScreen: View {
 
   var body: some View {
     List {
-      if entries.isEmpty {
+      if entries.isEmpty && isLoading {
+        ProgressView("Loading payees…")
+          .frame(maxWidth: .infinity)
+      } else if entries.isEmpty {
         ContentUnavailableView(
           searchText.isEmpty ? "No payees yet" : "No matching payees",
           systemImage: "person.text.rectangle",
@@ -87,6 +92,15 @@ struct ManagePayeesScreen: View {
     }
     .searchable(text: $searchText, prompt: "Search payees")
     .navigationTitle("Manage Payees")
+    .task(id: refreshVersion) {
+      isLoading = true
+      let repository = PayeeDirectoryRepository(modelContainer: modelContext.container)
+      directoryEntries = (try? await repository.entries()) ?? []
+      isLoading = false
+    }
+    .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+      refreshVersion += 1
+    }
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
         Button("Add Payee", systemImage: "plus") { showingAdd = true }

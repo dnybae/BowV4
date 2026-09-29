@@ -10,22 +10,41 @@ struct BudgetCalculator {
     allocations: [AllocationLedgerItem],
     transactions: [TransactionLedgerItem]
   ) -> BudgetSnapshot {
+    calculateWithCheckpoint(
+      month: month, accounts: accounts, envelopes: envelopes,
+      allocations: allocations, transactions: transactions
+    ).snapshot
+  }
+
+  func calculateWithCheckpoint(
+    month: Date,
+    accounts: [AccountLedgerItem],
+    envelopes: [EnvelopeLedgerItem],
+    allocations: [AllocationLedgerItem],
+    transactions: [TransactionLedgerItem],
+    previous: Checkpoint? = nil,
+    balanceReportOverride: AccountBalanceReport? = nil,
+    assignedInFutureOverride: Int64? = nil
+  ) -> Result {
     let monthStart = calendar.dateInterval(of: .month, for: month)?.start ?? month
     let nextMonth = calendar.date(byAdding: .month, value: 1, to: monthStart) ?? month
     let includedAccounts = accounts.filter { $0.openedAt < nextMonth }
     let accountKinds = Dictionary(uniqueKeysWithValues: includedAccounts.map { ($0.id, $0.kind) })
-    let balanceReport = AccountBalanceCalculator().calculate(
+    let balanceReport = balanceReportOverride ?? AccountBalanceCalculator().calculate(
       before: nextMonth, accounts: accounts, transactions: transactions
     )
     let accountBalances = balanceReport.balances
-    var cashAvailable = Dictionary(uniqueKeysWithValues: envelopes
-      .filter { $0.paymentAccountID == nil }.map { ($0.id, Int64(0)) })
-    var cashShortfall: [UUID: Int64] = [:]
-    var paymentAvailable = Dictionary(uniqueKeysWithValues: includedAccounts
-      .filter { $0.kind == .credit }
-      .map { ($0.id, Int64(0)) })
-    var creditShortfall: [CardEnvelopeKey: Int64] = [:]
-    var categoryCardReserve: [CardEnvelopeKey: Int64] = [:]
+    var cashAvailable = previous?.cashAvailable ?? [:]
+    for envelope in envelopes where envelope.paymentAccountID == nil {
+      cashAvailable[envelope.id, default: 0] += 0
+    }
+    var cashShortfall = previous?.cashShortfall ?? [:]
+    var paymentAvailable = previous?.paymentAvailable ?? [:]
+    for account in includedAccounts where account.kind == .credit {
+      paymentAvailable[account.id, default: 0] += 0
+    }
+    var creditShortfall = previous?.creditShortfall ?? [:]
+    var categoryCardReserve = previous?.categoryCardReserve ?? [:]
     var assigned: [UUID: Int64] = [:]
     var activity: [UUID: Int64] = [:]
 
@@ -37,7 +56,7 @@ struct BudgetCalculator {
       if $0.createdAt != $1.createdAt { return $0.createdAt < $1.createdAt }
       return $0.id.uuidString < $1.id.uuidString
     }
-    var activeMonth = calendar.dateInterval(
+    var activeMonth = previous?.month ?? calendar.dateInterval(
       of: .month,
       for: orderedEvents.first?.date ?? monthStart
     )?.start ?? monthStart
@@ -205,7 +224,7 @@ struct BudgetCalculator {
     let envelopeFunds = cashAvailable.values.reduce(Int64(0), +)
     let cardPaymentFunds = paymentAvailable.values.reduce(Int64(0), +)
     let todayMonth = calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
-    let assignedInFuture = allocations.filter { monthStart >= todayMonth && $0.date >= nextMonth }.reduce(Int64(0)) { total, allocation in
+    let assignedInFuture = assignedInFutureOverride ?? allocations.filter { monthStart >= todayMonth && $0.date >= nextMonth }.reduce(Int64(0)) { total, allocation in
       let fromReady = allocation.source == .readyToAssign
       let toReady = allocation.target == .readyToAssign
       return total + (fromReady ? allocation.amountMinor : 0) - (toReady ? allocation.amountMinor : 0)
@@ -214,7 +233,7 @@ struct BudgetCalculator {
       creditShortfall.map { ($0.key.envelopeID, $0.value) },
       uniquingKeysWith: +
     )
-    return BudgetSnapshot(
+    let snapshot = BudgetSnapshot(
       month: monthStart,
       accountBalances: accountBalances,
       cashAvailable: cashAvailable,
@@ -228,6 +247,29 @@ struct BudgetCalculator {
       cashTotalMinor: cashTotal,
       netWorthMinor: balanceReport.netWorthMinor
     )
+    return Result(
+      snapshot: snapshot,
+      checkpoint: Checkpoint(
+        month: monthStart, cashAvailable: cashAvailable,
+        cashShortfall: cashShortfall, paymentAvailable: paymentAvailable,
+        creditShortfall: creditShortfall,
+        categoryCardReserve: categoryCardReserve
+      )
+    )
+  }
+
+  struct Result {
+    var snapshot: BudgetSnapshot
+    var checkpoint: Checkpoint
+  }
+
+  struct Checkpoint {
+    var month: Date
+    var cashAvailable: [UUID: Int64]
+    var cashShortfall: [UUID: Int64]
+    var paymentAvailable: [UUID: Int64]
+    var creditShortfall: [CardEnvelopeKey: Int64]
+    var categoryCardReserve: [CardEnvelopeKey: Int64]
   }
 
   private func rollForward(
@@ -314,7 +356,7 @@ struct TransactionLedgerItem {
   var kind: BudgetTransactionKind
 }
 
-struct BudgetSnapshot {
+struct BudgetSnapshot: Sendable {
   var month: Date
   var accountBalances: [UUID: Int64]
   var cashAvailable: [UUID: Int64]
@@ -335,7 +377,7 @@ struct BudgetSnapshot {
   }
 }
 
-private struct CardEnvelopeKey: Hashable {
+struct CardEnvelopeKey: Hashable {
   var cardID: UUID
   var envelopeID: UUID
 }

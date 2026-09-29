@@ -6,10 +6,8 @@ struct CalendarScreen: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   var schedules: [BudgetSchedule]
   var occurrences: [BudgetScheduleOccurrence]
-  var transactions: [BudgetTransaction]
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
-  var allocations: [BudgetAllocation]
   var currencyCode: String
   @Binding var selectedDate: Date
   var returnToTodayRequest: Int = 0
@@ -18,6 +16,11 @@ struct CalendarScreen: View {
   @State private var months = CalendarTimelineWindow.months(around: Date())
   @State private var scrollMonth: Date?
   @State private var editingSchedule: BudgetSchedule?
+  @State private var monthTransactions: [BudgetTransaction] = []
+  @State private var selectedSnapshot: BudgetSnapshot?
+  @State private var snapshotRepository: BudgetSnapshotRepository?
+  @State private var refreshVersion = 0
+  @State private var isLoadingMonth = false
 
   private var calendar: Calendar { .current }
   private var currentMonth: Date {
@@ -32,7 +35,7 @@ struct CalendarScreen: View {
     }.sorted { $0.payee < $1.payee }
   }
   private var dayTransactions: [BudgetTransaction] {
-    transactions.filter { calendar.isDate($0.date, inSameDayAs: selectedDate) }
+    monthTransactions.filter { calendar.isDate($0.date, inSameDayAs: selectedDate) }
       .sorted { $0.createdAt > $1.createdAt }
   }
   private var spentMinor: Int64 {
@@ -44,13 +47,6 @@ struct CalendarScreen: View {
       return total - transaction.amountMinor
     }
   }
-  private var selectedSnapshot: BudgetSnapshot {
-    BudgetLedger.snapshot(
-      month: selectedDate, accounts: accounts, envelopes: envelopes,
-      allocations: allocations, transactions: transactions
-    )
-  }
-
   var body: some View {
     ScrollViewReader { scrollProxy in
       VStack(spacing: 0) {
@@ -61,7 +57,7 @@ struct CalendarScreen: View {
             ForEach(months, id: \.self) { month in
               CalendarTimelineMonth(
                 month: month, selectedDate: $selectedDate,
-                schedules: schedules, transactions: transactions
+                schedules: schedules
               )
               .id(month)
             }
@@ -97,6 +93,13 @@ struct CalendarScreen: View {
       }
       .onChange(of: returnToTodayRequest) { _, _ in
         returnToToday(using: scrollProxy)
+      }
+      .task(id: CalendarLoadKey(month: calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate,
+                                refreshVersion: refreshVersion)) {
+        await loadSelectedMonth()
+      }
+      .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+        refreshVersion += 1
       }
       .sheet(item: $editingSchedule) { schedule in
         ScheduleEditorScreen(schedule: schedule, accounts: accounts, envelopes: envelopes, currencyCode: currencyCode)
@@ -144,7 +147,7 @@ struct CalendarScreen: View {
         .padding(.vertical, 16)
         .frame(maxWidth: .infinity)
 
-        if selectedSchedules.isEmpty && dayTransactions.isEmpty {
+        if selectedSchedules.isEmpty && dayTransactions.isEmpty && !isLoadingMonth {
           ContentUnavailableView(
             "Nothing on this day",
             systemImage: "calendar",
@@ -153,14 +156,14 @@ struct CalendarScreen: View {
           .frame(maxWidth: .infinity)
         }
 
-        ForEach(selectedSchedules) { schedule in
+        if let selectedSnapshot { ForEach(selectedSchedules) { schedule in
           CalendarScheduleRow(
             schedule: schedule, selectedDate: selectedDate,
             occurrence: occurrences.first {
               $0.scheduleID == schedule.id
                 && calendar.isDate($0.scheduledFor, inSameDayAs: selectedDate)
             },
-            transactions: transactions, snapshot: selectedSnapshot,
+            transactions: monthTransactions, snapshot: selectedSnapshot,
             currencyCode: currencyCode,
             onEdit: { editingSchedule = schedule },
             onRecord: onRecord,
@@ -170,7 +173,7 @@ struct CalendarScreen: View {
             },
             onSelectTransaction: onSelectTransaction
           )
-        }
+        } }
 
         if !dayTransactions.isEmpty {
           Text("Transactions")
@@ -217,13 +220,35 @@ struct CalendarScreen: View {
       }
     }
   }
+
+  private func loadSelectedMonth() async {
+    isLoadingMonth = true
+    let month = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
+    let next = calendar.date(byAdding: .month, value: 1, to: month) ?? .distantFuture
+    let predicate = #Predicate<BudgetTransaction> { $0.date >= month && $0.date < next }
+    monthTransactions = (try? modelContext.fetch(FetchDescriptor(predicate: predicate))) ?? []
+    if snapshotRepository == nil {
+      snapshotRepository = BudgetSnapshotRepository(modelContainer: modelContext.container)
+    }
+    if let snapshotRepository {
+      await snapshotRepository.invalidate()
+      selectedSnapshot = try? await snapshotRepository.snapshot(month: month)
+    }
+    isLoadingMonth = false
+  }
+}
+
+private struct CalendarLoadKey: Hashable {
+  var month: Date
+  var refreshVersion: Int
 }
 
 private struct CalendarTimelineMonth: View {
+  @Environment(\.modelContext) private var modelContext
   var month: Date
   @Binding var selectedDate: Date
   var schedules: [BudgetSchedule]
-  var transactions: [BudgetTransaction]
+  @State private var transactionDays: Set<Date> = []
 
   private var calendar: Calendar { .current }
   private var days: [CalendarDayCell] {
@@ -252,12 +277,6 @@ private struct CalendarTimelineMonth: View {
     }
     return counts
   }
-  private var transactionDays: Set<Date> {
-    guard let interval = calendar.dateInterval(of: .month, for: month) else { return [] }
-    return Set(transactions.filter { interval.contains($0.date) }
-      .map { calendar.startOfDay(for: $0.date) })
-  }
-
   var body: some View {
     let counts = scheduleCounts
     let recorded = transactionDays
@@ -280,6 +299,14 @@ private struct CalendarTimelineMonth: View {
       .padding(.bottom, 16)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+    .task(id: month) {
+      let next = calendar.date(byAdding: .month, value: 1, to: month) ?? .distantFuture
+      let predicate = #Predicate<BudgetTransaction> { $0.date >= month && $0.date < next }
+      var descriptor = FetchDescriptor<BudgetTransaction>(predicate: predicate)
+      descriptor.propertiesToFetch = [\.date]
+      let dates = (try? modelContext.fetch(descriptor))?.map(\.date) ?? []
+      transactionDays = Set(dates.map { calendar.startOfDay(for: $0) })
+    }
   }
 
   private func dayButton(_ day: Date, scheduled: Int, recorded: Bool) -> some View {

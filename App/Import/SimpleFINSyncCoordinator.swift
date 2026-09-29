@@ -219,7 +219,7 @@ final class SimpleFINSyncCoordinator {
       .sorted { abs($0.date.timeIntervalSince(record.date)) < abs($1.date.timeIntervalSince(record.date)) }
   }
 
-  private func isPossibleMatch(_ transaction: BudgetTransaction, for record: SimpleFINImportRecord) -> Bool {
+  func isPossibleMatch(_ transaction: BudgetTransaction, for record: SimpleFINImportRecord) -> Bool {
     let amount = transaction.transferAccountID == record.localAccountID
       ? -transaction.amountMinor : transaction.amountMinor
     let inAccount = transaction.accountID == record.localAccountID

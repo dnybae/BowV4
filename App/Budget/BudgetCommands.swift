@@ -105,7 +105,7 @@ struct BudgetCommands {
         payee: "Balance Adjustment", notes: "Current balance updated",
         kind: delta > 0 ? .inflow : .expense
       )
-      adjustment.sourceRaw = "balanceAdjustment"
+      adjustment.sourceRaw = BudgetTransaction.balanceAdjustmentSource
       context.insert(adjustment)
       account.lastReconciledAt = nil
       account.lastReconciledBalanceMinor = nil

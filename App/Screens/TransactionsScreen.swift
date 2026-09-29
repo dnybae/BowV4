@@ -26,7 +26,7 @@ struct TransactionsScreen: View {
   private var visibleTransactions: [BudgetTransaction] {
     transactions
       .filter { transaction in
-        transaction.sourceRaw != "balanceAdjustment"
+        !transaction.isBalanceAdjustment
           && filter.includes(TransactionFilterItem(
           accountID: transaction.accountID,
           transferAccountID: transaction.transferAccountID,
@@ -68,7 +68,7 @@ struct TransactionsScreen: View {
         }
       }
       let uncategorizedCount = transactions.filter {
-        $0.kind == .expense && $0.envelopeID == nil && $0.sourceRaw != "balanceAdjustment"
+        $0.kind == .expense && $0.envelopeID == nil && !$0.isBalanceAdjustment
       }.count
       if uncategorizedCount > 0 {
         Section("Needs Attention") {

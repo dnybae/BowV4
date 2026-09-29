@@ -17,15 +17,17 @@ struct AccountBalanceCalculator {
       if let reportingCurrencyCode, account.currencyCode != reportingCurrencyCode {
         issues.append(.currencyMismatch(account.id))
       }
-      if account.kind == .liability && account.openingBalanceMinor > 0 {
-        issues.append(.positiveLiability(account.id))
-      }
     }
     if reportingCurrencyCode == nil && Set(included.map(\.currencyCode)).count > 1 {
       issues.append(.mixedCurrencies)
     }
 
-    for transaction in transactions where inclusive ? transaction.date <= cutoff : transaction.date < cutoff {
+    let ordered = transactions.sorted {
+      if $0.date != $1.date { return $0.date < $1.date }
+      if $0.createdAt != $1.createdAt { return $0.createdAt < $1.createdAt }
+      return $0.id.uuidString < $1.id.uuidString
+    }
+    for transaction in ordered where inclusive ? transaction.date <= cutoff : transaction.date < cutoff {
       guard let source = byID[transaction.accountID] else {
         issues.append(.missingAccount(transaction.id))
         continue

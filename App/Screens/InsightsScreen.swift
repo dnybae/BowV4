@@ -31,6 +31,23 @@ struct InsightsScreen: View {
       currencyCode: currencyCode
     )
   }
+  private var netWorthIssueDescription: String {
+    guard let issue = currentNetWorth.issues.first else { return "Review your account balances." }
+    switch issue {
+    case .currencyMismatch(let id):
+      let name = accounts.first { $0.id == id }?.name ?? "An account"
+      return "\(name) uses a different currency from this budget."
+    case .mixedCurrencies:
+      return "Accounts use different currencies. Conversion rates are needed before they can be totaled."
+    case .missingAccount:
+      return "A recorded transaction references an account that is no longer available."
+    case .positiveLiability(let id):
+      let name = accounts.first { $0.id == id }?.name ?? "A loan"
+      return "\(name) has a positive balance. Enter money owed as a negative amount."
+    case .overflow:
+      return "One or more balances are too large to total safely."
+    }
+  }
   private var forecast: [BowForecastMonth] {
     guard let current = currentNetWorth.netWorthMinor else { return [] }
     return BowForecast().project(from: Date(), currentNetWorthMinor: current,
@@ -42,7 +59,7 @@ struct InsightsScreen: View {
       let income = items.filter { $0.kind == .inflow && accountKinds[$0.accountID] == .cash }
         .reduce(Int64(0)) { $0 + max(0, $1.amountMinor) }
       let expenses = items.filter { transaction in
-        (transaction.kind == .expense && transaction.sourceRaw != "balanceAdjustment"
+        (transaction.kind == .expense && !transaction.isBalanceAdjustment
           && [.cash, .credit].contains(accountKinds[transaction.accountID]))
           || (transaction.kind == .transfer
           && accountKinds[transaction.accountID] == .cash
@@ -148,7 +165,7 @@ struct InsightsScreen: View {
           } else {
             Text("Net worth unavailable")
               .font(.subheadline.weight(.semibold))
-            Text("Review account currencies, loan signs, and any missing transfer accounts.")
+            Text(netWorthIssueDescription)
               .font(.caption)
               .foregroundStyle(.secondary)
           }

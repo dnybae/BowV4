@@ -211,6 +211,7 @@ struct CalendarScreen: View {
       }
     } else {
       withAnimation(reduceMotion ? nil : .snappy) {
+        scrollMonth = month
         proxy.scrollTo(month, anchor: .top)
       }
     }

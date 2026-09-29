@@ -240,7 +240,7 @@ private struct AccountDetailScreen: View {
           ContentUnavailableView("No transactions yet", systemImage: "list.bullet.rectangle")
         } else {
           ForEach(accountTransactions) { transaction in
-            if transaction.sourceRaw == "balanceAdjustment" {
+            if transaction.isBalanceAdjustment {
               TransactionRow(
                 transaction: transaction,
                 accountName: account.name,

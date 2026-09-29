@@ -28,6 +28,9 @@ final class BudgetTransaction {
     BudgetTransactionKind(rawValue: kindRaw) ?? .expense
   }
 
+  static let balanceAdjustmentSource = "balanceAdjustment"
+  var isBalanceAdjustment: Bool { sourceRaw == Self.balanceAdjustmentSource }
+
   init(
     accountID: UUID,
     transferAccountID: UUID? = nil,

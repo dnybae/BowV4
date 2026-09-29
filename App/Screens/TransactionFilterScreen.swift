@@ -68,8 +68,8 @@ struct TransactionFilterScreen: View {
           CategoryScopeSelectionField(selection: $draft.envelopeScope, envelopes: envelopes)
         }
 
-        Section("Review") {
-          Toggle("Needs Approval Only", isOn: $draft.needsApprovalOnly)
+        Section("Status") {
+          Toggle("Matched Only", isOn: $draft.matchedOnly)
         }
 
         Section("Date Range") {

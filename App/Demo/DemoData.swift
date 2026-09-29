@@ -158,20 +158,18 @@ enum DemoData {
     transaction("CVS Pharmacy", -4_600, .expense, from: everyday, envelope: health, month: 0, day: 18, domain: "cvs.com")
     let uncategorized = transaction("Target", -2_750, .expense, from: everyday, day: 20, domain: "target.com", cleared: false)
     uncategorized.notes = "Sample uncategorized purchase"
-    let approval = transaction("Netflix", -1_599, .expense, from: card, envelope: fun, day: 21, domain: "netflix.com")
-    approval.sourceRaw = "simplefin"
-    approval.externalKey = "demo|streaming"
-    approval.needsApproval = true
+    transaction("Netflix", -1_599, .expense, from: card, envelope: fun, day: 21, domain: "netflix.com")
     let match = transaction("Whole Foods Market", -3_200, .expense, from: everyday, envelope: groceries, day: 22, domain: "wholefoodsmarket.com", cleared: false)
     match.notes = "Manually entered before bank import"
-    let linked = transaction("Dunkin", -650, .expense, from: everyday, envelope: dining, day: 23, domain: "dunkindonuts.com")
+    let linked = transaction("Dunkin", -650, .expense, from: everyday, envelope: dining, day: 23, domain: "dunkindonuts.com", cleared: false)
+    let linkedSnapshot = try JSONEncoder().encode(ManualTransactionSnapshot(linked))
     linked.sourceRaw = "manualLinked"
     linked.externalKey = "demo|coffee"
-    linked.needsApproval = true
+    linked.isCleared = true
     let imported = transaction("Barnes & Noble", -2_400, .expense, from: card, envelope: fun, day: 24, domain: "barnesandnoble.com")
     imported.sourceRaw = "simplefin"
     imported.externalKey = "demo|bookstore"
-    imported.needsApproval = true
+    imported.needsApproval = false
 
     insert(BudgetPayee(name: "Whole Foods Market", defaultEnvelopeID: groceries.id, exactMatchText: "WHOLE FOODS", merchantDomain: "wholefoodsmarket.com"))
     insert(BudgetPayee(name: "Apartment Rent", defaultEnvelopeID: housing.id, exactMatchText: "APARTMENT RENT ACH"))
@@ -191,7 +189,7 @@ enum DemoData {
     connection.lastSuccessfulAt = Date().addingTimeInterval(-3_600)
     connection.lastAttemptAt = connection.lastSuccessfulAt
     connection.automaticSync = false
-    connection.lastMessage = "Demo bank data: two items are waiting for review."
+    connection.lastMessage = "Demo bank data: two posted items need review and one is pending."
     let checkingLink = insert(SimpleFINAccountLink(remoteKey: "demo-checking", name: "Example Bank Checking", currencyCode: "USD"))
     checkingLink.localAccountID = everyday.id
     checkingLink.reportedBalance = "3850.20"
@@ -209,11 +207,17 @@ enum DemoData {
     let linkedRecord = insert(SimpleFINImportRecord(remoteKey: "demo|coffee", localAccountID: everyday.id, date: linked.date, amountMinor: linked.amountMinor, payee: linked.payee))
     linkedRecord.status = .linked
     linkedRecord.transactionID = linked.id
+    linkedRecord.matchedAutomatically = true
+    linkedRecord.originalManualSnapshot = linkedSnapshot
     let importedRecord = insert(SimpleFINImportRecord(remoteKey: "demo|bookstore", localAccountID: card.id, date: imported.date, amountMinor: imported.amountMinor, payee: imported.payee))
     importedRecord.status = .imported
     importedRecord.transactionID = imported.id
     let ignoredRecord = insert(SimpleFINImportRecord(remoteKey: "demo|ignored", localAccountID: everyday.id, date: date(0, 15), amountMinor: -1_200, payee: "Duplicate Parking"))
     ignoredRecord.status = .ignored
+    let pendingBank = insert(SimpleFINImportRecord(remoteKey: "demo|pending", localAccountID: everyday.id, date: today, amountMinor: -1_850, payee: "Blue Bottle Coffee"))
+    pendingBank.bankState = .pending
+    pendingBank.isVisiblePending = true
+    pendingBank.lastSeenAt = today
 
     if scenario == .deficit {
       insert(BudgetAllocation(date: today, amountMinor: 1_500_000, targetEnvelopeID: emergency.id))

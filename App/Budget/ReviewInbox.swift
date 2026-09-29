@@ -34,7 +34,8 @@ struct ReviewInbox {
     schedules: [BudgetSchedule],
     calendar: Calendar = .current
   ) {
-    let transactionByID = Dictionary(uniqueKeysWithValues: transactions.map { ($0.id, $0) })
+    let transactionByID = Dictionary(transactions.map { ($0.id, $0) },
+                                     uniquingKeysWith: { first, _ in first })
     let unresolved = records.filter {
       $0.bankState == .posted && (
         $0.status == .review

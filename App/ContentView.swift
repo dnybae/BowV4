@@ -180,7 +180,7 @@ private struct BudgetHomeView: View {
                 schedules: schedules,
                 occurrences: scheduleOccurrences,
                 currencyCode: currencyCode,
-                onSelect: { activeSheet = .editTransaction($0) },
+                onSelect: { activeSheet = .transactionDetail($0) },
                 onRecord: { activeSheet = .recordScheduled($0) },
                 onEditSchedule: { activeSheet = .editSchedule($0) }
               )
@@ -290,6 +290,14 @@ private struct BudgetHomeView: View {
               payees: payees,
               currencyCode: currencyCode
             )
+          case .transactionDetail(let id):
+            if let transaction = transaction(for: id) {
+              TransactionDetailScreen(
+                transaction: transaction,
+                accounts: accounts, envelopes: envelopes,
+                payees: payees, currencyCode: currencyCode
+              )
+            }
           case .recordScheduled(let draft):
             TransactionEditorScreen(
               transaction: nil,
@@ -425,6 +433,7 @@ private struct BudgetHomeView: View {
 private enum BowSheet: Identifiable {
   case newTransaction
   case editTransaction(UUID)
+  case transactionDetail(UUID)
   case recordScheduled(ScheduledTransactionDraft)
   case editSchedule(UUID)
   case newAccount
@@ -438,6 +447,7 @@ private enum BowSheet: Identifiable {
     switch self {
     case .newTransaction: "newTransaction"
     case .editTransaction(let id): "editTransaction-\(id)"
+    case .transactionDetail(let id): "transactionDetail-\(id)"
     case .recordScheduled(let draft): "recordScheduled-\(draft.scheduleID)-\(draft.scheduledFor)"
     case .editSchedule(let id): "editSchedule-\(id)"
     case .newAccount: "newAccount"

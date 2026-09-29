@@ -18,7 +18,8 @@ struct SimpleFINScreen: View {
 
   private var connection: SimpleFINConnection? { connections.first }
   private var reviewItems: [SimpleFINImportRecord] {
-    records.filter { $0.status == .review }.sorted { $0.date > $1.date }
+    records.filter { $0.bankState == .posted && $0.status == .review }
+      .sorted { $0.date > $1.date }
   }
 
   var body: some View {
@@ -53,7 +54,7 @@ struct SimpleFINScreen: View {
           Text("Connection")
         } footer: {
           Text(isDemoMode
-            ? "This sample connection never contacts a bank. Review the example matches below or change account mappings to test the interface."
+            ? "This sample connection never contacts a bank. Review the posted examples below or change account mappings to test the interface."
             : "Bow checks while you use the app and requests background refresh when iOS allows it. SimpleFIN may update a bank only once a day.")
         }
 
@@ -110,7 +111,7 @@ struct SimpleFINScreen: View {
         }
 
         if !reviewItems.isEmpty {
-          Section("Possible Duplicates · \(reviewItems.count)") {
+          Section("Posted Transactions to Review · \(reviewItems.count)") {
             ForEach(reviewItems) { record in
               NavigationLink {
                 SimpleFINReviewScreen(record: record)
@@ -233,7 +234,7 @@ struct SimpleFINScreen: View {
   private func sync() async {
     do {
       let result = try await coordinator.sync(in: modelContext, manual: true)
-      message = "Imported \(result.imported), matched \(result.linked), and held \(result.needsReview) for duplicate review."
+      message = "Matched \(result.linked), \(result.needsReview) posted to review, and \(result.pending) new pending at bank. See Spending for decisions."
       SimpleFINBackgroundRefresh.schedule(in: modelContext)
     } catch {
       message = error.localizedDescription

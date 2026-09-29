@@ -37,6 +37,7 @@ final class TransactionFeedModel {
     nextRequest.accountID = filter.accountID ?? scopedAccountID
     nextRequest.payeeKey = scopedPayeeKey
     nextRequest.needsApprovalOnly = filter.needsApprovalOnly
+    nextRequest.matchedOnly = filter.matchedOnly
     nextRequest.includesBalanceAdjustments = includesBalanceAdjustments
     nextRequest.minimumAmountMinor = filter.minimumAmountMinor
     nextRequest.maximumAmountMinor = filter.maximumAmountMinor

@@ -242,13 +242,15 @@ final class SimpleFINSyncCoordinator {
     )
     context.insert(transaction)
     record.transactionID = transaction.id
-    record.pendingEnteredAt = Date()
     try context.save()
   }
 
   func unmatch(_ record: SimpleFINImportRecord, in context: ModelContext) throws {
     guard record.status == .linked, let id = record.transactionID,
           let transaction = try BudgetTransactionLookup.byID(id, in: context) else { return }
+    let otherLinked = try context.fetch(FetchDescriptor<SimpleFINImportRecord>(
+      predicate: #Predicate { $0.transactionID == id }
+    )).filter { $0.id != record.id && $0.status == .linked }
     let original = record.originalManualSnapshot.flatMap {
       try? JSONDecoder().decode(ManualTransactionSnapshot.self, from: $0)
     }
@@ -265,6 +267,16 @@ final class SimpleFINSyncCoordinator {
     transaction.isCleared = original?.isCleared ?? false
     transaction.destinationIsCleared = original?.destinationIsCleared ?? false
     transaction.needsApproval = false
+    if let remaining = otherLinked.first {
+      transaction.sourceRaw = "manualLinked"
+      transaction.externalKey = remaining.remoteKey
+      if otherLinked.contains(where: { $0.localAccountID == transaction.accountID }) {
+        transaction.isCleared = true
+      }
+      if otherLinked.contains(where: { $0.localAccountID == transaction.transferAccountID }) {
+        transaction.destinationIsCleared = true
+      }
+    }
     record.transactionID = nil
     record.status = .review
     record.matchedAutomatically = false
@@ -355,11 +367,8 @@ final class SimpleFINSyncCoordinator {
     let dates = accounts.flatMap { account in
       (account.transactions ?? []).filter { $0.pending == true || $0.posted > 0 }.map(\.date)
     }
-    guard let earliest = dates.min(), let latest = dates.max() else {
-      return SimpleFINSyncSummary()
-    }
-    let start = earliest.addingTimeInterval(-11 * 86_400)
-    let end = latest.addingTimeInterval(11 * 86_400)
+    let start = (dates.min() ?? Date()).addingTimeInterval(-11 * 86_400)
+    let end = (dates.max() ?? Date()).addingTimeInterval(11 * 86_400)
     let transactions = try context.fetch(FetchDescriptor<BudgetTransaction>(predicate: #Predicate {
       $0.date >= start && $0.date <= end
     }))
@@ -378,6 +387,7 @@ final class SimpleFINSyncCoordinator {
     var summary = SimpleFINSyncSummary()
     let matcher = SimpleFINMatchPlanner()
     let now = Date()
+    var checkedLocalIDs = Set<UUID>()
 
     for remote in accounts where links.contains(where: { $0.remoteKey == remote.remoteKey && $0.localAccountID != nil }) {
       for item in (remote.transactions ?? []) where item.pending == true || item.posted > 0 {
@@ -390,6 +400,7 @@ final class SimpleFINSyncCoordinator {
             let localID = link.localAccountID,
             let account = localAccounts.first(where: { $0.id == localID }),
             remote.currency == account.currencyCode else { continue }
+      if remote.transactions != nil { checkedLocalIDs.insert(localID) }
       let items = (remote.transactions ?? []).filter { $0.pending == true || $0.posted > 0 }
         .sorted { ($0.pending == true ? 0 : 1) < ($1.pending == true ? 0 : 1) }
       for item in items {
@@ -506,10 +517,9 @@ final class SimpleFINSyncCoordinator {
         }
       }
     }
-    for record in records where record.bankState == .pending {
-      if let lastSeen = record.lastSeenAt, now.timeIntervalSince(lastSeen) > 7 * 86_400 {
-        record.isVisiblePending = false
-      }
+    for record in records where record.bankState == .pending
+      && checkedLocalIDs.contains(record.localAccountID) && record.lastSeenAt != now {
+      record.isVisiblePending = false
     }
     return summary
   }
@@ -555,9 +565,9 @@ final class SimpleFINSyncCoordinator {
 }
 
 struct SimpleFINSyncSummary: Sendable {
-  var imported = 0
   var linked = 0
   var needsReview = 0
+  var pending = 0
 }
 
 enum SimpleFINReviewDecision {

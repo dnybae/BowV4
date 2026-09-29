@@ -55,6 +55,11 @@ struct TransactionFilterChecks {
     var imported = purchase
     imported.needsApproval = true
     precondition(filter.includes(imported, calendar: calendar))
+    filter = TransactionFilter(matchedOnly: true)
+    precondition(!filter.includes(purchase, calendar: calendar))
+    var matched = purchase
+    matched.isMatched = true
+    precondition(filter.includes(matched, calendar: calendar))
     print("Transaction filter checks passed")
   }
 }

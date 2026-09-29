@@ -3,8 +3,10 @@ import SwiftData
 
 struct TransactionsScreen: View {
   @Environment(\.modelContext) private var modelContext
-  @Query(filter: #Predicate<SimpleFINImportRecord> { $0.statusRaw == "review" })
+  @Query
   private var simpleFINRecords: [SimpleFINImportRecord]
+  @Query(filter: #Predicate<BudgetTransaction> { $0.needsApproval })
+  private var approvals: [BudgetTransaction]
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
   var schedules: [BudgetSchedule]
@@ -20,38 +22,71 @@ struct TransactionsScreen: View {
   @State private var scheduledRecords: [BudgetTransaction] = []
   @State private var refreshVersion = 0
 
-  private var reviewCount: Int {
-    let other = ReviewInbox(
-      transactions: scheduledRecords, records: simpleFINRecords,
+  private var inbox: ReviewInbox {
+    let known = Set(approvals.map(\.id))
+    return ReviewInbox(
+      transactions: approvals + scheduledRecords.filter { !known.contains($0.id) },
+      records: simpleFINRecords,
       occurrences: occurrences, schedules: schedules
-    ).items.filter {
-      if case .transaction = $0 { return false }
-      return true
-    }.count
-    return feed.approvalCount + other
+    )
+  }
+
+  private var pendingCount: Int {
+    simpleFINRecords.filter { $0.bankState == .pending && $0.isVisiblePending }.count
   }
 
   var body: some View {
     List {
-      if reviewCount > 0 {
+      if !inbox.bankItems.isEmpty || pendingCount > 0 || !inbox.scheduledItems.isEmpty {
         Section {
-          NavigationLink(value: SpendingRoute.reviewInbox) {
-            VStack(alignment: .leading, spacing: 4) {
-              Text("Transactions Needing Approval")
-                .font(.headline)
-              Text("\(reviewCount) \(reviewCount == 1 ? "item" : "items") to review, record, or resolve")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+          if !inbox.bankItems.isEmpty {
+            NavigationLink(value: SpendingRoute.reviewInbox) {
+              Label {
+                VStack(alignment: .leading, spacing: 3) {
+                  Text("Review bank transactions").font(.headline)
+                  Text("\(inbox.bankItems.count) posted \(inbox.bankItems.count == 1 ? "item needs" : "items need") a decision")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                }
+              } icon: {
+                Image(systemName: "checkmark.circle")
+                  .foregroundStyle(.tint)
+              }
+              .padding(.vertical, 5)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 8)
           }
-          .listRowBackground(Color.accentColor.opacity(0.10))
+          if pendingCount > 0 {
+            NavigationLink(value: SpendingRoute.pendingBank) {
+              Label {
+                VStack(alignment: .leading, spacing: 3) {
+                  Text("Pending at bank").font(.headline)
+                  Text("\(pendingCount) \(pendingCount == 1 ? "authorization" : "authorizations") · not in your budget")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                }
+              } icon: {
+                Image(systemName: "clock").foregroundStyle(.orange)
+              }
+              .padding(.vertical, 5)
+            }
+          }
+          if !inbox.scheduledItems.isEmpty {
+            NavigationLink(value: SpendingRoute.scheduledBills) {
+              Label {
+                VStack(alignment: .leading, spacing: 3) {
+                  Text("Scheduled bills").font(.headline)
+                  Text("\(inbox.scheduledItems.count) due to record or skip")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                }
+              } icon: {
+                Image(systemName: "calendar").foregroundStyle(.secondary)
+              }
+              .padding(.vertical, 5)
+            }
+          }
         }
       }
       if feed.uncategorizedCount > 0 {
         Section("Needs Attention") {
-          Button("Categorize \(feed.uncategorizedCount) transactions", systemImage: "tag") {
+          Button("Categorize \(feed.uncategorizedCount) \(feed.uncategorizedCount == 1 ? "transaction" : "transactions")", systemImage: "tag") {
             searchText = ""
             filter = TransactionFilter(envelopeScope: .uncategorized)
           }
@@ -112,7 +147,7 @@ struct TransactionsScreen: View {
         for: occurrences, in: modelContext
       )) ?? []
       await feed.reload(container: modelContext.container, searchText: searchText,
-                        filter: filter, includeApprovalCount: true)
+                        filter: filter)
     }
     .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
       refreshVersion += 1
@@ -122,11 +157,26 @@ struct TransactionsScreen: View {
       switch route {
       case .reviewInbox:
         ReviewInboxScreen(
+          mode: .bank,
           scheduledRecords: scheduledRecords, records: simpleFINRecords,
           occurrences: occurrences, schedules: schedules,
           accounts: accounts, currencyCode: currencyCode,
           onSelectTransaction: onSelect, onRecord: onRecord,
           onEditSchedule: onEditSchedule
+        )
+      case .scheduledBills:
+        ReviewInboxScreen(
+          mode: .scheduled,
+          scheduledRecords: scheduledRecords, records: simpleFINRecords,
+          occurrences: occurrences, schedules: schedules,
+          accounts: accounts, currencyCode: currencyCode,
+          onSelectTransaction: onSelect, onRecord: onRecord,
+          onEditSchedule: onEditSchedule
+        )
+      case .pendingBank:
+        PendingBankScreen(
+          records: simpleFINRecords, accounts: accounts,
+          envelopes: envelopes, onSelectTransaction: onSelect
         )
       }
     }
@@ -177,7 +227,10 @@ struct TransactionSummaryRow: View {
         Text("\(transaction.accountName) · \(transaction.date.formatted(date: .abbreviated, time: .omitted))")
           .font(.caption).foregroundStyle(.secondary)
         if transaction.needsApproval {
-          Text("Needs approval").font(.caption).foregroundStyle(.orange)
+          Text("Needs review").font(.caption).foregroundStyle(.orange)
+        } else if transaction.sourceRaw == "manualLinked" {
+          Label("Matched", systemImage: "link")
+            .font(.caption).foregroundStyle(.tint)
         }
         if transaction.envelopeID == nil && transaction.kind == .expense {
           Text("Needs categorization").font(.caption).foregroundStyle(.orange)
@@ -198,6 +251,8 @@ struct TransactionSummaryRow: View {
 
 enum SpendingRoute: Hashable {
   case reviewInbox
+  case scheduledBills
+  case pendingBank
 }
 
 struct TransactionRow: View {
@@ -230,9 +285,12 @@ struct TransactionRow: View {
           .font(.caption)
           .foregroundStyle(.secondary)
         if transaction.needsApproval {
-          Text("Needs approval")
+          Text("Needs review")
             .font(.caption)
             .foregroundStyle(.orange)
+        } else if transaction.sourceRaw == "manualLinked" {
+          Label("Matched", systemImage: "link")
+            .font(.caption).foregroundStyle(.tint)
         }
         if transaction.envelopeID == nil && transaction.kind == .expense {
           Text("Needs categorization")

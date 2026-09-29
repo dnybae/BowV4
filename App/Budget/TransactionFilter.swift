@@ -4,6 +4,7 @@ struct TransactionFilter: Hashable, Sendable {
   var accountID: UUID?
   var envelopeScope: TransactionEnvelopeScope = .all
   var needsApprovalOnly = false
+  var matchedOnly = false
   var startDate: Date?
   var endDate: Date?
   var minimumAmountMinor: Int64?
@@ -14,6 +15,7 @@ struct TransactionFilter: Hashable, Sendable {
       accountID != nil,
       envelopeScope != .all,
       needsApprovalOnly,
+      matchedOnly,
       startDate != nil,
       endDate != nil,
       minimumAmountMinor != nil,
@@ -39,6 +41,7 @@ struct TransactionFilter: Hashable, Sendable {
     }
 
     if needsApprovalOnly && !item.needsApproval { return false }
+    if matchedOnly && !item.isMatched { return false }
 
     if let startDate,
        calendar.compare(item.date, to: startDate, toGranularity: .day) == .orderedAscending {
@@ -70,4 +73,5 @@ struct TransactionFilterItem {
   var amountMinor: Int64
   var isUncategorizedExpense: Bool
   var needsApproval: Bool = false
+  var isMatched: Bool = false
 }

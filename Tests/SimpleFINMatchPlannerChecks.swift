@@ -15,7 +15,13 @@ struct SimpleFINMatchPlannerChecks {
       transactedAt: nil, description: "Different bank payee"
     )
     let planner = SimpleFINMatchPlanner()
-    precondition(planner.decide(for: incoming, among: [manual]) == .linkManual(manual.id))
+    precondition(planner.decide(for: incoming, among: [manual]) == .review([manual.id]),
+                 "a different payee needs a human decision")
+
+    var samePayee = incoming
+    samePayee.description = "Cafe"
+    precondition(planner.decide(for: samePayee, among: [manual]) == .linkManual(manual.id),
+                 "a unique same-amount and same-payee entry can match automatically")
 
     var repeatedAmount = manual
     repeatedAmount.id = UUID()

@@ -35,7 +35,9 @@ struct SimpleFINReviewScreen: View {
       } header: {
         Text("Posted at your bank")
       } footer: {
-        Text("Choose what this bank transaction represents. Your choice completes the review.")
+        Text(record.status == .imported
+          ? "Choose what this imported transaction represents. Your choice completes the review."
+          : "This bank item is not in your budget yet. Choose what it represents to complete the review.")
       }
 
       if relatedSchedule?.kind == .transfer,
@@ -140,10 +142,14 @@ struct SimpleFINReviewScreen: View {
     .navigationTitle("Review Transaction")
     .navigationBarTitleDisplayMode(.inline)
     .safeAreaInset(edge: .bottom) {
-      Button(primaryTitle) { confirm() }
+      Button {
+        confirm()
+      } label: {
+        Text(primaryTitle)
+          .frame(maxWidth: .infinity)
+      }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
-        .frame(maxWidth: .infinity)
         .disabled(selected == nil)
         .padding(.horizontal, 20)
         .padding(.vertical, 10)

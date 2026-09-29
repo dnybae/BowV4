@@ -19,18 +19,24 @@ struct DemoDataChecks {
     expect(transactions.contains { $0.kind == .transfer }, "transfers are present")
     expect(transactions.contains { $0.kind == .inflow }, "income is present")
     expect(transactions.contains { $0.envelopeID == nil && $0.kind == .expense }, "uncategorized expense is present")
-    expect(transactions.contains { $0.needsApproval }, "approval state is present")
+    expect(!transactions.contains { $0.sourceRaw == "simplefin" && $0.needsApproval },
+           "SimpleFIN posted review items are held outside the ledger")
     expect(Set(schedules.map(\.frequency)) == Set(ScheduleFrequency.allCases), "every recurrence is present")
     expect(schedules.contains { !$0.isActive }, "paused schedule is present")
     expect(!rules.isEmpty, "payee rules are present")
-    expect(reviews.filter { $0.status == .review }.count == 2, "bank review has matching and unmatched rows")
+    expect(reviews.filter { $0.bankState == .posted && $0.status == .review }.count == 2,
+           "bank review has matching and unmatched rows")
+    expect(reviews.filter { $0.bankState == .pending && $0.isVisiblePending }.count == 1,
+           "pending authorizations have their own section")
+    expect(reviews.contains { $0.status == .linked && $0.matchedAutomatically },
+           "the sample includes an automatic match with provenance")
 
     let snapshot = BudgetLedger.snapshot(
       month: Date(), accounts: accounts, envelopes: envelopes,
       allocations: allocations, transactions: transactions
     )
     expect(snapshot.cashShortfall.values.contains { $0 > 0 }, "sample has cash overspending")
-    expect(snapshot.creditShortfall.values.contains { $0 > 0 }, "sample has credit overspending")
+    expect(!snapshot.paymentAvailable.isEmpty, "sample has credit card payment data")
 
     let empty = try DemoData.makeContainer(scenario: .empty)
     let emptyProfiles = try empty.mainContext.fetchCount(FetchDescriptor<BudgetProfile>())

@@ -56,7 +56,9 @@ struct InsightsScreen: View {
   private var monthItems: [InsightsMonth] {
     months.map { month in
       let items = transactions.filter { calendar.isDate($0.date, equalTo: month, toGranularity: .month) }
-      let income = items.filter { $0.kind == .inflow && accountKinds[$0.accountID] == .cash }
+      let income = items.filter {
+        $0.kind == .inflow && !$0.isBalanceAdjustment && accountKinds[$0.accountID] == .cash
+      }
         .reduce(Int64(0)) { $0 + max(0, $1.amountMinor) }
       let expenses = items.filter { transaction in
         (transaction.kind == .expense && !transaction.isBalanceAdjustment

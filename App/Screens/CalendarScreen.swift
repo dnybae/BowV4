@@ -38,7 +38,8 @@ struct CalendarScreen: View {
   private var spentMinor: Int64 {
     let budgetAccountIDs = Set(accounts.filter { $0.kind == .cash || $0.kind == .credit }.map(\.id))
     return dayTransactions.reduce(0) { total, transaction in
-      guard transaction.kind == .expense, transaction.amountMinor < 0,
+      guard transaction.kind == .expense, !transaction.isBalanceAdjustment,
+            transaction.amountMinor < 0,
             budgetAccountIDs.contains(transaction.accountID) else { return total }
       return total - transaction.amountMinor
     }

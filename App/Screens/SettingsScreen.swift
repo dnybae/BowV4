@@ -3,16 +3,20 @@ import SwiftData
 
 struct SettingsScreen: View {
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.modelContext) private var modelContext
   @AppStorage("bow.appearance") private var appearanceRaw = AppAppearance.system.rawValue
   @AppStorage("bow.demoMode") private var isDemoMode = false
   @AppStorage("bow.demoResetVersion") private var demoResetVersion = 0
   @AppStorage("bow.demoScenario") private var demoScenarioRaw = DemoScenario.showcase.rawValue
+  @Query private var profiles: [BudgetProfile]
   @Query private var groups: [BudgetGroup]
   @Query private var envelopes: [BudgetEnvelope]
   @Query private var simpleFINRecords: [SimpleFINImportRecord]
   @State private var showingYNABImport = false
   @State private var showingBankImport = false
   @State private var showingResetDemo = false
+  @State private var showingRename = false
+  @State private var budgetNameDraft = ""
 
   private var version: String {
     Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
@@ -22,6 +26,20 @@ struct SettingsScreen: View {
     NavigationStack {
       Form {
         Section("Budget Settings") {
+          Button {
+            budgetNameDraft = profiles.first?.name ?? "My Budget"
+            showingRename = true
+          } label: {
+            HStack {
+              Label("Budget Name", systemImage: "pencil")
+              Spacer(minLength: 8)
+              Text(profiles.first?.name ?? "My Budget")
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            }
+            .contentShape(Rectangle())
+          }
+          .accessibilityLabel("Rename Budget, current name \(profiles.first?.name ?? "My Budget")")
           NavigationLink {
             CategoryManagementScreen()
           } label: {
@@ -59,6 +77,18 @@ struct SettingsScreen: View {
           }
           Button("Import YNAB Categories", systemImage: "square.and.arrow.down") {
             showingYNABImport = true
+          }
+        }
+
+        Section("More") {
+          NavigationLink {
+            SettingsPlaceholderScreen(
+              title: "Home Inventory",
+              description: "A place to track personal items and home supplies is coming soon.",
+              systemImage: "shippingbox"
+            )
+          } label: {
+            Label("Home Inventory", systemImage: "shippingbox")
           }
         }
 
@@ -143,6 +173,19 @@ struct SettingsScreen: View {
       }
       .sheet(isPresented: $showingBankImport) {
         BankFileImportScreen()
+      }
+      .alert("Rename Budget", isPresented: $showingRename) {
+        TextField("Budget Name", text: $budgetNameDraft)
+        Button("Cancel", role: .cancel) {}
+        Button("Save") {
+          let name = budgetNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+          if !name.isEmpty {
+            profiles.first?.name = name
+            try? modelContext.save()
+          }
+        }
+      } message: {
+        Text("Choose a name for this budget.")
       }
       .confirmationDialog("Reset all demo changes?", isPresented: $showingResetDemo) {
         Button("Reset Demo Data", role: .destructive) {

@@ -3,12 +3,19 @@ import SwiftUI
 struct AccountsScreen: View {
   var accounts: [BudgetAccount]
   var transactions: [BudgetTransaction]
-  var balances: [UUID: Int64]
+  var balanceReport: AccountBalanceReport
   var currencyCode: String
   var onAddAccount: () -> Void
+  var onViewInsights: () -> Void
   var onSelectTransaction: (UUID) -> Void
   @AppStorage("bow.collapsedAccountGroups") private var collapsedAccountGroups = ""
   @State private var editingAccount: BudgetAccount?
+
+  private var balances: [UUID: Int64] { balanceReport.balances }
+  private var netWorthText: String {
+    balanceReport.netWorthMinor.map { BudgetMoney.formatted($0, currencyCode: currencyCode) }
+      ?? "Unavailable"
+  }
 
   private var hasOnBudgetAccounts: Bool {
     accounts.contains { $0.kind == .cash || $0.kind == .credit }
@@ -38,6 +45,8 @@ struct AccountsScreen: View {
         .frame(maxWidth: .infinity)
       } else {
         VStack(alignment: .leading, spacing: 30) {
+          netWorthCard
+
           if hasOnBudgetAccounts {
             budgetGroup("On Budget") {
               accountGroup(.cash, title: "Cash")
@@ -147,6 +156,38 @@ struct AccountsScreen: View {
         }
       }
     }
+  }
+
+  private var netWorthCard: some View {
+    Button(action: onViewInsights) {
+      HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Net Worth")
+            .font(.headline)
+          Text("View Insights")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+        }
+        Spacer(minLength: 8)
+        Text(netWorthText)
+          .font(.headline)
+          .monospacedDigit()
+          .lineLimit(1)
+          .minimumScaleFactor(0.75)
+        Image(systemName: "chevron.right")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(.tertiary)
+          .accessibilityHidden(true)
+      }
+      .foregroundStyle(.primary)
+      .padding(18)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(Color(uiColor: .secondarySystemGroupedBackground),
+                  in: RoundedRectangle(cornerRadius: 24))
+      .contentShape(RoundedRectangle(cornerRadius: 24))
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("Net Worth, \(netWorthText). View Insights")
   }
 
   private func toggleGroup(_ kind: BudgetAccountKind) {

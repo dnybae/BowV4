@@ -3,6 +3,31 @@ import SwiftData
 
 @ModelActor
 actor PayeeDirectoryRepository {
+  func renameHistory(from oldKeys: Set<String>, to newName: String) throws {
+    var offset = 0
+    while true {
+      try Task.checkCancellation()
+      let context = ModelContext(modelContainer)
+      var descriptor = FetchDescriptor<BudgetTransaction>(sortBy: [SortDescriptor(\.id)])
+      descriptor.fetchLimit = 256
+      descriptor.fetchOffset = offset
+      let batch = try context.fetch(descriptor)
+      for transaction in batch where oldKeys.contains(PayeeDirectory.key(transaction.payee)) {
+        if transaction.payee != newName { transaction.merchantDomain = nil }
+        transaction.payee = newName
+      }
+      if context.hasChanges { try context.save() }
+      offset += batch.count
+      if batch.count < 256 { break }
+    }
+    let context = ModelContext(modelContainer)
+    for schedule in try context.fetch(FetchDescriptor<BudgetSchedule>())
+      where oldKeys.contains(PayeeDirectory.key(schedule.payee)) {
+      schedule.payee = newName
+    }
+    if context.hasChanges { try context.save() }
+  }
+
   func entries() throws -> [PayeeDirectory.Entry] {
     let context = ModelContext(modelContainer)
     let payees = try context.fetch(FetchDescriptor<BudgetPayee>())

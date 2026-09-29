@@ -82,11 +82,14 @@ struct AccountEditorScreen: View {
     .navigationTitle(account == nil ? "Private Account" : "Edit Account")
     .task {
       guard let account, !loadedCurrentBalance else { return }
+      let displayedBeforeLoad = openingBalance
       let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
       if let report = try? await repository.accountReport(at: Date(), currencyCode: currencyCode) {
-        openingBalance = BudgetMoney.editableSigned(
-          report.balances[account.id] ?? account.openingBalanceMinor
-        )
+        if openingBalance == displayedBeforeLoad {
+          openingBalance = BudgetMoney.editableSigned(
+            report.balances[account.id] ?? account.openingBalanceMinor
+          )
+        }
       }
       loadedCurrentBalance = true
     }
@@ -97,14 +100,14 @@ struct AccountEditorScreen: View {
           Button("Cancel") { dismiss() }
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Save") { save() }
+          Button("Save") { Task { await save() } }
             .disabled(!canSave)
         }
       }
     }
     .safeAreaInset(edge: .bottom) {
       if account == nil {
-        Button(action: save) {
+        Button { Task { await save() } } label: {
           Text("Create Account")
             .fontWeight(.semibold)
             .frame(maxWidth: .infinity)
@@ -133,7 +136,7 @@ struct AccountEditorScreen: View {
       && (type.kind != .liability || (parsedOpeningBalance ?? 0) <= 0)
   }
 
-  private func save() {
+  private func save() async {
     guard let minor = parsedOpeningBalance else {
       errorMessage = "Enter a valid balance with no more than two decimal places."
       return
@@ -141,9 +144,16 @@ struct AccountEditorScreen: View {
     do {
       let saved: BudgetAccount
       if let account {
+        let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
+        await repository.invalidate()
+        let report = try await repository.accountReport(at: Date(), currencyCode: currencyCode)
+        guard let existingBalance = report.balances[account.id] else {
+          throw BudgetCommandError.invalidTransfer
+        }
         try BudgetCommands.updateAccount(
           account, name: name, type: type, note: note,
-          currentBalanceMinor: minor, in: modelContext
+          currentBalanceMinor: minor, existingBalanceMinor: existingBalance,
+          in: modelContext
         )
         saved = account
       } else {

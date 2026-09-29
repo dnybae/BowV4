@@ -250,7 +250,10 @@ struct EnvelopeDetailScreen: View {
 
   private func setHidden(_ hidden: Bool) {
     do {
-      try BudgetCommands.setEnvelopeHidden(envelope, hidden: hidden, in: modelContext)
+      try BudgetCommands.setEnvelopeHidden(
+        envelope, hidden: hidden,
+        availableMinor: snapshot.available(for: envelope.id), in: modelContext
+      )
       dismiss()
     } catch { message = error.localizedDescription }
   }

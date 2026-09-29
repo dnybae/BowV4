@@ -109,7 +109,7 @@ struct SimpleFINReviewScreen: View {
               && $0.statusRaw != ignored
           })
           let used = try modelContext.fetch(other).contains { $0.id != record.id }
-          return !used && SimpleFINSyncCoordinator.shared.isPossibleMatch(transaction, for: record)
+          return !used && SimpleFINSyncCoordinator.isPossibleMatch(transaction, for: record)
         }
         candidates = (relatedSchedule?.kind == .transfer
           ? matches.filter { $0.kind == .transfer } : matches)

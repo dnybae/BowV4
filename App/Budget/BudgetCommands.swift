@@ -81,6 +81,7 @@ struct BudgetCommands {
     type: BudgetAccountType,
     note: String,
     currentBalanceMinor: Int64,
+    existingBalanceMinor: Int64,
     in context: ModelContext
   ) throws {
     let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -89,15 +90,7 @@ struct BudgetCommands {
       throw BudgetCommandError.liabilityRequiresNegativeBalance
     }
     let now = Date()
-    let accounts = try context.fetch(FetchDescriptor<BudgetAccount>())
-    let transactions = try context.fetch(FetchDescriptor<BudgetTransaction>())
-    let report = BudgetLedger.accountBalanceReport(
-      before: now, inclusive: true, accounts: accounts, transactions: transactions
-    )
-    guard let existingBalance = report.balances[account.id] else {
-      throw BudgetCommandError.invalidTransfer
-    }
-    let (delta, overflow) = currentBalanceMinor.subtractingReportingOverflow(existingBalance)
+    let (delta, overflow) = currentBalanceMinor.subtractingReportingOverflow(existingBalanceMinor)
     guard !overflow else { throw BudgetCommandError.balanceOverflow }
     if delta != 0 {
       let adjustment = BudgetTransaction(
@@ -202,11 +195,9 @@ struct BudgetCommands {
       throw BudgetCommandError.futureTransactionNeedsSchedule
     }
     if let scheduleID, let scheduledFor {
-      let calendar = Calendar.current
-      let alreadyRecorded = try context.fetch(FetchDescriptor<BudgetTransaction>()).contains {
-        $0.scheduleID == scheduleID
-          && $0.scheduledFor.map { calendar.isDate($0, inSameDayAs: scheduledFor) } == true
-      }
+      let alreadyRecorded = try BudgetTransactionLookup.scheduled(
+        scheduleID: scheduleID, on: scheduledFor, in: context
+      ) != nil
       guard !alreadyRecorded else { throw BudgetCommandError.duplicateScheduledOccurrence }
     }
     try validateTransaction(
@@ -281,11 +272,10 @@ struct BudgetCommands {
       throw BudgetCommandError.futureTransactionNeedsSchedule
     }
     if let scheduleID, let scheduledFor {
-      let calendar = Calendar.current
-      let alreadyRecorded = try context.fetch(FetchDescriptor<BudgetTransaction>()).contains {
-        $0.id != transaction.id && $0.scheduleID == scheduleID
-          && $0.scheduledFor.map { calendar.isDate($0, inSameDayAs: scheduledFor) } == true
-      }
+      let alreadyRecorded = try BudgetTransactionLookup.scheduled(
+        scheduleID: scheduleID, on: scheduledFor,
+        excluding: transaction.id, in: context
+      ) != nil
       guard !alreadyRecorded else { throw BudgetCommandError.duplicateScheduledOccurrence }
     }
     try validateTransaction(
@@ -375,6 +365,7 @@ struct BudgetCommands {
     from source: BudgetBucket,
     to target: BudgetBucket,
     date: Date,
+    snapshot: BudgetSnapshot,
     in context: ModelContext
   ) throws {
     guard amountMinor > 0 else { throw BudgetCommandError.invalidAmount }
@@ -387,8 +378,6 @@ struct BudgetCommands {
     }
     let accounts = try context.fetch(FetchDescriptor<BudgetAccount>())
     let envelopes = try context.fetch(FetchDescriptor<BudgetEnvelope>())
-    let allocations = try context.fetch(FetchDescriptor<BudgetAllocation>())
-    let transactions = try context.fetch(FetchDescriptor<BudgetTransaction>())
     let envelopeIDs = Set(envelopes.filter { $0.paymentAccountID == nil }.map(\.id))
     let cardIDs = Set(accounts.filter { $0.kind == .credit }.map(\.id))
     for bucket in [source, target] {
@@ -398,10 +387,8 @@ struct BudgetCommands {
       case .cardPayment(let id): guard cardIDs.contains(id) else { throw BudgetCommandError.invalidTransfer }
       }
     }
-    let snapshot = BudgetLedger.snapshot(
-      month: date, accounts: accounts, envelopes: envelopes,
-      allocations: allocations, transactions: transactions
-    )
+    guard calendar.isDate(snapshot.month, equalTo: date, toGranularity: .month)
+    else { throw BudgetCommandError.invalidTransfer }
     let available: Int64
     switch source {
     case .readyToAssign:
@@ -435,16 +422,12 @@ struct BudgetCommands {
     try context.save()
   }
 
-  static func setEnvelopeHidden(_ envelope: BudgetEnvelope, hidden: Bool, in context: ModelContext) throws {
+  static func setEnvelopeHidden(
+    _ envelope: BudgetEnvelope, hidden: Bool,
+    availableMinor: Int64, in context: ModelContext
+  ) throws {
     if hidden {
-      let snapshot = BudgetLedger.snapshot(
-        month: Date(),
-        accounts: try context.fetch(FetchDescriptor<BudgetAccount>()),
-        envelopes: try context.fetch(FetchDescriptor<BudgetEnvelope>()),
-        allocations: try context.fetch(FetchDescriptor<BudgetAllocation>()),
-        transactions: try context.fetch(FetchDescriptor<BudgetTransaction>())
-      )
-      guard snapshot.available(for: envelope.id) >= 0 else {
+      guard availableMinor >= 0 else {
         throw BudgetCommandError.hiddenOverspending
       }
     }
@@ -464,7 +447,7 @@ struct BudgetCommands {
   static func deleteUnusedEnvelope(_ envelope: BudgetEnvelope, in context: ModelContext) throws {
     guard envelope.paymentAccountID == nil else { throw BudgetCommandError.cardPaymentEnvelopeProtected }
     let id = envelope.id
-    let hasTransactions = try context.fetch(FetchDescriptor<BudgetTransaction>()).contains { $0.envelopeID == id }
+    let hasTransactions = try BudgetTransactionLookup.inEnvelope(id, in: context)
     let hasAllocations = try context.fetch(FetchDescriptor<BudgetAllocation>()).contains {
       $0.sourceEnvelopeID == id || $0.targetEnvelopeID == id
     }

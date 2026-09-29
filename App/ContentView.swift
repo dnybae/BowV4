@@ -68,12 +68,12 @@ private struct BudgetHomeView: View {
   @Query private var allocations: [BudgetAllocation]
   @Query private var schedules: [BudgetSchedule]
   @Query private var scheduleOccurrences: [BudgetScheduleOccurrence]
-  @Query private var simpleFINRecords: [SimpleFINImportRecord]
   @State private var snapshotRepository: BudgetSnapshotRepository?
   @State private var loadedSnapshot: BudgetSnapshot?
   @State private var loadedPreviousSnapshot: BudgetSnapshot?
   @State private var loadedAccountReport: AccountBalanceReport?
   @State private var ledgerError: String?
+  @State private var ledgerRefreshGeneration = 0
   @AppStorage("bow.appearance") private var appearanceRaw = AppAppearance.system.rawValue
   @State private var selectedMonth = Date()
   @State private var selectedCalendarDate = Date()
@@ -173,7 +173,6 @@ private struct BudgetHomeView: View {
                 envelopes: envelopes,
                 schedules: schedules,
                 occurrences: scheduleOccurrences,
-                simpleFINRecords: simpleFINRecords,
                 currencyCode: currencyCode,
                 onSelect: { activeSheet = .editTransaction($0) },
                 onRecord: { activeSheet = .recordScheduled($0) },
@@ -389,6 +388,8 @@ private struct BudgetHomeView: View {
   }
 
   private func refreshLedger(invalidate: Bool = false) async {
+    ledgerRefreshGeneration += 1
+    let generation = ledgerRefreshGeneration
     if snapshotRepository == nil {
       snapshotRepository = BudgetSnapshotRepository(modelContainer: modelContext.container)
     }
@@ -398,6 +399,7 @@ private struct BudgetHomeView: View {
     do {
       let result = try await snapshotRepository.bundle(month: month, currencyCode: currencyCode)
       guard !Task.isCancelled,
+            generation == ledgerRefreshGeneration,
             Calendar.current.isDate(month, equalTo: selectedMonth, toGranularity: .month) else { return }
       loadedSnapshot = result.current
       loadedPreviousSnapshot = result.previous
@@ -406,7 +408,9 @@ private struct BudgetHomeView: View {
     } catch is CancellationError {
       return
     } catch {
-      ledgerError = error.localizedDescription
+      if generation == ledgerRefreshGeneration {
+        ledgerError = error.localizedDescription
+      }
     }
   }
 }

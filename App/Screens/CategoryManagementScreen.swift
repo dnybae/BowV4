@@ -222,7 +222,11 @@ struct CategoryManagementScreen: View {
 
   private func setHidden(_ envelope: BudgetEnvelope, _ hidden: Bool) {
     do {
-      try BudgetCommands.setEnvelopeHidden(envelope, hidden: hidden, in: modelContext)
+      guard let snapshot else { return }
+      try BudgetCommands.setEnvelopeHidden(
+        envelope, hidden: hidden,
+        availableMinor: snapshot.available(for: envelope.id), in: modelContext
+      )
     } catch { message = error.localizedDescription }
   }
 }

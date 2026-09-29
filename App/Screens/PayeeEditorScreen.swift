@@ -5,8 +5,6 @@ struct PayeeEditorScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
   @Query private var payees: [BudgetPayee]
-  @Query private var transactions: [BudgetTransaction]
-  @Query private var schedules: [BudgetSchedule]
   @Query private var envelopes: [BudgetEnvelope]
   var entry: PayeeDirectory.Entry?
   var onSaved: () -> Void
@@ -15,6 +13,7 @@ struct PayeeEditorScreen: View {
   @State private var defaultEnvelopeID: UUID?
   @State private var errorMessage: String?
   @State private var showingDelete = false
+  @State private var isSaving = false
 
   init(entry: PayeeDirectory.Entry?, payee: BudgetPayee? = nil, onSaved: @escaping () -> Void = {}) {
     self.entry = entry
@@ -63,8 +62,8 @@ struct PayeeEditorScreen: View {
           Button("Cancel") { dismiss() }
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Save") { save() }
-            .disabled(trimmedName.isEmpty)
+          Button("Save") { Task { await save() } }
+            .disabled(trimmedName.isEmpty || isSaving)
         }
       }
       .confirmationDialog("Delete this payee?", isPresented: $showingDelete) {
@@ -83,11 +82,19 @@ struct PayeeEditorScreen: View {
     }
   }
 
-  private func save() {
+  private func save() async {
+    guard !isSaving else { return }
+    isSaving = true
+    defer { isSaving = false }
     let newKey = PayeeDirectory.key(trimmedName)
-    let allEntries = PayeeDirectory.entries(
-      payees: payees, transactions: transactions, schedules: schedules
-    )
+    let repository = PayeeDirectoryRepository(modelContainer: modelContext.container)
+    let allEntries: [PayeeDirectory.Entry]
+    do {
+      allEntries = try await repository.entries()
+    } catch {
+      errorMessage = error.localizedDescription
+      return
+    }
     guard !allEntries.contains(where: { $0.key == newKey && $0.key != entry?.key }) else {
       errorMessage = "A payee with this name already exists."
       return
@@ -113,12 +120,9 @@ struct PayeeEditorScreen: View {
         let previousExact = payees.first { $0.id == entry.ruleID }?.exactMatchText ?? ""
         if newKey != entry.key || trimmedName != entry.name
             || PayeeDirectory.key(previousExact) != exactKey {
-          PayeeDirectory.rename(
-            from: entry.key,
-            to: trimmedName,
-            payees: payees,
-            transactions: transactions,
-            schedules: schedules
+          try await repository.renameHistory(
+            from: Set([entry.key, PayeeDirectory.key(previousExact)]).subtracting([""]),
+            to: trimmedName
           )
         }
         if let payee = payees.first(where: { $0.id == entry.ruleID }) {

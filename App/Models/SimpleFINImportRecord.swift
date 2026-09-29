@@ -3,7 +3,7 @@ import SwiftData
 
 @Model
 final class SimpleFINImportRecord {
-  #Index<SimpleFINImportRecord>([\.remoteKey], [\.transactionID], [\.statusRaw, \.date])
+  #Index<SimpleFINImportRecord>([\.id], [\.remoteKey], [\.transactionID], [\.statusRaw, \.date])
   var id: UUID = UUID()
   var remoteKey: String = ""
   var localAccountID: UUID = UUID()

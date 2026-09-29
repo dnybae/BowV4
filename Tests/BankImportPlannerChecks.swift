@@ -44,6 +44,27 @@ struct BankImportPlannerChecks {
     otherFile.isManual = false
     let overlapping = planner.plan(rows: [row], accountID: accountID, existing: [otherFile])
     precondition(overlapping[0].decision == .review([manualID]))
+    let scaleStart = ContinuousClock.now
+    let historical = (0..<50_000).map { index in
+      LocalTransactionCandidate(
+        id: UUID(), accountID: accountID,
+        amountMinor: -Int64(100 + index),
+        date: date.addingTimeInterval(TimeInterval(index % 3_650) * 86_400),
+        payee: "Historical \(index)", externalKey: nil, isManual: true
+      )
+    }
+    let imported = (0..<2_000).map { index in
+      BankImportRow(
+        rowNumber: index + 1,
+        date: date.addingTimeInterval(TimeInterval(index % 3_650) * 86_400),
+        amountMinor: -Int64(100_000 + index), payee: "New \(index)",
+        memo: "", externalID: "SCALE-\(index)"
+      )
+    }
+    let scaleResult = planner.plan(rows: imported, accountID: accountID, existing: historical)
+    precondition(scaleResult.count == imported.count)
+    precondition(scaleResult.allSatisfy { $0.decision == .createNew })
+    print("50,000 local candidates and 2,000 import rows planned in \(ContinuousClock.now - scaleStart)")
     print("Bank import planner checks passed")
   }
 }

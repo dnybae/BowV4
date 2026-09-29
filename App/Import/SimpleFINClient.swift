@@ -36,7 +36,7 @@ enum SimpleFINError: LocalizedError {
   }
 }
 
-struct SimpleFINAccountSet: Decodable {
+struct SimpleFINAccountSet: Decodable, Sendable {
   var accounts: [SimpleFINRemoteAccount]
   var errlist: [SimpleFINRemoteError]?
   var errors: [String]?
@@ -49,11 +49,11 @@ struct SimpleFINAccountSet: Decodable {
   }
 }
 
-struct SimpleFINRemoteError: Decodable {
+struct SimpleFINRemoteError: Decodable, Sendable {
   var msg: String
 }
 
-struct SimpleFINRemoteAccount: Decodable {
+struct SimpleFINRemoteAccount: Decodable, Sendable {
   var id: String
   var name: String
   var connID: String?
@@ -71,7 +71,7 @@ struct SimpleFINRemoteAccount: Decodable {
   var remoteKey: String { "\(connID ?? "")|\(id)" }
 }
 
-struct SimpleFINRemoteTransaction: Decodable {
+struct SimpleFINRemoteTransaction: Decodable, Sendable {
   var id: String
   var posted: TimeInterval
   var amount: String

@@ -4,8 +4,6 @@ import SwiftData
 struct PayeeRuleEditorScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
-  @Query private var transactions: [BudgetTransaction]
-  @Query private var schedules: [BudgetSchedule]
   var rule: BudgetPayee?
   var rules: [BudgetPayee]
   var envelopes: [BudgetEnvelope]
@@ -14,6 +12,7 @@ struct PayeeRuleEditorScreen: View {
   @State private var envelopeID: UUID?
   @State private var errorMessage: String?
   @State private var showingDeleteConfirmation = false
+  @State private var isSaving = false
 
   init(rule: BudgetPayee?, rules: [BudgetPayee], envelopes: [BudgetEnvelope]) {
     self.rule = rule
@@ -50,9 +49,9 @@ struct PayeeRuleEditorScreen: View {
           Button("Cancel") { dismiss() }
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Save") { save() }
+          Button("Save") { Task { await save() } }
             .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-              || envelopeID == nil)
+              || envelopeID == nil || isSaving)
         }
       }
       .confirmationDialog("Delete this rule?", isPresented: $showingDeleteConfirmation) {
@@ -71,7 +70,10 @@ struct PayeeRuleEditorScreen: View {
     }
   }
 
-  private func save() {
+  private func save() async {
+    guard !isSaving else { return }
+    isSaving = true
+    defer { isSaving = false }
     guard let envelopeID else { return }
     let matcher = PayeeRuleMatcher()
     let match = matcher.normalized(matchText)
@@ -97,13 +99,12 @@ struct PayeeRuleEditorScreen: View {
         let updatedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if rule.name != updatedName
             || matcher.normalized(rule.exactMatchText) != match {
-          PayeeDirectory.rename(
-            from: PayeeDirectory.key(rule.name),
-            to: updatedName,
-            payees: rules,
-            transactions: transactions,
-            schedules: schedules
-          )
+          try await PayeeDirectoryRepository(modelContainer: modelContext.container)
+            .renameHistory(
+              from: Set([PayeeDirectory.key(rule.name),
+                         PayeeDirectory.key(rule.exactMatchText)]).subtracting([""]),
+              to: updatedName
+            )
         }
         rule.name = updatedName
         rule.exactMatchText = matchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -130,13 +131,6 @@ struct PayeeRuleEditorScreen: View {
   private func delete() {
     guard let rule else { return }
     do {
-      PayeeDirectory.rename(
-        from: PayeeDirectory.key(rule.name),
-        to: rule.name,
-        payees: rules,
-        transactions: transactions,
-        schedules: schedules
-      )
       modelContext.delete(rule)
       try modelContext.save()
       dismiss()

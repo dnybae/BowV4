@@ -3,11 +3,12 @@ import SwiftData
 
 struct TransactionsScreen: View {
   @Environment(\.modelContext) private var modelContext
+  @Query(filter: #Predicate<SimpleFINImportRecord> { $0.statusRaw == "review" })
+  private var simpleFINRecords: [SimpleFINImportRecord]
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
   var schedules: [BudgetSchedule]
   var occurrences: [BudgetScheduleOccurrence]
-  var simpleFINRecords: [SimpleFINImportRecord]
   var currencyCode: String
   var onSelect: (UUID) -> Void
   var onRecord: (ScheduledTransactionDraft) -> Void

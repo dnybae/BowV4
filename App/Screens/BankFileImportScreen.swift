@@ -7,9 +7,6 @@ struct BankFileImportScreen: View {
   @Environment(\.modelContext) private var modelContext
   @AppStorage("bow.demoMode") private var isDemoMode = false
   @Query private var accounts: [BudgetAccount]
-  @Query private var transactions: [BudgetTransaction]
-  @Query private var payees: [BudgetPayee]
-  @Query private var envelopes: [BudgetEnvelope]
   @Query private var profiles: [BudgetProfile]
   @State private var showingFilePicker = false
   @State private var fileName: String?
@@ -20,6 +17,11 @@ struct BankFileImportScreen: View {
   @State private var qifDateOrder: BankDateOrder = .monthDayYear
   @State private var accountID: UUID?
   @State private var proposals: [BankImportProposal] = []
+  @State private var reviewCount = 0
+  @State private var visibleProposalCount = 100
+  @State private var isPreviewing = false
+  @State private var isImporting = false
+  @State private var previewToken = UUID()
   @State private var importSeparately: Set<String> = []
   @State private var errorMessage: String?
 
@@ -95,15 +97,17 @@ struct BankFileImportScreen: View {
         if format != nil {
           Section {
             Button("Preview Transactions", systemImage: "list.bullet.rectangle") {
-              preview()
+              Task { await preview() }
             }
-            .disabled(selectedAccount == nil)
+            .disabled(selectedAccount == nil || isPreviewing)
+            if isPreviewing { ProgressView("Preparing preview…") }
+            if isImporting { ProgressView("Importing transactions…") }
           }
         }
 
         if !proposals.isEmpty {
           Section {
-            Text("\(proposals.count) unique rows · \(proposals.filter { if case .review = $0.decision { true } else { false } }.count) need duplicate review")
+            Text("\(proposals.count) unique rows · \(reviewCount) need duplicate review")
               .font(.subheadline.weight(.medium))
           } header: {
             Text("Preview")
@@ -112,7 +116,7 @@ struct BankFileImportScreen: View {
           }
 
           Section("Transactions") {
-            ForEach(proposals) { proposal in
+            ForEach(proposals.prefix(visibleProposalCount)) { proposal in
               VStack(alignment: .leading, spacing: 5) {
                 HStack {
                   Text(proposal.row.payee.isEmpty ? "Transaction" : proposal.row.payee)
@@ -152,6 +156,11 @@ struct BankFileImportScreen: View {
               }
               .padding(.vertical, 4)
             }
+            if visibleProposalCount < proposals.count {
+              Button("Show More Transactions") {
+                visibleProposalCount += 100
+              }
+            }
           }
         }
       }
@@ -162,8 +171,8 @@ struct BankFileImportScreen: View {
           Button("Cancel") { dismiss() }
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Import") { importFile() }
-            .disabled(proposals.isEmpty || selectedAccount == nil)
+          Button("Import") { Task { await importFile() } }
+            .disabled(proposals.isEmpty || selectedAccount == nil || isImporting)
         }
       }
       .onAppear {
@@ -182,27 +191,32 @@ struct BankFileImportScreen: View {
           UTType(filenameExtension: "qif") ?? .data
         ]
       ) { result in
-        do {
-          let url = try result.get()
-          guard let format = BankFileFormat(rawValue: url.pathExtension.lowercased()) else {
-            throw BankFileParseError.unsupportedFormat
+        Task {
+          do {
+            let url = try result.get()
+            let loaded = try await Task.detached(priority: .userInitiated) { () throws -> (BankFileFormat, String, BankCSVTable?) in
+              guard let format = BankFileFormat(rawValue: url.pathExtension.lowercased()) else {
+                throw BankFileParseError.unsupportedFormat
+              }
+              let accessed = url.startAccessingSecurityScopedResource()
+              defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+              let data = try Data(contentsOf: url)
+              guard let text = String(data: data, encoding: .utf8)
+                ?? String(data: data, encoding: .utf16)
+                ?? String(data: data, encoding: .isoLatin1) else {
+                throw BankFileParseError.unreadableText
+              }
+              return (format, text, format == .csv ? try BankFileParser().csvTable(text) : nil)
+            }.value
+            format = loaded.0
+            fileName = url.lastPathComponent
+            fileText = loaded.1
+            csvTable = loaded.2
+            if let csvTable { mapping = BankCSVMapping.suggested(for: csvTable.headers) }
+            clearPreview()
+          } catch {
+            errorMessage = error.localizedDescription
           }
-          let accessed = url.startAccessingSecurityScopedResource()
-          defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-          let data = try Data(contentsOf: url)
-          guard let text = String(data: data, encoding: .utf8)
-            ?? String(data: data, encoding: .utf16)
-            ?? String(data: data, encoding: .isoLatin1) else {
-            throw BankFileParseError.unreadableText
-          }
-          self.format = format
-          fileName = url.lastPathComponent
-          fileText = text
-          csvTable = format == .csv ? try BankFileParser().csvTable(text) : nil
-          if let csvTable { mapping = BankCSVMapping.suggested(for: csvTable.headers) }
-          clearPreview()
-        } catch {
-          errorMessage = error.localizedDescription
         }
       }
       .alert("Couldn’t Import File", isPresented: Binding(
@@ -232,82 +246,70 @@ struct BankFileImportScreen: View {
   }
 
   private func clearPreview() {
+    previewToken = UUID()
+    isPreviewing = false
     proposals = []
+    reviewCount = 0
+    visibleProposalCount = 100
     importSeparately = []
   }
 
-  private func preview() {
+  private func preview() async {
     guard let format, let account = selectedAccount else { return }
+    let token = UUID()
+    previewToken = token
+    isPreviewing = true
+    defer { if previewToken == token { isPreviewing = false } }
     do {
-      let parser = BankFileParser()
-      let rows: [BankImportRow]
-      switch format {
-      case .csv:
-        guard let csvTable else { throw BankFileParseError.emptyFile }
-        rows = try parser.csvRows(csvTable, mapping: mapping)
-      case .ofx, .qfx:
-        rows = try parser.ofxRows(fileText)
-      case .qif:
-        rows = try parser.qifRows(fileText, dateOrder: qifDateOrder)
-      }
-      let existing = transactions.filter { $0.kind != .transfer }.map {
-        LocalTransactionCandidate(
-          id: $0.id,
-          accountID: $0.accountID,
-          amountMinor: $0.amountMinor,
-          date: $0.date,
-          payee: $0.payee,
-          externalKey: $0.externalKey,
-          isManual: $0.sourceRaw == "manual"
-        )
-      }
-      let transfers = transactions.filter { $0.kind == .transfer }.flatMap { transaction in
-        var candidates = [LocalTransactionCandidate(
-          id: transaction.id,
-          accountID: transaction.accountID,
-          amountMinor: transaction.amountMinor,
-          date: transaction.date,
-          payee: transaction.payee,
-          externalKey: transaction.externalKey,
-          isManual: false
-        )]
-        if let destinationID = transaction.transferAccountID {
-          candidates.append(LocalTransactionCandidate(
-            id: transaction.id,
-            accountID: destinationID,
-            amountMinor: -transaction.amountMinor,
-            date: transaction.date,
-            payee: transaction.payee,
-            externalKey: nil,
-            isManual: false
-          ))
+      let sourceText = fileText
+      let table = csvTable
+      let selectedMapping = mapping
+      let selectedDateOrder = qifDateOrder
+      let rows = try await Task.detached(priority: .userInitiated) { () throws -> [BankImportRow] in
+        let parser = BankFileParser()
+        switch format {
+        case .csv:
+          guard let table else { throw BankFileParseError.emptyFile }
+          return try parser.csvRows(table, mapping: selectedMapping)
+        case .ofx, .qfx:
+          return try parser.ofxRows(sourceText)
+        case .qif:
+          return try parser.qifRows(sourceText, dateOrder: selectedDateOrder)
         }
-        return candidates
+      }.value
+      let accountID = account.id
+      let bundle = try await BankImportCandidateRepository(modelContainer: modelContext.container)
+        .candidates(accountID: accountID, rows: rows)
+      let planned = await Task.detached(priority: .userInitiated) {
+        BankImportPlanner().plan(
+          rows: rows, accountID: accountID,
+          existing: bundle.existing, manualTransfers: bundle.transfers
+        )
+      }.value
+      guard previewToken == token else { return }
+      proposals = planned
+      reviewCount = planned.reduce(0) { count, proposal in
+        if case .review = proposal.decision { count + 1 } else { count }
       }
-      proposals = BankImportPlanner().plan(
-        rows: rows,
-        accountID: account.id,
-        existing: existing,
-        manualTransfers: transfers
-      )
+      visibleProposalCount = 100
       importSeparately = []
     } catch {
+      guard previewToken == token else { return }
       clearPreview()
       errorMessage = error.localizedDescription
     }
   }
 
-  private func importFile() {
+  private func importFile() async {
     guard let account = selectedAccount else { return }
+    guard !isImporting else { return }
+    isImporting = true
+    defer { isImporting = false }
     do {
-      _ = try BankFileImportService().save(
+      _ = try await BankFileImportRepository(modelContainer: modelContext.container).save(
         proposals: proposals,
         importSeparately: importSeparately,
-        account: account,
-        existingTransactions: transactions,
-        payees: payees,
-        envelopes: envelopes,
-        in: modelContext
+        accountID: account.id
       )
       dismiss()
     } catch {

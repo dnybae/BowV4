@@ -52,15 +52,10 @@ struct CheckBowEnvelopeIntent: AppIntent {
   func perform() async throws -> some IntentResult & ProvidesDialog {
     let container = try BowModelStore.makeContainer()
     let context = container.mainContext
-    let accounts = try context.fetch(FetchDescriptor<BudgetAccount>())
     let envelopes = try context.fetch(FetchDescriptor<BudgetEnvelope>())
     let matches = envelopes.filter { $0.name.localizedCaseInsensitiveCompare(envelope) == .orderedSame }
     guard matches.count == 1, let selected = matches.first else { throw BowShortcutError.envelopeNotFound }
-    let snapshot = BudgetLedger.snapshot(
-      month: Date(), accounts: accounts, envelopes: envelopes,
-      allocations: try context.fetch(FetchDescriptor<BudgetAllocation>()),
-      transactions: try context.fetch(FetchDescriptor<BudgetTransaction>())
-    )
+    let snapshot = try await BudgetSnapshotRepository(modelContainer: container).snapshot(month: Date())
     let amount = selected.paymentAccountID.map { snapshot.paymentAvailable[$0, default: 0] }
       ?? snapshot.available(for: selected.id)
     let currency = try context.fetch(FetchDescriptor<BudgetProfile>()).first?.currencyCode ?? "USD"

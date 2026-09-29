@@ -7,6 +7,12 @@ import SwiftData
 actor TransactionPageRepository {
   static let pageSize = 80
 
+  struct Cursor: Sendable {
+    var date: Date
+    var createdAt: Date
+    var equalTimestampOffset: Int
+  }
+
   struct Request: Sendable {
     var accountID: UUID?
     var envelopeID: UUID?
@@ -19,36 +25,18 @@ actor TransactionPageRepository {
     var minimumAmountMinor: Int64?
     var maximumAmountMinor: Int64?
     var searchText = ""
-    var offset = 0
+    var cursor: Cursor?
   }
 
   struct Page: Sendable {
     var items: [TransactionListItem]
-    var nextOffset: Int?
+    var nextCursor: Cursor?
   }
 
   func page(_ request: Request) throws -> Page {
     let startDate = request.startDate ?? .distantPast
     let endDate = request.endDate ?? .distantFuture
-    let predicate: Predicate<BudgetTransaction>
-    if let accountID = request.accountID, let envelopeID = request.envelopeID {
-      predicate = #Predicate { item in
-        item.date >= startDate && item.date < endDate
-          && (item.accountID == accountID || item.transferAccountID == accountID)
-          && item.envelopeID == envelopeID
-      }
-    } else if let accountID = request.accountID {
-      predicate = #Predicate { item in
-        item.date >= startDate && item.date < endDate
-          && (item.accountID == accountID || item.transferAccountID == accountID)
-      }
-    } else if let envelopeID = request.envelopeID {
-      predicate = #Predicate { item in
-        item.date >= startDate && item.date < endDate && item.envelopeID == envelopeID
-      }
-    } else {
-      predicate = #Predicate { item in item.date >= startDate && item.date < endDate }
-    }
+    var cursor = request.cursor
     let accounts = try modelContext.fetch(FetchDescriptor<BudgetAccount>())
     let envelopes = try modelContext.fetch(FetchDescriptor<BudgetEnvelope>())
     let accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
@@ -63,23 +51,54 @@ actor TransactionPageRepository {
     }
     let search = request.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     var items: [TransactionListItem] = []
-    var offset = request.offset
     var more = true
     while items.count < Self.pageSize && more {
       try Task.checkCancellation()
+      let activeDate = cursor?.date ?? .distantFuture
+      let activeCreatedAt = cursor?.createdAt ?? .distantFuture
+      let scopedPredicate: Predicate<BudgetTransaction>
+      if let accountID = request.accountID, let envelopeID = request.envelopeID {
+        scopedPredicate = #Predicate { item in
+          item.date >= startDate && item.date < endDate
+            && (item.date < activeDate || (item.date == activeDate && item.createdAt <= activeCreatedAt))
+            && (item.accountID == accountID || item.transferAccountID == accountID)
+            && item.envelopeID == envelopeID
+        }
+      } else if let accountID = request.accountID {
+        scopedPredicate = #Predicate { item in
+          item.date >= startDate && item.date < endDate
+            && (item.date < activeDate || (item.date == activeDate && item.createdAt <= activeCreatedAt))
+            && (item.accountID == accountID || item.transferAccountID == accountID)
+        }
+      } else if let envelopeID = request.envelopeID {
+        scopedPredicate = #Predicate { item in
+          item.date >= startDate && item.date < endDate && item.envelopeID == envelopeID
+            && (item.date < activeDate || (item.date == activeDate && item.createdAt <= activeCreatedAt))
+        }
+      } else {
+        scopedPredicate = #Predicate { item in
+          item.date >= startDate && item.date < endDate
+            && (item.date < activeDate || (item.date == activeDate && item.createdAt <= activeCreatedAt))
+        }
+      }
       var descriptor = FetchDescriptor<BudgetTransaction>(
-        predicate: predicate,
+        predicate: scopedPredicate,
         sortBy: [SortDescriptor(\.date, order: .reverse),
                  SortDescriptor(\.createdAt, order: .reverse),
                  SortDescriptor(\.id, order: .reverse)]
       )
       descriptor.fetchLimit = 256
-      descriptor.fetchOffset = offset
+      descriptor.fetchOffset = cursor?.equalTimestampOffset ?? 0
       let fetched = try ModelContext(modelContainer).fetch(descriptor)
       let fetchedCount = fetched.count
-      let batchStart = offset
+      var consumed = 0
       for item in fetched {
-        offset += 1
+        consumed += 1
+        if cursor?.date == item.date && cursor?.createdAt == item.createdAt {
+          cursor?.equalTimestampOffset += 1
+        } else {
+          cursor = Cursor(date: item.date, createdAt: item.createdAt, equalTimestampOffset: 1)
+        }
         if !request.includesBalanceAdjustments
             && item.sourceRaw == BudgetTransaction.balanceAdjustmentSource { continue }
         if let payeeKey = request.payeeKey {
@@ -110,9 +129,9 @@ actor TransactionPageRepository {
         ))
         if items.count == Self.pageSize { break }
       }
-      more = fetchedCount == 256 || offset < batchStart + fetchedCount
+      more = fetchedCount == 256 || consumed < fetchedCount
     }
-    return Page(items: items, nextOffset: more ? offset : nil)
+    return Page(items: items, nextCursor: more ? cursor : nil)
   }
 
   func countUncategorized() throws -> Int {

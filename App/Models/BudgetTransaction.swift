@@ -4,10 +4,13 @@ import SwiftData
 @Model
 final class BudgetTransaction {
   #Index<BudgetTransaction>(
-    [\.date, \.createdAt],
+    [\.id],
+    [\.date, \.createdAt, \.id],
     [\.accountID, \.date],
     [\.transferAccountID, \.date],
     [\.envelopeID, \.date],
+    [\.needsApproval],
+    [\.kindRaw, \.envelopeID, \.sourceRaw],
     [\.externalKey],
     [\.scheduleID, \.scheduledFor]
   )

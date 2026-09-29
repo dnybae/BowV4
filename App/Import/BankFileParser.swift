@@ -1,13 +1,13 @@
 import Foundation
 
-enum BankFileFormat: String {
+enum BankFileFormat: String, Sendable {
   case csv
   case ofx
   case qfx
   case qif
 }
 
-enum BankDateOrder: String, CaseIterable, Identifiable {
+enum BankDateOrder: String, CaseIterable, Identifiable, Sendable {
   case monthDayYear
   case dayMonthYear
   case yearMonthDay
@@ -23,12 +23,12 @@ enum BankDateOrder: String, CaseIterable, Identifiable {
   }
 }
 
-struct BankCSVTable {
+struct BankCSVTable: Sendable {
   var headers: [String]
   var rows: [[String]]
 }
 
-struct BankCSVMapping: Equatable {
+struct BankCSVMapping: Equatable, Sendable {
   var dateColumn: Int?
   var payeeColumn: Int?
   var memoColumn: Int?
@@ -58,7 +58,7 @@ struct BankCSVMapping: Equatable {
   }
 }
 
-struct BankImportRow {
+struct BankImportRow: Sendable {
   var rowNumber: Int
   var date: Date
   var amountMinor: Int64

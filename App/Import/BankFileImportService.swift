@@ -27,13 +27,19 @@ struct BankFileImportService {
     proposals: [BankImportProposal],
     importSeparately: Set<String>,
     account: BudgetAccount,
-    existingTransactions: [BudgetTransaction],
+    existingKeys: Set<String>,
     payees: [BudgetPayee],
     envelopes: [BudgetEnvelope],
     in context: ModelContext
   ) throws -> BankFileImportSummary {
-    let existingKeys = Set(existingTransactions.compactMap(\.externalKey))
-    let existingByID = Dictionary(uniqueKeysWithValues: existingTransactions.map { ($0.id, $0) })
+    let linkedIDs = Set(proposals.compactMap { proposal -> UUID? in
+      if case .linkManual(let id) = proposal.decision { return id }
+      return nil
+    })
+    var existingByID: [UUID: BudgetTransaction] = [:]
+    for id in linkedIDs {
+      existingByID[id] = try BudgetTransactionLookup.byID(id, in: context)
+    }
     let validEnvelopeIDs = Set(envelopes.filter { !$0.isHidden && $0.paymentAccountID == nil }.map(\.id))
     let schedules = try context.fetch(FetchDescriptor<BudgetSchedule>())
     let matcher = PayeeRuleMatcher()

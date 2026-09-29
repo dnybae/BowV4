@@ -6,13 +6,14 @@ struct ReconciliationScreen: View {
   @Environment(\.modelContext) private var modelContext
   var account: BudgetAccount
   var currencyCode: String
-  @State private var transactions: [BudgetTransaction] = []
   @State private var entries: [ReconciliationEntry] = []
   @State private var payeeNames: [UUID: String] = [:]
   @State private var clearedBalanceMinor: Int64 = 0
   @State private var statementDate = Date()
   @State private var statementBalance = ""
   @State private var selectedIDs: Set<UUID> = []
+  @State private var visibleEntryCount = 300
+  @State private var isFinishing = false
   @State private var errorMessage: String?
 
   private var calculator: ReconciliationCalculator { ReconciliationCalculator() }
@@ -45,7 +46,7 @@ struct ReconciliationScreen: View {
           if entries.isEmpty {
             ContentUnavailableView("No entries by this date", systemImage: "list.bullet.rectangle")
           } else {
-            ForEach(entries) { entry in
+            ForEach(entries.prefix(visibleEntryCount)) { entry in
               Button {
                 if selectedIDs.insert(entry.id).inserted {
                   clearedBalanceMinor += entry.amountMinor
@@ -74,6 +75,9 @@ struct ReconciliationScreen: View {
               .buttonStyle(.plain)
               .accessibilityLabel("\(payeeNames[entry.id] ?? "Transfer"), \(BudgetMoney.formatted(entry.amountMinor, currencyCode: currencyCode)), \(selectedIDs.contains(entry.id) ? "cleared" : "uncleared")")
             }
+            if visibleEntryCount < entries.count {
+              Button("Show More Transactions") { visibleEntryCount += 300 }
+            }
           }
         } header: {
           HStack {
@@ -97,12 +101,12 @@ struct ReconciliationScreen: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Finish") { finish() }
-            .disabled(difference != 0)
+          Button("Finish") { Task { await finish() } }
+            .disabled(difference != 0 || isFinishing)
         }
       }
       .task(id: statementDate) {
-        loadEntries()
+        await loadEntries()
       }
       .alert("Couldn’t Reconcile", isPresented: Binding(
         get: { errorMessage != nil },
@@ -115,47 +119,37 @@ struct ReconciliationScreen: View {
     }
   }
 
-  private func finish() {
+  private func finish() async {
     guard let enteredBalance, enteredBalance == clearedBalanceMinor else { return }
-    let now = Date()
-    for transaction in transactions where entries.contains(where: { $0.id == transaction.id }) {
-      let selected = selectedIDs.contains(transaction.id)
-      if transaction.accountID == account.id {
-        transaction.isCleared = selected
-        transaction.reconciledAt = selected ? now : nil
-      } else if transaction.transferAccountID == account.id {
-        transaction.destinationIsCleared = selected
-        transaction.destinationReconciledAt = selected ? now : nil
-      }
-    }
-    account.lastReconciledAt = statementDate
-    account.lastReconciledBalanceMinor = enteredBalance
+    guard !isFinishing else { return }
+    isFinishing = true
+    defer { isFinishing = false }
     do {
-      try modelContext.save()
+      try await ReconciliationRepository(modelContainer: modelContext.container).finish(
+        accountID: account.id, through: statementDate,
+        balanceMinor: enteredBalance, selectedIDs: selectedIDs
+      )
       dismiss()
     } catch { errorMessage = error.localizedDescription }
   }
 
-  private func loadEntries() {
+  private func loadEntries() async {
     let accountID = account.id
-    let nextDay = Calendar.current.date(byAdding: .day, value: 1,
-      to: Calendar.current.startOfDay(for: statementDate)) ?? statementDate
-    let predicate = #Predicate<BudgetTransaction> {
-      $0.date < nextDay && ($0.accountID == accountID || $0.transferAccountID == accountID)
-    }
-    transactions = (try? modelContext.fetch(FetchDescriptor(predicate: predicate))) ?? []
-    payeeNames = Dictionary(uniqueKeysWithValues: transactions.map { ($0.id, $0.payee) })
-    entries = calculator.entries(accountID: accountID, transactions: transactions.map {
-      ReconciliationLedgerItem(
-        id: $0.id, date: $0.date, amountMinor: $0.amountMinor,
-        accountID: $0.accountID, transferAccountID: $0.transferAccountID,
-        isCleared: $0.isCleared, destinationIsCleared: $0.destinationIsCleared
+    let requestedDate = statementDate
+    do {
+      let result = try await ReconciliationRepository(modelContainer: modelContext.container)
+        .load(accountID: accountID, through: requestedDate)
+      guard requestedDate == statementDate, !Task.isCancelled else { return }
+      entries = result.entries
+      payeeNames = result.payeeNames
+      visibleEntryCount = 300
+      selectedIDs = Set(result.entries.filter(\.isCleared).map(\.id))
+      clearedBalanceMinor = calculator.clearedBalance(
+        openingBalanceMinor: account.openingBalanceMinor,
+        entries: result.entries, selectedIDs: selectedIDs
       )
-    }, through: statementDate)
-    selectedIDs = Set(entries.filter(\.isCleared).map(\.id))
-    clearedBalanceMinor = calculator.clearedBalance(
-      openingBalanceMinor: account.openingBalanceMinor,
-      entries: entries, selectedIDs: selectedIDs
-    )
+    } catch {
+      errorMessage = error.localizedDescription
+    }
   }
 }

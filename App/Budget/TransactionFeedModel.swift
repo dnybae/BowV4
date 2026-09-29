@@ -16,7 +16,7 @@ final class TransactionFeedModel {
   private var repository: TransactionPageRepository?
   private var container: ModelContainer?
   private var request = TransactionPageRepository.Request()
-  private var nextOffset: Int?
+  private var nextCursor: TransactionPageRepository.Cursor?
   private var generation = 0
 
   func reload(
@@ -54,7 +54,7 @@ final class TransactionFeedModel {
     let requestToLoad = nextRequest
     items = []
     didTrim = false
-    nextOffset = nil
+    nextCursor = nil
     hasMore = false
     isLoading = true
     errorMessage = nil
@@ -67,8 +67,8 @@ final class TransactionFeedModel {
         ? try await repository.countNeedsApproval() : 0
       guard currentGeneration == generation, !Task.isCancelled else { return }
       items = loadedPage.items
-      nextOffset = loadedPage.nextOffset
-      hasMore = nextOffset != nil
+      nextCursor = loadedPage.nextCursor
+      hasMore = nextCursor != nil
       uncategorizedCount = loadedCount
       approvalCount = loadedApprovalCount
     } catch is CancellationError {
@@ -81,11 +81,11 @@ final class TransactionFeedModel {
   }
 
   func loadNext() async {
-    guard !isLoading, let nextOffset, let repository else { return }
+    guard !isLoading, let nextCursor, let repository else { return }
     let currentGeneration = generation
     isLoading = true
     var nextRequest = request
-    nextRequest.offset = nextOffset
+    nextRequest.cursor = nextCursor
     do {
       let page = try await repository.page(nextRequest)
       guard currentGeneration == generation, !Task.isCancelled else { return }
@@ -94,8 +94,8 @@ final class TransactionFeedModel {
         items.removeFirst(items.count - 400)
         didTrim = true
       }
-      self.nextOffset = page.nextOffset
-      hasMore = page.nextOffset != nil
+      self.nextCursor = page.nextCursor
+      hasMore = page.nextCursor != nil
     } catch is CancellationError {
       return
     } catch {

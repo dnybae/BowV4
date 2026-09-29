@@ -1,13 +1,13 @@
 import Foundation
 
-struct ReconciliationEntry: Identifiable {
+struct ReconciliationEntry: Identifiable, Sendable {
   var id: UUID
   var date: Date
   var amountMinor: Int64
   var isCleared: Bool
 }
 
-struct ReconciliationLedgerItem {
+struct ReconciliationLedgerItem: Sendable {
   var id: UUID
   var date: Date
   var amountMinor: Int64

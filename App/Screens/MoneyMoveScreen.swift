@@ -124,7 +124,7 @@ struct MoneyMoveScreen: View {
         }
       }
       .safeAreaInset(edge: .bottom) {
-        Button(action: save) {
+        Button { Task { await save() } } label: {
           Text("Move \(BudgetMoney.formatted(enteredMinor ?? 0, currencyCode: currencyCode)) in \(month.formatted(.dateTime.month(.wide)))")
             .fontWeight(.semibold)
             .frame(maxWidth: .infinity, minHeight: 44)
@@ -163,7 +163,7 @@ struct MoneyMoveScreen: View {
     }
   }
 
-  private func save() {
+  private func save() async {
     guard let minor = enteredMinor, minor > 0 else {
       errorMessage = "Enter an amount greater than zero."
       return
@@ -200,9 +200,13 @@ struct MoneyMoveScreen: View {
       allocationDate = monthInterval?.start ?? month
     }
     do {
+      let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
+      await repository.invalidate()
+      let current = try await repository.snapshot(month: month)
+      snapshot = current
       try BudgetCommands.moveMoney(
         amountMinor: minor, from: source, to: target,
-        date: allocationDate, in: modelContext
+        date: allocationDate, snapshot: current, in: modelContext
       )
       dismiss()
     } catch {

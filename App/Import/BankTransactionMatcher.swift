@@ -47,7 +47,7 @@ struct BankTransactionMatcher {
   }
 }
 
-struct BankTransactionCandidate {
+struct BankTransactionCandidate: Sendable {
   var externalKey: String
   var accountID: UUID
   var amountMinor: Int64
@@ -56,7 +56,7 @@ struct BankTransactionCandidate {
   var description: String
 }
 
-struct LocalTransactionCandidate {
+struct LocalTransactionCandidate: Sendable {
   var id: UUID
   var accountID: UUID
   var amountMinor: Int64
@@ -66,7 +66,7 @@ struct LocalTransactionCandidate {
   var isManual: Bool
 }
 
-enum BankMatchDecision: Equatable {
+enum BankMatchDecision: Equatable, Sendable {
   case alreadyImported(UUID)
   case linkManual(UUID)
   case review([UUID])

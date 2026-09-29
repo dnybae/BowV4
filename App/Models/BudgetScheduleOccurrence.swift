@@ -3,6 +3,7 @@ import SwiftData
 
 @Model
 final class BudgetScheduleOccurrence {
+  #Index<BudgetScheduleOccurrence>([\.scheduleID, \.scheduledFor])
   var id: UUID = UUID()
   var scheduleID: UUID = UUID()
   var scheduledFor: Date = Date()

@@ -43,20 +43,25 @@ struct LargeDataStressChecks {
     try context.save()
 
     let generationStart = ContinuousClock.now
+    let duplicateStartIndex = max(0, count - 201)
     for index in 0..<count {
       let isTransfer = index % 17 == 0
       let onCard = !isTransfer && index % 10 == 0
+      let timestamp = index > duplicateStartIndex
+        ? start.addingTimeInterval(TimeInterval(duplicateStartIndex * 6_300))
+        : start.addingTimeInterval(TimeInterval(index * 6_300))
       let transaction = BudgetTransaction(
         accountID: onCard ? card.id : account.id,
         transferAccountID: isTransfer ? card.id : nil,
         envelopeID: isTransfer ? nil : envelopes[index % envelopes.count].id,
-        date: start.addingTimeInterval(TimeInterval(index * 6_300)),
+        date: timestamp,
         amountMinor: -Int64(100 + index % 9_900),
         payee: "Payee \(index % 1_000)",
         notes: index % 29 == 0 ? "Searchable note \(index)" : "",
         kind: isTransfer ? .transfer : .expense
       )
-      transaction.createdAt = transaction.date.addingTimeInterval(TimeInterval(index % 13))
+      transaction.createdAt = index > duplicateStartIndex
+        ? timestamp : timestamp.addingTimeInterval(TimeInterval(index % 13))
       context.insert(transaction)
       if index % 500 == 499 { try context.save() }
     }
@@ -67,11 +72,19 @@ struct LargeDataStressChecks {
     let readStart = ContinuousClock.now
     let first = try await repository.page(.init())
     precondition(first.items.count == min(80, count))
-    let second = try await repository.page(.init(offset: first.nextOffset ?? count))
+    let second = try await repository.page(.init(cursor: first.nextCursor))
     precondition(Set(first.items.map(\.id)).isDisjoint(with: second.items.map(\.id)))
+    var seen = Set(first.items.map(\.id))
+    var cursor = first.nextCursor
+    while let current = cursor {
+      let page = try await repository.page(.init(cursor: current))
+      for item in page.items { precondition(seen.insert(item.id).inserted) }
+      cursor = page.nextCursor
+    }
+    precondition(seen.count == count)
     let uncategorized = try await repository.countUncategorized()
     precondition(uncategorized == 0)
-    print("first two pages in \(ContinuousClock.now - readStart)")
+    print("all \(count) paged exactly once in \(ContinuousClock.now - readStart)")
 
     var filtered = TransactionPageRepository.Request()
     filtered.searchText = "Payee 17"

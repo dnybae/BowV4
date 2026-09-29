@@ -75,7 +75,9 @@ final class SimpleFINSyncCoordinator {
     do {
       let response = try await SimpleFINClient().fetch(accessURL: accessURL, startDate: start)
       updateAccounts(response.accounts, in: work)
-      let summary = try importTransactions(response.accounts, in: work)
+      try work.save()
+      let summary = try await SimpleFINImportRepository(modelContainer: work.container)
+        .importTransactions(response.accounts)
       var messages = response.messages
       if let last = connection.lastSuccessfulAt, last < earliest {
         messages.append("This connection was inactive for over 90 days. Check your bank for older transactions that SimpleFIN could not return in this refresh.")
@@ -119,9 +121,8 @@ final class SimpleFINSyncCoordinator {
         switch decision {
         case .importNew: throw BudgetCommandError.scheduledTransferMustLinkTransfer
         case .link(let id):
-          guard try context.fetch(FetchDescriptor<BudgetTransaction>()).contains(where: {
-            $0.id == id && $0.kind == .transfer
-          }) else { throw BudgetCommandError.scheduledTransferMustLinkTransfer }
+          guard try BudgetTransactionLookup.byID(id, in: context)?.kind == .transfer
+          else { throw BudgetCommandError.scheduledTransferMustLinkTransfer }
         case .ignore: break
         }
       }
@@ -129,11 +130,9 @@ final class SimpleFINSyncCoordinator {
       case .ignore:
         break
       case .importNew, .link:
-        let calendar = Calendar.current
-        let recorded = try context.fetch(FetchDescriptor<BudgetTransaction>()).first {
-          $0.scheduleID == scheduleID
-            && $0.scheduledFor.map { calendar.isDate($0, inSameDayAs: scheduledFor) } == true
-        }
+        let recorded = try BudgetTransactionLookup.scheduled(
+          scheduleID: scheduleID, on: scheduledFor, in: context
+        )
         if let recorded {
           if case .link(let id) = decision, id == recorded.id {
             // Linking a bank leg to the already recorded transfer is valid.
@@ -151,28 +150,29 @@ final class SimpleFINSyncCoordinator {
         .first(where: { $0.id == record.localAccountID }) else {
         throw SimpleFINError.invalidResponse
       }
-      let transaction = makeTransaction(
+      let transaction = Self.makeTransaction(
         account: account, date: record.date,
         amount: record.amountMinor, payee: record.payee, in: context
       )
       transaction.externalKey = record.remoteKey
       transaction.scheduleID = scheduleID
       transaction.scheduledFor = scheduledFor
-      try adjustOpeningBalance(for: transaction, account: account)
+      try Self.adjustOpeningBalance(for: transaction, account: account)
       context.insert(transaction)
       record.transactionID = transaction.id
       record.status = .imported
     case .link(let id):
-      guard let transaction = try context.fetch(FetchDescriptor<BudgetTransaction>())
-        .first(where: { $0.id == id }),
-        isPossibleMatch(transaction, for: record) else {
+      guard let transaction = try BudgetTransactionLookup.byID(id, in: context),
+        Self.isPossibleMatch(transaction, for: record) else {
         throw SimpleFINError.invalidResponse
       }
       if let scheduleID, let existingScheduleID = transaction.scheduleID,
          existingScheduleID != scheduleID {
         throw SimpleFINError.invalidResponse
       }
-      let otherRecords = try context.fetch(FetchDescriptor<SimpleFINImportRecord>())
+      let otherRecords = try context.fetch(FetchDescriptor<SimpleFINImportRecord>(
+        predicate: #Predicate { $0.transactionID == id }
+      ))
       guard !otherRecords.contains(where: {
         $0.id != record.id && $0.transactionID == id && $0.status != .ignored
           && (transaction.kind != .transfer || $0.localAccountID == record.localAccountID)
@@ -215,11 +215,11 @@ final class SimpleFINSyncCoordinator {
     let usedIDs = Set(records.filter {
       $0.id != record.id && $0.status != .ignored && $0.localAccountID == record.localAccountID
     }.compactMap(\.transactionID))
-    return transactions.filter { !usedIDs.contains($0.id) && isPossibleMatch($0, for: record) }
+    return transactions.filter { !usedIDs.contains($0.id) && Self.isPossibleMatch($0, for: record) }
       .sorted { abs($0.date.timeIntervalSince(record.date)) < abs($1.date.timeIntervalSince(record.date)) }
   }
 
-  func isPossibleMatch(_ transaction: BudgetTransaction, for record: SimpleFINImportRecord) -> Bool {
+  nonisolated static func isPossibleMatch(_ transaction: BudgetTransaction, for record: SimpleFINImportRecord) -> Bool {
     let amount = transaction.transferAccountID == record.localAccountID
       ? -transaction.amountMinor : transaction.amountMinor
     let inAccount = transaction.accountID == record.localAccountID
@@ -227,8 +227,8 @@ final class SimpleFINSyncCoordinator {
     return inAccount
       && abs(transaction.date.timeIntervalSince(record.date)) <= 10 * 86_400
       && (amount == record.amountMinor
-          || (transaction.kind != .transfer && !normalized(record.payee).isEmpty
-            && normalized(transaction.payee) == normalized(record.payee)))
+          || (transaction.kind != .transfer && !Self.normalized(record.payee).isEmpty
+            && Self.normalized(transaction.payee) == Self.normalized(record.payee)))
       && transaction.externalKey != record.remoteKey
   }
 
@@ -279,13 +279,39 @@ final class SimpleFINSyncCoordinator {
   func importTransactions(
     _ accounts: [SimpleFINRemoteAccount], in context: ModelContext
   ) throws -> SimpleFINSyncSummary {
+    try Self.importTransactionsOffMain(accounts, in: context)
+  }
+
+  nonisolated static func importTransactionsOffMain(
+    _ accounts: [SimpleFINRemoteAccount], in context: ModelContext
+  ) throws -> SimpleFINSyncSummary {
     let links = try context.fetch(FetchDescriptor<SimpleFINAccountLink>())
     let localAccounts = try context.fetch(FetchDescriptor<BudgetAccount>())
-    var transactions = try context.fetch(FetchDescriptor<BudgetTransaction>())
-    let records = try context.fetch(FetchDescriptor<SimpleFINImportRecord>())
+    let postedDates = accounts.flatMap { account in
+      (account.transactions ?? []).filter { $0.pending != true && $0.posted > 0 }.map(\.date)
+    }
+    guard let earliest = postedDates.min(), let latest = postedDates.max() else {
+      return SimpleFINSyncSummary()
+    }
+    let start = earliest.addingTimeInterval(-11 * 86_400)
+    let end = latest.addingTimeInterval(11 * 86_400)
+    var transactions = try context.fetch(FetchDescriptor<BudgetTransaction>(predicate: #Predicate {
+      $0.date >= start && $0.date <= end
+    }))
+    let records = try context.fetch(FetchDescriptor<SimpleFINImportRecord>(predicate: #Predicate {
+      $0.date >= start && $0.date <= end
+    }))
     let schedules = try context.fetch(FetchDescriptor<BudgetSchedule>())
     var knownKeys = Set(records.map(\.remoteKey))
     knownKeys.formUnion(transactions.compactMap(\.externalKey))
+    var candidates = transactions.map { transaction in
+      LocalTransactionCandidate(
+        id: transaction.id, accountID: transaction.accountID,
+        amountMinor: transaction.amountMinor, date: transaction.date,
+        payee: transaction.payee, externalKey: transaction.externalKey,
+        isManual: transaction.sourceRaw == "manual" && transaction.kind != .transfer
+      )
+    }
     var summary = SimpleFINSyncSummary()
     let matcher = SimpleFINMatchPlanner()
 
@@ -304,22 +330,19 @@ final class SimpleFINSyncCoordinator {
         guard let amount = item.amountMinor else { throw SimpleFINError.invalidAmount }
         let key = Self.transactionKey(account: remote.remoteKey, transaction: item.id)
         guard knownKeys.insert(key).inserted else { continue }
+        let existingRecord = FetchDescriptor<SimpleFINImportRecord>(
+          predicate: #Predicate { $0.remoteKey == key }
+        )
+        let existingTransaction = FetchDescriptor<BudgetTransaction>(
+          predicate: #Predicate { $0.externalKey == key }
+        )
+        guard try context.fetchCount(existingRecord) == 0,
+              try context.fetchCount(existingTransaction) == 0 else { continue }
         let payee = item.description.trimmingCharacters(in: .whitespacesAndNewlines)
         let record = SimpleFINImportRecord(
           remoteKey: key, localAccountID: localID,
           date: item.date, amountMinor: amount, payee: payee
         )
-        let candidates = transactions.map { transaction in
-          LocalTransactionCandidate(
-            id: transaction.id,
-            accountID: transaction.accountID,
-            amountMinor: transaction.amountMinor,
-            date: transaction.date,
-            payee: transaction.payee,
-            externalKey: transaction.externalKey,
-            isManual: transaction.sourceRaw == "manual" && transaction.kind != .transfer
-          )
-        }
         let incoming = BankTransactionCandidate(
           externalKey: key, accountID: localID, amountMinor: amount,
           postedAt: item.date,
@@ -328,7 +351,7 @@ final class SimpleFINSyncCoordinator {
         )
         let decision = matcher.decide(for: incoming, among: candidates)
         let otherPossible = transactions.contains {
-          isPossibleMatch($0, for: record)
+          Self.isPossibleMatch($0, for: record)
             && ($0.kind == .transfer || $0.sourceRaw != "manual")
         }
         let scheduledTransferPossible = schedules.contains { schedule in
@@ -345,19 +368,28 @@ final class SimpleFINSyncCoordinator {
             transaction.needsApproval = true
             transaction.sourceRaw = "manualLinked"
             transaction.externalKey = key
+            if let candidateIndex = candidates.firstIndex(where: { $0.id == id }) {
+              candidates[candidateIndex].externalKey = key
+              candidates[candidateIndex].isManual = false
+            }
             record.transactionID = id
             record.status = .linked
             summary.linked += 1
           }
         case .createNew where !otherPossible && !scheduledTransferPossible:
-          let transaction = makeTransaction(
+          let transaction = Self.makeTransaction(
             account: account, date: item.date,
             amount: amount, payee: payee, in: context
           )
           transaction.externalKey = key
-          try adjustOpeningBalance(for: transaction, account: account)
+          try Self.adjustOpeningBalance(for: transaction, account: account)
           context.insert(transaction)
           transactions.append(transaction)
+          candidates.append(LocalTransactionCandidate(
+            id: transaction.id, accountID: transaction.accountID,
+            amountMinor: transaction.amountMinor, date: transaction.date,
+            payee: transaction.payee, externalKey: key, isManual: false
+          ))
           record.transactionID = transaction.id
           record.status = .imported
           summary.imported += 1
@@ -371,7 +403,7 @@ final class SimpleFINSyncCoordinator {
     return summary
   }
 
-  private func makeTransaction(
+  nonisolated private static func makeTransaction(
     account: BudgetAccount, date: Date, amount: Int64,
     payee: String, in context: ModelContext
   ) -> BudgetTransaction {
@@ -386,7 +418,7 @@ final class SimpleFINSyncCoordinator {
     return transaction
   }
 
-  private func adjustOpeningBalance(for transaction: BudgetTransaction, account: BudgetAccount) throws {
+  nonisolated private static func adjustOpeningBalance(for transaction: BudgetTransaction, account: BudgetAccount) throws {
     if transaction.date < account.openedAt {
       let (adjusted, overflow) = account.openingBalanceMinor.subtractingReportingOverflow(transaction.amountMinor)
       guard !overflow else { throw SimpleFINError.balanceOverflow }
@@ -398,11 +430,11 @@ final class SimpleFINSyncCoordinator {
     }
   }
 
-  private static func transactionKey(account: String, transaction: String) -> String {
+  nonisolated private static func transactionKey(account: String, transaction: String) -> String {
     "simplefin|\(Data(account.utf8).base64EncodedString())|\(Data(transaction.utf8).base64EncodedString())"
   }
 
-  private func normalized(_ value: String) -> String {
+  nonisolated private static func normalized(_ value: String) -> String {
     value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
       .components(separatedBy: .punctuationCharacters)
       .joined(separator: " ")
@@ -411,7 +443,7 @@ final class SimpleFINSyncCoordinator {
   }
 }
 
-struct SimpleFINSyncSummary {
+struct SimpleFINSyncSummary: Sendable {
   var imported = 0
   var linked = 0
   var needsReview = 0

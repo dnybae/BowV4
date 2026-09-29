@@ -205,23 +205,95 @@ struct CalendarScreen: View {
     }
   }
 
+  private func placeInitialScroll(using proxy: ScrollViewProxy) {
+    if !timeline.contains(selectedDate) {
+      timeline = CalendarTimelineWindow(centeredOn: selectedDate, calendar: calendar)
+    }
+    let month = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
+    visibleMonth = month
+    Task { @MainActor in
+      await Task.yield()
+      let target = CalendarDaySlot.ID.day(month)
+      scrollDay = target
+      proxy.scrollTo(target, anchor: .top)
+      hasPlacedInitialScroll = true
+    }
+  }
+
   private func returnToToday(using proxy: ScrollViewProxy) {
     let today = Date()
     let month = calendar.dateInterval(of: .month, for: today)?.start ?? today
     selectedDate = today
-    if !months.contains(month) {
-      months = CalendarTimelineWindow.months(around: month)
-      scrollMonth = month
+    visibleMonth = month
+    let target = CalendarDaySlot.ID.day(month)
+    if !timeline.contains(today) {
+      hasPlacedInitialScroll = false
+      timeline = CalendarTimelineWindow(centeredOn: today, calendar: calendar)
       Task { @MainActor in
         await Task.yield()
-        proxy.scrollTo(month, anchor: .top)
+        scrollDay = target
+        proxy.scrollTo(target, anchor: .top)
+        hasPlacedInitialScroll = true
       }
     } else {
       withAnimation(reduceMotion ? nil : .snappy) {
-        scrollMonth = month
-        proxy.scrollTo(month, anchor: .top)
+        scrollDay = target
+        proxy.scrollTo(target, anchor: .top)
       }
     }
+  }
+
+  private func updateVisibleDays(using frames: [Date: CGRect], scrollProxy: ScrollViewProxy) {
+    guard hasPlacedInitialScroll, viewportSize.width > 0, viewportSize.height > 0 else { return }
+    let viewport = CGRect(origin: .zero, size: viewportSize)
+    var visible: [(date: Date, frame: CGRect)] = []
+    var monthAreas: [Date: CGFloat] = [:]
+    for (date, frame) in frames {
+      let intersection = frame.intersection(viewport)
+      guard !intersection.isNull, intersection.width > 0, intersection.height > 0 else { continue }
+      visible.append((date: date, frame: intersection))
+      let month = calendar.dateInterval(of: .month, for: date)?.start ?? date
+      monthAreas[month, default: 0] += intersection.width * intersection.height
+    }
+    guard !visible.isEmpty else { return }
+    if let largest = monthAreas.max(by: { $0.value < $1.value }),
+       largest.value > monthAreas[visibleMonth, default: 0] + 1 {
+      visibleMonth = largest.key
+    }
+    guard !isCalendarScrolling, !isExtendingTimeline else { return }
+    let first = visible.min(by: { $0.frame.minY < $1.frame.minY })?.date
+    let last = visible.max(by: { $0.frame.maxY < $1.frame.maxY })?.date
+    if let first, let direction = timeline.directionToExtend(near: first), direction == .earlier {
+      extendTimeline(.earlier, using: scrollProxy)
+    } else if let last, let direction = timeline.directionToExtend(near: last), direction == .later {
+      extendTimeline(.later, using: scrollProxy)
+    }
+  }
+
+  private func extendTimeline(_ direction: CalendarTimelineWindow.Direction, using proxy: ScrollViewProxy) {
+    isExtendingTimeline = true
+    let anchor = scrollDay
+    Task { @MainActor in
+      await Task.yield()
+      timeline.extend(direction)
+      await Task.yield()
+      if let anchor {
+        scrollDay = anchor
+        proxy.scrollTo(anchor, anchor: .top)
+      }
+      isExtendingTimeline = false
+    }
+  }
+
+  private func loadRecordedDays() async {
+    let first = timeline.firstMonth
+    let end = timeline.endMonth
+    let predicate = #Predicate<BudgetTransaction> { $0.date >= first && $0.date < end }
+    var descriptor = FetchDescriptor<BudgetTransaction>(predicate: predicate)
+    descriptor.propertiesToFetch = [\.date]
+    let dates = (try? modelContext.fetch(descriptor))?.map(\.date) ?? []
+    guard !Task.isCancelled else { return }
+    recordedDays = Set(dates.map { calendar.startOfDay(for: $0) })
   }
 
   private func loadSelectedMonth() async {
@@ -243,6 +315,12 @@ struct CalendarScreen: View {
 
 private struct CalendarLoadKey: Hashable {
   var month: Date
+  var refreshVersion: Int
+}
+
+private struct CalendarDayMarkLoadKey: Hashable {
+  var firstMonth: Date
+  var endMonth: Date
   var refreshVersion: Int
 }
 

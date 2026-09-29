@@ -7,7 +7,6 @@ struct SettingsScreen: View {
   @AppStorage("bow.demoMode") private var isDemoMode = false
   @AppStorage("bow.demoResetVersion") private var demoResetVersion = 0
   @AppStorage("bow.demoScenario") private var demoScenarioRaw = DemoScenario.showcase.rawValue
-  @AppStorage("bow.logoDevPublishableKey") private var logoDevPublishableKey = ""
   @Query private var groups: [BudgetGroup]
   @Query private var envelopes: [BudgetEnvelope]
   @Query private var simpleFINRecords: [SimpleFINImportRecord]
@@ -79,16 +78,6 @@ struct SettingsScreen: View {
           } label: {
             Label("Notifications", systemImage: "bell")
           }
-        }
-
-        Section {
-          TextField("Logo.dev publishable key (pk_…)", text: $logoDevPublishableKey)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-        } header: {
-          Text("Merchant Logos")
-        } footer: {
-          Text("A publishable key enables merchant logos in transaction lists. Merchant names are sent to Logo.dev for matching.")
         }
 
         Section("Privacy & Legal") {

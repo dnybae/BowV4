@@ -11,6 +11,7 @@ final class BudgetTransaction {
   var createdAt: Date = Date()
   var amountMinor: Int64 = 0
   var payee: String = ""
+  var merchantDomain: String? = nil
   var notes: String = ""
   var kindRaw: String = BudgetTransactionKind.expense.rawValue
   var isCleared: Bool = false
@@ -34,6 +35,7 @@ final class BudgetTransaction {
     date: Date,
     amountMinor: Int64,
     payee: String,
+    merchantDomain: String? = nil,
     notes: String,
     kind: BudgetTransactionKind
   ) {
@@ -43,6 +45,7 @@ final class BudgetTransaction {
     self.date = date
     self.amountMinor = amountMinor
     self.payee = payee
+    self.merchantDomain = merchantDomain
     self.notes = notes
     self.kindRaw = kind.rawValue
   }

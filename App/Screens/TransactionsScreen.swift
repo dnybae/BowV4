@@ -153,7 +153,10 @@ struct TransactionRow: View {
 
   var body: some View {
     HStack(spacing: 12) {
-      MerchantLogoView(payee: transaction.kind == .transfer ? "" : transaction.payee)
+      MerchantLogoView(
+        merchantName: transaction.kind == .transfer ? "" : transaction.payee,
+        domain: transaction.kind == .transfer ? nil : transaction.merchantDomain
+      )
       VStack(alignment: .leading, spacing: 3) {
         Text(title)
           .foregroundStyle(.primary)

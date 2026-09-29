@@ -14,9 +14,9 @@ enum DemoData {
     let today = Date()
     let recent = Calendar.current.date(byAdding: .day, value: -2, to: today) ?? today
     return "Date,Payee,Memo,Amount\n"
-      + "\(formatter.string(from: recent)),Sample Hardware,New expense,-49.99\n"
-      + "\(formatter.string(from: today)),Sample Refund,New inflow,12.00\n"
-      + "\(formatter.string(from: today)),Streaming Service,Possible duplicate,-15.99\n"
+      + "\(formatter.string(from: recent)),The Home Depot,New expense,-49.99\n"
+      + "\(formatter.string(from: today)),Target,Refund,12.00\n"
+      + "\(formatter.string(from: today)),Netflix,Possible duplicate,-15.99\n"
   }
 
   static func makeContainer(scenario: DemoScenario = .showcase) throws -> ModelContainer {
@@ -103,7 +103,7 @@ enum DemoData {
       _ payee: String, _ amount: Int64, _ kind: BudgetTransactionKind,
       from account: BudgetAccount, to destination: BudgetAccount? = nil,
       envelope category: BudgetEnvelope? = nil, month: Int = 0, day: Int,
-      notes: String = "", cleared: Bool = true
+      notes: String = "", domain: String? = nil, cleared: Bool = true
     ) -> BudgetTransaction {
       let item = insert(BudgetTransaction(
         accountID: account.id,
@@ -112,6 +112,7 @@ enum DemoData {
         date: date(month, day),
         amountMinor: amount,
         payee: payee,
+        merchantDomain: domain,
         notes: notes,
         kind: kind
       ))
@@ -122,13 +123,13 @@ enum DemoData {
 
     var previousRent: BudgetTransaction?
     for month in -5...0 {
-      transaction("Paycheck · Northstar Studio", 465_000, .inflow, from: everyday, month: month, day: 1, notes: "Twice-monthly salary combined")
+      transaction("Paycheck", 465_000, .inflow, from: everyday, month: month, day: 1, notes: "Twice-monthly salary combined")
       let rent = transaction("Apartment Rent", -145_000, .expense, from: everyday, envelope: housing, month: month, day: 3)
       if month == -1 { previousRent = rent }
-      transaction("City Market", month == 0 ? -110_000 : -32_000 - Int64((month + 5) * 1_500), .expense, from: everyday, envelope: groceries, month: month, day: 7)
-      transaction("Electric & Water", -18_500, .expense, from: everyday, envelope: utilities, month: month, day: 11)
-      transaction("Metro Pass", -12_000, .expense, from: everyday, envelope: transport, month: month, day: 13)
-      transaction("Café Luna", -7_800, .expense, from: card, envelope: dining, month: month, day: 16)
+      transaction("Whole Foods Market", month == 0 ? -52_480 : -32_000 - Int64((month + 5) * 1_500), .expense, from: everyday, envelope: groceries, month: month, day: 7, domain: "wholefoodsmarket.com")
+      transaction("ComEd", -18_500, .expense, from: everyday, envelope: utilities, month: month, day: 11, domain: "comed.com")
+      transaction("Uber", -12_000, .expense, from: everyday, envelope: transport, month: month, day: 13, domain: "uber.com")
+      transaction("Starbucks", -780, .expense, from: card, envelope: dining, month: month, day: 16, domain: "starbucks.com")
       transaction("Card Payment", -20_000, .transfer, from: everyday, to: card, month: month, day: 19)
       allocate(145_000, to: housing, in: month)
       allocate(month == 0 ? 36_000 : 48_000, to: groceries, in: month)
@@ -143,46 +144,47 @@ enum DemoData {
     }
 
     transaction("Starting bonus", 75_000, .inflow, from: everyday, month: -4, day: 22)
-    transaction("Weekend Trip", -26_000, .expense, from: card, envelope: travel, month: -3, day: 23)
-    transaction("Dentist", -9_500, .expense, from: everyday, envelope: health, month: -2, day: 21)
+    transaction("Hilton", -26_000, .expense, from: card, envelope: travel, month: -3, day: 23, domain: "hilton.com")
+    transaction("Aspen Dental", -9_500, .expense, from: everyday, envelope: health, month: -2, day: 21, domain: "aspendental.com")
     transaction("Reimbursement", 4_200, .inflow, from: everyday, envelope: health, month: -2, day: 25)
     transaction("Savings Transfer", -35_000, .transfer, from: everyday, to: savings, month: -1, day: 25)
     transaction("Car Loan Payment", -31_500, .transfer, from: everyday, to: loan, envelope: carPayment, month: -1, day: 26)
     transaction("Investing", -20_000, .transfer, from: everyday, to: investments, envelope: emergency, month: -1, day: 27)
-    transaction("Unexpected Repair", -42_000, .expense, from: floatingCard, envelope: gifts, month: -1, day: 20)
+    transaction("Macy’s", -42_000, .expense, from: floatingCard, envelope: gifts, month: -1, day: 20, domain: "macys.com")
     transaction("Rewards Card Payment", -5_000, .transfer, from: everyday, to: floatingCard, month: 0, day: 14)
-    let gift = transaction("Birthday Gift", -5_800, .expense, from: wallet, envelope: gifts, month: 0, day: 12, cleared: false)
+    let gift = transaction("Target", -5_800, .expense, from: wallet, envelope: gifts, month: 0, day: 12, domain: "target.com", cleared: false)
     gift.notes = "Cash purchase to categorize and fund"
-    transaction("Riverside Restaurant", -65_000, .expense, from: card, envelope: dining, month: 0, day: 17, cleared: false)
-    transaction("Pharmacy", -4_600, .expense, from: everyday, envelope: health, month: 0, day: 18)
-    let uncategorized = transaction("Corner Shop", -2_750, .expense, from: everyday, day: 20, cleared: false)
+    transaction("Olive Garden", -18_500, .expense, from: card, envelope: dining, month: 0, day: 17, domain: "olivegarden.com", cleared: false)
+    transaction("CVS Pharmacy", -4_600, .expense, from: everyday, envelope: health, month: 0, day: 18, domain: "cvs.com")
+    let uncategorized = transaction("Target", -2_750, .expense, from: everyday, day: 20, domain: "target.com", cleared: false)
     uncategorized.notes = "Sample uncategorized purchase"
-    let approval = transaction("Streaming Service", -1_599, .expense, from: card, envelope: fun, day: 21)
+    let approval = transaction("Netflix", -1_599, .expense, from: card, envelope: fun, day: 21, domain: "netflix.com")
     approval.sourceRaw = "simplefin"
     approval.externalKey = "demo|streaming"
     approval.needsApproval = true
-    let match = transaction("City Market", -3_200, .expense, from: everyday, envelope: groceries, day: 22, cleared: false)
+    let match = transaction("Whole Foods Market", -3_200, .expense, from: everyday, envelope: groceries, day: 22, domain: "wholefoodsmarket.com", cleared: false)
     match.notes = "Manually entered before bank import"
-    let linked = transaction("Coffee House", -650, .expense, from: everyday, envelope: dining, day: 23)
+    let linked = transaction("Dunkin", -650, .expense, from: everyday, envelope: dining, day: 23, domain: "dunkindonuts.com")
     linked.sourceRaw = "manualLinked"
     linked.externalKey = "demo|coffee"
     linked.needsApproval = true
-    let imported = transaction("Bookstore", -2_400, .expense, from: card, envelope: fun, day: 24)
+    let imported = transaction("Barnes & Noble", -2_400, .expense, from: card, envelope: fun, day: 24, domain: "barnesandnoble.com")
     imported.sourceRaw = "simplefin"
     imported.externalKey = "demo|bookstore"
     imported.needsApproval = true
 
-    insert(BudgetPayee(name: "City Market", defaultEnvelopeID: groceries.id, exactMatchText: "CITY MARKET"))
+    insert(BudgetPayee(name: "Whole Foods Market", defaultEnvelopeID: groceries.id, exactMatchText: "WHOLE FOODS"))
     insert(BudgetPayee(name: "Apartment Rent", defaultEnvelopeID: housing.id, exactMatchText: "APARTMENT RENT ACH"))
-    insert(BudgetPayee(name: "Café Luna", defaultEnvelopeID: dining.id, exactMatchText: "CAFE LUNA"))
+    insert(BudgetPayee(name: "Starbucks", defaultEnvelopeID: dining.id, exactMatchText: "STARBUCKS"))
+    insert(BudgetPayee(name: "Netflix", defaultEnvelopeID: fun.id, exactMatchText: "NETFLIX"))
 
     let rentSchedule = insert(BudgetSchedule(payee: "Apartment Rent", amountMinor: 145_000, accountID: everyday.id, envelopeID: housing.id, startDate: date(-5, 3), frequency: .monthly, notes: "Due on the 3rd"))
     previousRent?.scheduleID = rentSchedule.id
     previousRent?.scheduledFor = date(-1, 3)
-    insert(BudgetSchedule(payee: "Weekly Groceries", amountMinor: 13_000, accountID: everyday.id, envelopeID: groceries.id, startDate: today, frequency: .weekly, notes: "Sample weekly bill"))
-    insert(BudgetSchedule(payee: "Insurance Renewal", amountMinor: 28_000, accountID: everyday.id, envelopeID: nil, startDate: today, frequency: .once, notes: "Choose an envelope before recording"))
-    insert(BudgetSchedule(payee: "Annual Subscription", amountMinor: 12_000, accountID: card.id, envelopeID: fun.id, startDate: date(-2, 18), frequency: .yearly, notes: "Renews annually"))
-    let paused = insert(BudgetSchedule(payee: "Paused Gym Membership", amountMinor: 4_500, accountID: everyday.id, envelopeID: fun.id, startDate: date(-1, 8), frequency: .monthly, notes: "Inactive example"))
+    insert(BudgetSchedule(payee: "Instacart", amountMinor: 13_000, accountID: everyday.id, envelopeID: groceries.id, startDate: today, frequency: .weekly, notes: "Weekly grocery order"))
+    insert(BudgetSchedule(payee: "GEICO", amountMinor: 28_000, accountID: everyday.id, envelopeID: nil, startDate: today, frequency: .once, notes: "Choose an envelope before recording"))
+    insert(BudgetSchedule(payee: "Disney+", amountMinor: 12_000, accountID: card.id, envelopeID: fun.id, startDate: date(-2, 18), frequency: .yearly, notes: "Renews annually"))
+    let paused = insert(BudgetSchedule(payee: "Planet Fitness", amountMinor: 4_500, accountID: everyday.id, envelopeID: fun.id, startDate: date(-1, 8), frequency: .monthly, notes: "Inactive example"))
     paused.isActive = false
 
     let connection = insert(SimpleFINConnection())
@@ -200,9 +202,9 @@ enum DemoData {
     cardLink.reportedAt = today
     insert(SimpleFINAccountLink(remoteKey: "demo-unmapped", name: "Unmapped Savings", currencyCode: "USD"))
 
-    let duplicate = insert(SimpleFINImportRecord(remoteKey: "demo|duplicate", localAccountID: everyday.id, date: match.date, amountMinor: -3_200, payee: "City Market"))
+    let duplicate = insert(SimpleFINImportRecord(remoteKey: "demo|duplicate", localAccountID: everyday.id, date: match.date, amountMinor: -3_200, payee: "Whole Foods Market"))
     duplicate.status = .review
-    let unmatched = insert(SimpleFINImportRecord(remoteKey: "demo|unmatched", localAccountID: card.id, date: today, amountMinor: -8_750, payee: "Airline Tickets"))
+    let unmatched = insert(SimpleFINImportRecord(remoteKey: "demo|unmatched", localAccountID: card.id, date: today, amountMinor: -8_750, payee: "Delta Air Lines"))
     unmatched.status = .review
     let linkedRecord = insert(SimpleFINImportRecord(remoteKey: "demo|coffee", localAccountID: everyday.id, date: linked.date, amountMinor: linked.amountMinor, payee: linked.payee))
     linkedRecord.status = .linked

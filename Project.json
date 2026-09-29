@@ -22,6 +22,7 @@
           "CFBundleDisplayName": "Bow",
           "CFBundleShortVersionString": "1.0",
           "CFBundleVersion": "1",
+          "LogoDevPublishableKey": "$(LOGO_DEV_PUBLISHABLE_KEY)",
           "ITSAppUsesNonExemptEncryption": false,
           "BGTaskSchedulerPermittedIdentifiers": [
             "app.bitrig.new.b6ec559c-1e09-43ff-a70f-25c814186523.simplefin-refresh"
@@ -42,6 +43,7 @@
         "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
         "CURRENT_PROJECT_VERSION": "1",
         "MARKETING_VERSION": "1.0",
+        "LOGO_DEV_PUBLISHABLE_KEY": "pk_dXt4s8CCQ92jZp3kzg7udQ",
         "PRODUCT_BUNDLE_IDENTIFIER": "app.bitrig.new.b6ec559c-1e09-43ff-a70f-25c814186523",
         "PRODUCT_NAME": "$(TARGET_NAME)",
         "SWIFT_VERSION": "5.0",

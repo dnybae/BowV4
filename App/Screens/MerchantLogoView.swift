@@ -1,37 +1,13 @@
 import SwiftUI
 
 struct MerchantLogoView: View {
-  @AppStorage("bow.logoDevPublishableKey") private var publishableKey = ""
-  var payee: String
-
-  private var logoURL: URL? {
-    let key = publishableKey.trimmingCharacters(in: .whitespacesAndNewlines)
-    let name = payee.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard key.hasPrefix("pk_"), !name.isEmpty else { return nil }
-    var components = URLComponents()
-    components.scheme = "https"
-    components.host = "img.logo.dev"
-    let domain = name.lowercased()
-    let isDomain = !domain.contains(" ") && domain.contains(".")
-      && domain.range(of: "^[a-z0-9.-]+$", options: .regularExpression) != nil
-    components.path = isDomain ? "/\(domain)" : "/name/\(name)"
-    components.queryItems = [
-      URLQueryItem(name: "token", value: key),
-      URLQueryItem(name: "size", value: "80"),
-      URLQueryItem(name: "format", value: "png"),
-      URLQueryItem(name: "fallback", value: "404")
-    ]
-    return components.url
-  }
+  var merchantName: String
+  var domain: String? = nil
 
   var body: some View {
-    Group {
-      if let logoURL {
-        AsyncImage(url: logoURL) { image in
-          image.resizable().scaledToFit()
-        } placeholder: {
-          fallback
-        }
+    AsyncImage(url: LogoDev.logoURL(domain: domain, merchantName: merchantName)) { phase in
+      if let image = phase.image {
+        image.resizable().scaledToFit()
       } else {
         fallback
       }
@@ -43,8 +19,8 @@ struct MerchantLogoView: View {
   }
 
   private var fallback: some View {
-    Text(String(payee.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1)).uppercased())
-      .font(.subheadline.weight(.bold))
+    Image(systemName: "storefront")
+      .font(.subheadline)
       .foregroundStyle(.secondary)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
   }

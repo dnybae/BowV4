@@ -102,6 +102,7 @@ struct PayeeDirectory {
     schedules: [BudgetSchedule]
   ) {
     for transaction in transactions where canonicalKey(for: transaction.payee, payees: payees) == oldKey {
+      if transaction.payee != newName { transaction.merchantDomain = nil }
       transaction.payee = newName
     }
     for schedule in schedules where canonicalKey(for: schedule.payee, payees: payees) == oldKey {

@@ -39,7 +39,9 @@ struct ReviewInboxScreen: View {
               reviewRow(
                 title: transaction.payee.isEmpty ? "Transaction" : transaction.payee,
                 subtitle: "Review imported transaction · \(transaction.date.formatted(date: .abbreviated, time: .omitted))",
-                amount: transaction.amountMinor
+                amount: transaction.amountMinor,
+                merchantName: transaction.kind == .transfer ? "" : transaction.payee,
+                merchantDomain: transaction.kind == .transfer ? nil : transaction.merchantDomain
               )
             }
           case .bankRecord(let record, let related):
@@ -55,7 +57,8 @@ struct ReviewInboxScreen: View {
               reviewRow(
                 title: record.payee.isEmpty ? "Bank transaction" : record.payee,
                 subtitle: related == nil ? "Resolve bank match" : "Resolve bank match and scheduled bill",
-                amount: record.amountMinor
+                amount: record.amountMinor,
+                merchantName: record.payee
               )
             }
           case .scheduled(let occurrence, let schedule):
@@ -63,7 +66,8 @@ struct ReviewInboxScreen: View {
               reviewRow(
                 title: schedule.payee,
                 subtitle: "Scheduled for \(occurrence.scheduledFor.formatted(date: .abbreviated, time: .omitted))",
-                amount: -schedule.amountMinor
+                amount: -schedule.amountMinor,
+                merchantName: schedule.kind == .transfer ? "" : schedule.payee
               )
               HStack {
                 Button("Record Transaction", systemImage: "plus") {
@@ -118,8 +122,12 @@ struct ReviewInboxScreen: View {
     }
   }
 
-  private func reviewRow(title: String, subtitle: String, amount: Int64) -> some View {
+  private func reviewRow(
+    title: String, subtitle: String, amount: Int64,
+    merchantName: String, merchantDomain: String? = nil
+  ) -> some View {
     HStack(spacing: 12) {
+      MerchantLogoView(merchantName: merchantName, domain: merchantDomain)
       VStack(alignment: .leading, spacing: 4) {
         Text(title).foregroundStyle(.primary)
         Text(subtitle).font(.caption).foregroundStyle(.secondary)

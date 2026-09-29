@@ -210,7 +210,10 @@ struct InsightsScreen: View {
             editingTransaction = transaction
           } label: {
             HStack {
-              MerchantLogoView(payee: transaction.payee)
+              MerchantLogoView(
+                merchantName: transaction.kind == .transfer ? "" : transaction.payee,
+                domain: transaction.kind == .transfer ? nil : transaction.merchantDomain
+              )
               VStack(alignment: .leading) {
                 Text(transaction.payee.isEmpty ? transaction.kind.title : transaction.payee)
                   .foregroundStyle(.primary)

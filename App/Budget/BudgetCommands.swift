@@ -254,7 +254,11 @@ struct BudgetCommands {
     transaction.envelopeID = envelopeID
     transaction.amountMinor = kind == .inflow ? amountMinor : -amountMinor
     transaction.date = date
-    transaction.payee = payee.trimmingCharacters(in: .whitespacesAndNewlines)
+    let updatedPayee = payee.trimmingCharacters(in: .whitespacesAndNewlines)
+    if transaction.payee != updatedPayee || kind == .transfer {
+      transaction.merchantDomain = nil
+    }
+    transaction.payee = updatedPayee
     transaction.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
     if let scheduleID, let scheduledFor {
       transaction.scheduleID = scheduleID

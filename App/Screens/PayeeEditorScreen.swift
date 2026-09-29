@@ -11,7 +11,6 @@ struct PayeeEditorScreen: View {
   @State private var name: String
   @State private var exactMatchText: String
   @State private var merchantDomain: String
-  @State private var brandResults: [BrandSearchResult] = []
   @State private var defaultEnvelopeID: UUID?
   @State private var errorMessage: String?
   @State private var showingDelete = false
@@ -36,27 +35,6 @@ struct PayeeEditorScreen: View {
         Section("Payee") {
           TextField("Payee Name", text: $name)
             .textInputAutocapitalization(.words)
-          if merchantDomain.isEmpty && !brandResults.isEmpty {
-            ForEach(brandResults) { brand in
-              Button {
-                name = brand.name
-                merchantDomain = brand.domain
-                brandResults = []
-              } label: {
-                HStack(spacing: 12) {
-                  MerchantLogoView(
-                    merchantName: brand.name, domain: brand.domain,
-                    logoURL: brand.compactLogoURL
-                  )
-                  VStack(alignment: .leading, spacing: 2) {
-                    Text(brand.name).foregroundStyle(.primary)
-                    Text(brand.domain).font(.caption).foregroundStyle(.secondary)
-                  }
-                }
-                .contentShape(Rectangle())
-              }
-            }
-          }
         }
         Section {
           TextField("Website domain", text: $merchantDomain)
@@ -70,7 +48,7 @@ struct PayeeEditorScreen: View {
         } header: {
           Text("Company")
         } footer: {
-          Text("Choose a company suggestion above or enter its website domain to show the correct logo. Leave blank for a personal payee.")
+          Text("Logo.dev looks up the payee name automatically. Enter a website domain if you need a more precise logo, or leave this blank for a personal payee.")
         }
         Section {
           CategorySelectionField(
@@ -116,17 +94,6 @@ struct PayeeEditorScreen: View {
         Button("OK") { errorMessage = nil }
       } message: {
         Text(errorMessage ?? "")
-      }
-      .task(id: trimmedName) {
-        brandResults = []
-        guard merchantDomain.isEmpty, trimmedName.count >= 2,
-              BrandLookupClient.isConfigured else { return }
-        do {
-          try await Task.sleep(for: .milliseconds(200))
-          let results = try await BrandLookupClient.search(trimmedName)
-          try Task.checkCancellation()
-          brandResults = results
-        } catch { }
       }
     }
   }

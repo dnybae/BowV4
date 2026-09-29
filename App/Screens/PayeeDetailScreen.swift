@@ -42,9 +42,6 @@ struct PayeeDetailScreen: View {
                 Text(domain).font(.subheadline).foregroundStyle(.secondary)
               }
             }
-            if let description = payee.brandDescription, !description.isEmpty {
-              Text(description).font(.subheadline)
-            }
           }
         }
         if let payee = payees.first(where: { $0.id == entry.ruleID }),

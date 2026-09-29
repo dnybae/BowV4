@@ -413,7 +413,6 @@ final class SimpleFINSyncCoordinator {
       payee: payee, notes: "", kind: kind
     )
     transaction.sourceRaw = "simplefin"
-    transaction.bankDescription = payee
     transaction.isCleared = true
     transaction.needsApproval = true
     return transaction

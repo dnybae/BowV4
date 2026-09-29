@@ -297,10 +297,6 @@ struct BudgetCommands {
     transaction.amountMinor = kind == .inflow ? amountMinor : -amountMinor
     transaction.date = date
     let updatedPayee = payee.trimmingCharacters(in: .whitespacesAndNewlines)
-    if transaction.payee != updatedPayee
-        && (transaction.sourceRaw == "simplefin" || transaction.sourceRaw == "bankFile") {
-      transaction.brandLookupAttemptedAt = Date()
-    }
     transaction.merchantDomain = kind == .transfer ? nil : merchantDomain
     transaction.payee = updatedPayee
     transaction.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)

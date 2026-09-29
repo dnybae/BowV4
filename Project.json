@@ -22,7 +22,6 @@
           "BGTaskSchedulerPermittedIdentifiers" : [
             "app.bitrig.new.b6ec559c-1e09-43ff-a70f-25c814186523.simplefin-refresh"
           ],
-          "BrandLookupBaseURL" : "$(BOW_BRAND_LOOKUP_BASE_URL)",
           "CFBundleDisplayName" : "Bow",
           "CFBundleShortVersionString" : "1.0",
           "CFBundleVersion" : "1",
@@ -46,7 +45,6 @@
       "settings" : {
         "ASSETCATALOG_COMPILER_APPICON_NAME" : "AppIcon",
         "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME" : "AccentColor",
-        "BOW_BRAND_LOOKUP_BASE_URL" : "",
         "CURRENT_PROJECT_VERSION" : "1",
         "LOGO_DEV_PUBLISHABLE_KEY" : "pk_dXt4s8CCQ92jZp3kzg7udQ",
         "MARKETING_VERSION" : "1.0",

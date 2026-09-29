@@ -33,7 +33,6 @@ node_modules/
 # Environment
 .env
 .env.local
-.dev.vars
 
 # Build
 build/

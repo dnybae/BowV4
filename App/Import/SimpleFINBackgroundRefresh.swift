@@ -28,6 +28,5 @@ enum SimpleFINBackgroundRefresh {
     guard !UserDefaults.standard.bool(forKey: "bow.demoMode") else { return }
     defer { schedule(in: container.mainContext) }
     _ = try? await SimpleFINSyncCoordinator.shared.sync(in: container.mainContext)
-    await MerchantEnrichmentCoordinator.shared.run(container: container, maxLookups: 5)
   }
 }

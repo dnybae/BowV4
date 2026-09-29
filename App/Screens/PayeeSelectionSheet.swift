@@ -8,8 +8,6 @@ struct PayeeSelectionSheet: View {
   var selectedName: String
   var onSelect: (BudgetPayee) -> Void
   @State private var searchText = ""
-  @State private var brandResults: [BrandSearchResult] = []
-  @State private var isSearching = false
   @State private var errorMessage: String?
   @State private var directoryEntries: [PayeeDirectory.Entry] = []
   @State private var isLoadingPayees = true
@@ -72,45 +70,18 @@ struct PayeeSelectionSheet: View {
             .accessibilityLabel("Create payee named \(query)")
           }
         }
-        if !brandResults.isEmpty {
-          Section("Companies") {
-            ForEach(brandResults) { brand in
-              Button {
-                selectBrand(brand)
-              } label: {
-                HStack(spacing: 12) {
-                  MerchantLogoView(
-                    merchantName: brand.name, domain: brand.domain,
-                    logoURL: brand.compactLogoURL
-                  )
-                  VStack(alignment: .leading, spacing: 2) {
-                    Text(brand.name).foregroundStyle(.primary)
-                    Text(brand.domain).font(.caption).foregroundStyle(.secondary)
-                  }
-                  Spacer(minLength: 8)
-                }
-                .contentShape(Rectangle())
-              }
-              .accessibilityLabel("Select company \(brand.name), \(brand.domain)")
-            }
-          }
-        } else if isSearching {
-          Section("Companies") {
-            ProgressView("Searching companies…")
-          }
-        }
         if localEntries.isEmpty && query.isEmpty && isLoadingPayees {
           ProgressView("Loading payees…")
             .frame(maxWidth: .infinity)
         } else if localEntries.isEmpty && query.isEmpty {
           ContentUnavailableView(
             "No payees yet", systemImage: "person.text.rectangle",
-            description: Text("Search for a company or create a payee by name.")
+            description: Text("Search your payees or create one by name.")
           )
         }
       }
       .listStyle(.insetGrouped)
-      .searchable(text: $searchText, placement: .toolbar, prompt: "Search payees or companies")
+      .searchable(text: $searchText, placement: .toolbar, prompt: "Search payees")
       .searchFocused($searchFocused)
       .navigationTitle("Payee")
       .navigationBarTitleDisplayMode(.inline)
@@ -126,26 +97,6 @@ struct PayeeSelectionSheet: View {
       .task {
         try? await Task.sleep(for: .milliseconds(250))
         if !Task.isCancelled { searchFocused = true }
-      }
-      .task(id: query) {
-        let requestedQuery = query
-        brandResults = []
-        isSearching = false
-        guard requestedQuery.count >= 2 && BrandLookupClient.isConfigured else { return }
-        do {
-          try await Task.sleep(for: .milliseconds(200))
-          try Task.checkCancellation()
-          isSearching = true
-          let results = try await BrandLookupClient.search(requestedQuery)
-          try Task.checkCancellation()
-          guard query == requestedQuery else { return }
-          brandResults = results
-          isSearching = false
-        } catch is CancellationError {
-          if query == requestedQuery { isSearching = false }
-        } catch {
-          if query == requestedQuery { isSearching = false }
-        }
       }
       .alert("Couldn’t Save Payee", isPresented: Binding(
         get: { errorMessage != nil },
@@ -170,27 +121,22 @@ struct PayeeSelectionSheet: View {
         return
       }
     }
-    createPayee(name: entry.name, domain: nil)
+    createPayee(name: entry.name)
   }
 
   private func createNamedPayee() {
     guard !query.isEmpty else { return }
-    createPayee(name: query, domain: nil)
+    createPayee(name: query)
   }
 
-  private func selectBrand(_ brand: BrandSearchResult) {
-    createPayee(name: brand.name, domain: brand.domain)
-  }
-
-  private func createPayee(name: String, domain: String?) {
+  private func createPayee(name: String) {
     do {
       let savedPayees = try modelContext.fetch(FetchDescriptor<BudgetPayee>())
       let payee: BudgetPayee
       if let existing = PayeeDirectory.matchingPayee(for: name, payees: savedPayees) {
         payee = existing
-        if let domain { payee.merchantDomain = domain }
       } else {
-        payee = BudgetPayee(name: name, merchantDomain: domain)
+        payee = BudgetPayee(name: name)
         modelContext.insert(payee)
       }
       try modelContext.save()

@@ -3,6 +3,7 @@ import SwiftData
 import UIKit
 
 struct ContentView: View {
+  @AppStorage("bow.appearance") private var appearanceRaw = AppAppearance.system.rawValue
   @AppStorage("bow.demoMode") private var isDemoMode = false
   @AppStorage("bow.demoResetVersion") private var demoResetVersion = 0
   @AppStorage("bow.demoScenario") private var demoScenarioRaw = DemoScenario.showcase.rawValue
@@ -33,6 +34,11 @@ struct ContentView: View {
     }
     .task(id: isDemoMode) {
       if isDemoMode && demoContainer == nil { prepareDemo() }
+    }
+    .task(id: appearanceRaw) {
+      AppIconAppearanceController.synchronize(
+        for: AppAppearance(rawValue: appearanceRaw) ?? .system
+      )
     }
     .onChange(of: demoResetVersion) { _, _ in
       demoContainer = nil

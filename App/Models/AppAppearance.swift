@@ -22,4 +22,12 @@ enum AppAppearance: String, CaseIterable, Identifiable {
     case .dark: .dark
     }
   }
+
+  var alternateIconName: String? {
+    switch self {
+    case .system: nil
+    case .light: "AppIconLight"
+    case .dark: "AppIconDark"
+    }
+  }
 }

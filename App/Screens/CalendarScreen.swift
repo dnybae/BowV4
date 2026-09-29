@@ -14,26 +14,20 @@ struct CalendarScreen: View {
   var returnToTodayRequest: Int = 0
   var onRecord: (ScheduledTransactionDraft) -> Void
   var onSelectTransaction: (UUID) -> Void
-  @State private var timeline = CalendarTimelineWindow(centeredOn: Date())
-  @State private var calendarScrollID = UUID()
-  @State private var scrollDay: CalendarDaySlot.ID? = .day(
-    Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
-  )
-  @State private var visibleMonth = Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
-  @State private var calendarVisibleRect: CGRect = .zero
-  @State private var hasPlacedInitialScroll = false
-  @State private var isPlacingInitialScroll = false
-  @State private var isTodayVisible = true
-  @State private var isCalendarScrolling = false
-  @State private var isExtendingTimeline = false
+  @State private var displayedMonth = Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
   @State private var editingSchedule: BudgetSchedule?
-  @State private var recordedDays: Set<Date> = []
   @State private var monthTransactions: [BudgetTransaction] = []
   @State private var selectedSnapshot: BudgetSnapshot?
   @State private var snapshotRepository: BudgetSnapshotRepository?
   @State private var refreshVersion = 0
   @State private var isLoadingMonth = false
 
+  private var monthPage: CalendarMonthPage {
+    CalendarMonthPage(containing: displayedMonth, calendar: calendar)
+  }
+  private var recordedDays: Set<Date> {
+    Set(monthTransactions.map { calendar.startOfDay(for: $0.date) })
+  }
   private var selectedSchedules: [BudgetSchedule] {
     schedules.filter {
       $0.isActive && ScheduleRecurrence(calendar: calendar).occurs(
@@ -55,79 +49,51 @@ struct CalendarScreen: View {
     }
   }
   var body: some View {
-    ScrollViewReader { scrollProxy in
-      VStack(spacing: 0) {
-        CalendarWeekdayHeader(calendar: calendar)
-        Divider()
-        ScrollView(.vertical) {
-          CalendarTimelineGrid(
-            days: timeline.days,
-            selectedDate: $selectedDate,
-            schedules: schedules,
-            recordedDays: recordedDays,
-            calendar: calendar
-          )
-        }
-        .id(calendarScrollID)
-        .scrollTargetBehavior(.viewAligned)
-        .scrollPosition(id: $scrollDay, anchor: .top)
-        .onScrollGeometryChange(for: CalendarScrollMetrics.self) { geometry in
-          CalendarScrollMetrics(
-            visibleRect: geometry.visibleRect,
-            contentHeight: geometry.contentSize.height
-          )
-        } action: { _, metrics in
-          calendarVisibleRect = metrics.visibleRect
-          if !hasPlacedInitialScroll,
-             metrics.contentHeight > metrics.visibleRect.height {
-            placeInitialScroll(using: scrollProxy)
-          } else {
-            updateVisibleDays(in: metrics.visibleRect, scrollProxy: scrollProxy)
-          }
-        }
-        .onAppear {
-          if !timeline.contains(selectedDate) {
-            timeline = CalendarTimelineWindow(centeredOn: selectedDate, calendar: calendar)
-          }
-          visibleMonth = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
-        }
-        .onScrollPhaseChange { _, phase in
-          isCalendarScrolling = phase.isScrolling
-          if !phase.isScrolling {
-            updateVisibleDays(in: calendarVisibleRect, scrollProxy: scrollProxy)
-          }
-        }
-        Divider()
-        selectedDayAgenda
-          .frame(height: 230)
+    VStack(spacing: 0) {
+      CalendarMonthHeader(
+        month: displayedMonth,
+        onPrevious: { moveMonth(by: -1) },
+        onNext: { moveMonth(by: 1) }
+      )
+      CalendarWeekdayHeader(calendar: calendar)
+      Divider()
+      CalendarMonthGrid(
+        days: monthPage.days,
+        selectedDate: $selectedDate,
+        schedules: schedules,
+        recordedDays: recordedDays,
+        calendar: calendar
+      )
+      Divider()
+      selectedDayAgenda
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    .navigationTitle("Calendar")
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbar {
+      ToolbarItem(placement: .topBarTrailing) {
+        Button("Today") { returnToToday() }
       }
-      .navigationTitle(visibleMonth.formatted(.dateTime.month(.wide).year()))
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .topBarTrailing) {
-          if !calendar.isDateInToday(selectedDate) || !isTodayVisible {
-            Button("Today") { returnToToday(using: scrollProxy) }
-          }
-        }
-      }
-      .onChange(of: returnToTodayRequest) { _, _ in
-        returnToToday(using: scrollProxy)
-      }
-      .task(id: CalendarLoadKey(month: calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate,
-                                refreshVersion: refreshVersion)) {
-        await loadSelectedMonth()
-      }
-      .task(id: CalendarDayMarkLoadKey(firstMonth: timeline.firstMonth,
-                                       endMonth: timeline.endMonth,
-                                       refreshVersion: refreshVersion)) {
-        await loadRecordedDays()
-      }
-      .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-        refreshVersion += 1
-      }
-      .sheet(item: $editingSchedule) { schedule in
-        ScheduleEditorScreen(schedule: schedule, accounts: accounts, envelopes: envelopes, currencyCode: currencyCode)
-      }
+    }
+    .onAppear {
+      displayedMonth = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
+    }
+    .onChange(of: selectedDate) { _, date in
+      let month = calendar.dateInterval(of: .month, for: date)?.start ?? date
+      if month != displayedMonth { displayedMonth = month }
+    }
+    .onChange(of: returnToTodayRequest) { _, _ in
+      returnToToday()
+    }
+    .task(id: CalendarLoadKey(month: calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate,
+                              refreshVersion: refreshVersion)) {
+      await loadSelectedMonth()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+      refreshVersion += 1
+    }
+    .sheet(item: $editingSchedule) { schedule in
+      ScheduleEditorScreen(schedule: schedule, accounts: accounts, envelopes: envelopes, currencyCode: currencyCode)
     }
   }
 
@@ -210,121 +176,41 @@ struct CalendarScreen: View {
     }
   }
 
-  private func placeInitialScroll(using proxy: ScrollViewProxy) {
-    guard !hasPlacedInitialScroll, !isPlacingInitialScroll else { return }
-    isPlacingInitialScroll = true
-    let month = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
-    visibleMonth = month
-    Task { @MainActor in
-      try? await Task.sleep(nanoseconds: 120_000_000)
-      let target = CalendarDaySlot.ID.day(month)
-      scrollDay = target
-      proxy.scrollTo(target, anchor: .top)
-      hasPlacedInitialScroll = true
-      isPlacingInitialScroll = false
-      updateVisibleDays(in: calendarVisibleRect, scrollProxy: proxy)
+  private func moveMonth(by offset: Int) {
+    guard let nextDate = monthPage.adjacentSelection(from: selectedDate, by: offset) else { return }
+    withAnimation(reduceMotion ? nil : .snappy) {
+      selectedDate = nextDate
+      displayedMonth = calendar.dateInterval(of: .month, for: nextDate)?.start ?? nextDate
     }
   }
 
-  private func returnToToday(using proxy: ScrollViewProxy) {
+  private func returnToToday() {
     let today = Date()
-    let month = calendar.dateInterval(of: .month, for: today)?.start ?? today
-    selectedDate = today
-    visibleMonth = month
-    isTodayVisible = true
-    let target = CalendarDaySlot.ID.day(month)
-    if !timeline.contains(today) {
-      hasPlacedInitialScroll = false
-      isPlacingInitialScroll = false
-      calendarVisibleRect = .zero
-      timeline = CalendarTimelineWindow(centeredOn: today, calendar: calendar)
-      scrollDay = target
-      calendarScrollID = UUID()
-    } else {
-      withAnimation(reduceMotion ? nil : .snappy) {
-        scrollDay = target
-        proxy.scrollTo(target, anchor: .top)
-      }
+    withAnimation(reduceMotion ? nil : .snappy) {
+      selectedDate = today
+      displayedMonth = calendar.dateInterval(of: .month, for: today)?.start ?? today
     }
-  }
-
-  private func updateVisibleDays(in rect: CGRect, scrollProxy: ScrollViewProxy) {
-    guard hasPlacedInitialScroll, rect.width > 0, rect.height > 0, !timeline.days.isEmpty else { return }
-    let rowHeight = CalendarGridMetrics.rowHeight
-    let rowCount = (timeline.days.count + 6) / 7
-    let firstRow = max(0, Int(floor(rect.minY / rowHeight)))
-    let lastRow = min(rowCount - 1, Int(ceil(rect.maxY / rowHeight)) - 1)
-    guard firstRow <= lastRow else { return }
-    var first: Date?
-    var last: Date?
-    var monthAreas: [Date: CGFloat] = [:]
-    for row in firstRow...lastRow {
-      let rowTop = CGFloat(row) * rowHeight
-      let visibleHeight = max(0, min(rowTop + rowHeight, rect.maxY) - max(rowTop, rect.minY))
-      guard visibleHeight > 0 else { continue }
-      for index in (row * 7)..<min(row * 7 + 7, timeline.days.count) {
-        guard let date = timeline.days[index].date else { continue }
-        if first == nil { first = date }
-        last = date
-        let month = calendar.dateInterval(of: .month, for: date)?.start ?? date
-        monthAreas[month, default: 0] += visibleHeight
-      }
-    }
-    guard let first, let last else { return }
-    let today = calendar.startOfDay(for: Date())
-    isTodayVisible = first <= today && today <= last
-    if let largest = monthAreas.max(by: { $0.value < $1.value }),
-       largest.value > monthAreas[visibleMonth, default: 0] + 1 {
-      visibleMonth = largest.key
-    }
-    guard !isCalendarScrolling, !isExtendingTimeline else { return }
-    if let direction = timeline.directionToExtend(near: first), direction == .earlier {
-      extendTimeline(.earlier, anchoredAt: first, using: scrollProxy)
-    } else if let direction = timeline.directionToExtend(near: last), direction == .later {
-      extendTimeline(.later, anchoredAt: first, using: scrollProxy)
-    }
-  }
-
-  private func extendTimeline(
-    _ direction: CalendarTimelineWindow.Direction,
-    anchoredAt visibleDate: Date,
-    using proxy: ScrollViewProxy
-  ) {
-    isExtendingTimeline = true
-    let anchor = CalendarDaySlot.ID.day(visibleDate)
-    Task { @MainActor in
-      await Task.yield()
-      timeline.extend(direction)
-      await Task.yield()
-      scrollDay = anchor
-      proxy.scrollTo(anchor, anchor: .top)
-      isExtendingTimeline = false
-    }
-  }
-
-  private func loadRecordedDays() async {
-    let first = timeline.firstMonth
-    let end = timeline.endMonth
-    let predicate = #Predicate<BudgetTransaction> { $0.date >= first && $0.date < end }
-    var descriptor = FetchDescriptor<BudgetTransaction>(predicate: predicate)
-    descriptor.propertiesToFetch = [\.date]
-    let dates = (try? modelContext.fetch(descriptor))?.map(\.date) ?? []
-    guard !Task.isCancelled else { return }
-    recordedDays = Set(dates.map { calendar.startOfDay(for: $0) })
   }
 
   private func loadSelectedMonth() async {
     isLoadingMonth = true
+    monthTransactions = []
+    selectedSnapshot = nil
     let month = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
     let next = calendar.date(byAdding: .month, value: 1, to: month) ?? .distantFuture
     let predicate = #Predicate<BudgetTransaction> { $0.date >= month && $0.date < next }
-    monthTransactions = (try? modelContext.fetch(FetchDescriptor(predicate: predicate))) ?? []
+    let transactions = (try? modelContext.fetch(FetchDescriptor(predicate: predicate))) ?? []
+    guard !Task.isCancelled else { return }
+    monthTransactions = transactions
     if snapshotRepository == nil {
       snapshotRepository = BudgetSnapshotRepository(modelContainer: modelContext.container)
     }
     if let snapshotRepository {
       await snapshotRepository.invalidate()
-      selectedSnapshot = try? await snapshotRepository.snapshot(month: month)
+      guard !Task.isCancelled else { return }
+      let snapshot = try? await snapshotRepository.snapshot(month: month)
+      guard !Task.isCancelled else { return }
+      selectedSnapshot = snapshot
     }
     isLoadingMonth = false
   }
@@ -335,10 +221,30 @@ private struct CalendarLoadKey: Hashable {
   var refreshVersion: Int
 }
 
-private struct CalendarDayMarkLoadKey: Hashable {
-  var firstMonth: Date
-  var endMonth: Date
-  var refreshVersion: Int
+private struct CalendarMonthHeader: View {
+  var month: Date
+  var onPrevious: () -> Void
+  var onNext: () -> Void
+
+  var body: some View {
+    HStack(spacing: 12) {
+      Text(month, format: .dateTime.month(.wide).year())
+        .font(.largeTitle.weight(.bold))
+        .lineLimit(1)
+        .minimumScaleFactor(0.75)
+        .accessibilityAddTraits(.isHeader)
+      Spacer(minLength: 0)
+      Button("Previous Month", systemImage: "chevron.left") { onPrevious() }
+        .labelStyle(.iconOnly)
+        .buttonStyle(.bordered)
+      Button("Next Month", systemImage: "chevron.right") { onNext() }
+        .labelStyle(.iconOnly)
+        .buttonStyle(.bordered)
+    }
+    .padding(.horizontal, 20)
+    .padding(.top, 12)
+    .padding(.bottom, 8)
+  }
 }
 
 private struct CalendarWeekdayHeader: View {
@@ -361,8 +267,8 @@ private struct CalendarWeekdayHeader: View {
   }
 }
 
-private struct CalendarTimelineGrid: View {
-  var days: [CalendarDaySlot]
+private struct CalendarMonthGrid: View {
+  var days: [CalendarMonthDay]
   @Binding var selectedDate: Date
   var schedules: [BudgetSchedule]
   var recordedDays: Set<Date>
@@ -378,7 +284,7 @@ private struct CalendarTimelineGrid: View {
               starting: schedule.startDate, frequency: schedule.frequency, on: day
             ) ? 1 : 0)
           }
-          CalendarTimelineDayButton(
+          CalendarMonthDayButton(
             day: day,
             selectedDate: $selectedDate,
             scheduledCount: scheduled,
@@ -390,13 +296,12 @@ private struct CalendarTimelineGrid: View {
         }
       }
     }
-    .scrollTargetLayout()
     .padding(.horizontal, 16)
     .frame(maxWidth: .infinity)
   }
 }
 
-private struct CalendarTimelineDayButton: View {
+private struct CalendarMonthDayButton: View {
   var day: Date
   @Binding var selectedDate: Date
   var scheduledCount: Int
@@ -409,11 +314,11 @@ private struct CalendarTimelineDayButton: View {
     Button {
       selectedDate = day
     } label: {
-      VStack(spacing: 3) {
+      VStack(spacing: 2) {
         Text(day.formatted(.dateTime.day()))
-          .font(.system(.callout, design: .rounded, weight: isSelected ? .bold : .medium))
+          .font(.system(.title3, design: .rounded, weight: isSelected ? .bold : .medium))
           .foregroundStyle(isSelected ? Color(uiColor: .systemBackground) : (isToday ? Color.red : Color.primary))
-          .frame(width: 30, height: 30)
+          .frame(width: 36, height: 36)
           .background {
             if isSelected { Circle().fill(Color.primary) }
           }
@@ -432,12 +337,7 @@ private struct CalendarTimelineDayButton: View {
 }
 
 private enum CalendarGridMetrics {
-  static let rowHeight: CGFloat = 44
-}
-
-private struct CalendarScrollMetrics: Equatable {
-  var visibleRect: CGRect
-  var contentHeight: CGFloat
+  static let rowHeight: CGFloat = 56
 }
 
 private struct CalendarScheduleRow: View {

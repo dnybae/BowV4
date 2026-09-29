@@ -1,5 +1,7 @@
 import SwiftUI
 import SwiftData
+import PhotosUI
+import UniformTypeIdentifiers
 
 struct PayeeEditorScreen: View {
   @Environment(\.dismiss) private var dismiss
@@ -11,10 +13,15 @@ struct PayeeEditorScreen: View {
   @State private var name: String
   @State private var exactMatchText: String
   @State private var merchantDomain: String
+  @State private var logoSource: PayeeLogoSource
+  @State private var customLogoData: Data?
+  @State private var selectedPhoto: PhotosPickerItem?
   @State private var defaultEnvelopeID: UUID?
   @State private var errorMessage: String?
   @State private var showingDelete = false
   @State private var isSaving = false
+  @State private var showingFiles = false
+  @State private var showingFindLogo = false
 
   init(entry: PayeeDirectory.Entry?, payee: BudgetPayee? = nil, onSaved: @escaping () -> Void = {}) {
     self.entry = entry
@@ -22,6 +29,8 @@ struct PayeeEditorScreen: View {
     _name = State(initialValue: entry?.name ?? "")
     _exactMatchText = State(initialValue: payee?.exactMatchText ?? "")
     _merchantDomain = State(initialValue: payee?.merchantDomain ?? "")
+    _logoSource = State(initialValue: payee?.logoSource ?? .system)
+    _customLogoData = State(initialValue: payee?.customLogoData)
     _defaultEnvelopeID = State(initialValue: payee?.defaultEnvelopeID)
   }
 
@@ -37,18 +46,41 @@ struct PayeeEditorScreen: View {
             .textInputAutocapitalization(.words)
         }
         Section {
-          TextField("Website domain", text: $merchantDomain)
-            .textInputAutocapitalization(.never)
-            .keyboardType(.URL)
-          if !validDomain {
-            Text("Enter a domain like starbucks.com.")
-              .font(.footnote)
-              .foregroundStyle(.orange)
+          HStack(spacing: 12) {
+            MerchantLogoView(
+              merchantName: trimmedName,
+              appearanceOverride: PayeeLogoAppearance(
+                name: trimmedName,
+                source: logoSource,
+                domain: merchantDomain,
+                imageData: customLogoData
+              ),
+              size: 52
+            )
+            VStack(alignment: .leading, spacing: 3) {
+              Text("Payee Icon")
+              Text(logoSource.title)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            }
+          }
+          .padding(.vertical, 3)
+
+          PhotosPicker(selection: $selectedPhoto, matching: .images) {
+            Label("Choose Photo", systemImage: "photo")
+          }
+          Button("Choose File", systemImage: "folder") { showingFiles = true }
+          Button("Find Logo", systemImage: "magnifyingglass") { showingFindLogo = true }
+            .disabled(trimmedName.isEmpty)
+          if logoSource != .system {
+            Button("Use Default Icon", systemImage: "storefront") {
+              logoSource = .system
+            }
           }
         } header: {
-          Text("Company")
+          Text("Icon")
         } footer: {
-          Text("Logo.dev looks up the payee name automatically. Enter a website domain if you need a more precise logo, or leave this blank for a personal payee.")
+          Text("Every payee starts with a native icon. You can use your own image or choose a Logo.dev logo instead.")
         }
         Section {
           CategorySelectionField(
@@ -79,7 +111,7 @@ struct PayeeEditorScreen: View {
         }
         ToolbarItem(placement: .confirmationAction) {
           Button("Save") { Task { await save() } }
-            .disabled(trimmedName.isEmpty || !validDomain || isSaving)
+            .disabled(trimmedName.isEmpty || isSaving)
         }
       }
       .confirmationDialog("Delete this payee?", isPresented: $showingDelete) {
@@ -95,12 +127,41 @@ struct PayeeEditorScreen: View {
       } message: {
         Text(errorMessage ?? "")
       }
+      .fileImporter(isPresented: $showingFiles, allowedContentTypes: [.image]) { result in
+        do {
+          let url = try result.get()
+          let hasAccess = url.startAccessingSecurityScopedResource()
+          defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
+          let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+          guard size <= 50_000_000 else { throw PayeeLogoImage.ImportError.tooLarge }
+          customLogoData = try PayeeLogoImage.preparedData(from: Data(contentsOf: url))
+          logoSource = .custom
+        } catch {
+          errorMessage = error.localizedDescription
+        }
+      }
+      .sheet(isPresented: $showingFindLogo) {
+        PayeeLogoFinderSheet(payeeName: trimmedName, domain: merchantDomain) { selectedDomain in
+          merchantDomain = selectedDomain ?? ""
+          logoSource = .logoDev
+        }
+      }
+      .onChange(of: selectedPhoto) { _, photo in
+        guard let photo else { return }
+        Task {
+          do {
+            guard let data = try await photo.loadTransferable(type: Data.self) else {
+              throw PayeeLogoImage.ImportError.invalidImage
+            }
+            customLogoData = try PayeeLogoImage.preparedData(from: data)
+            logoSource = .custom
+          } catch {
+            errorMessage = error.localizedDescription
+          }
+          selectedPhoto = nil
+        }
+      }
     }
-  }
-
-  private var validDomain: Bool {
-    let value = merchantDomain.trimmingCharacters(in: .whitespacesAndNewlines)
-    return value.isEmpty || value.range(of: "^(?:[A-Za-z0-9-]+\\.)+[A-Za-z]{2,}$", options: .regularExpression) != nil
   }
 
   private func save() async {
@@ -151,21 +212,29 @@ struct PayeeEditorScreen: View {
           payee.exactMatchText = exact
           payee.defaultEnvelopeID = defaultEnvelopeID
           payee.merchantDomain = merchantDomain.isEmpty ? nil : merchantDomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+          payee.logoSource = logoSource
+          payee.customLogoData = logoSource == .custom ? customLogoData : nil
         } else {
-          modelContext.insert(BudgetPayee(
+          let payee = BudgetPayee(
             name: trimmedName,
             defaultEnvelopeID: defaultEnvelopeID,
             exactMatchText: exact,
             merchantDomain: merchantDomain.isEmpty ? nil : merchantDomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-          ))
+          )
+          payee.logoSource = logoSource
+          payee.customLogoData = logoSource == .custom ? customLogoData : nil
+          modelContext.insert(payee)
         }
       } else {
-        modelContext.insert(BudgetPayee(
+        let payee = BudgetPayee(
           name: trimmedName,
           defaultEnvelopeID: defaultEnvelopeID,
           exactMatchText: exact,
           merchantDomain: merchantDomain.isEmpty ? nil : merchantDomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        ))
+        )
+        payee.logoSource = logoSource
+        payee.customLogoData = logoSource == .custom ? customLogoData : nil
+        modelContext.insert(payee)
       }
       try modelContext.save()
       dismiss()

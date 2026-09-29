@@ -8,6 +8,13 @@ final class BudgetPayee {
   var defaultEnvelopeID: UUID? = nil
   var exactMatchText: String = ""
   var merchantDomain: String? = nil
+  var logoSourceRaw: String = PayeeLogoSource.system.rawValue
+  @Attribute(.externalStorage) var customLogoData: Data? = nil
+
+  var logoSource: PayeeLogoSource {
+    get { PayeeLogoSource(rawValue: logoSourceRaw) ?? .system }
+    set { logoSourceRaw = newValue.rawValue }
+  }
 
   init(
     name: String, defaultEnvelopeID: UUID? = nil, exactMatchText: String = "",

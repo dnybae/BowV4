@@ -266,7 +266,9 @@ struct InsightsScreen: View {
                 merchantName: transaction.kind == .transfer ? "" : transaction.payee,
                 domain: transaction.kind == .transfer ? nil : PayeeDirectory.logoDomain(
                   for: transaction.payee, transactionDomain: transaction.merchantDomain, payees: payees
-                )
+                ),
+                kind: transaction.kind,
+                categoryName: envelopes.first { $0.id == transaction.envelopeID }?.name
               )
               VStack(alignment: .leading) {
                 Text(transaction.payee.isEmpty ? transaction.kind.title : transaction.payee)

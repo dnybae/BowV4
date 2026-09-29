@@ -4,6 +4,7 @@ import SwiftData
 struct ReviewInboxScreen: View {
   @Environment(\.modelContext) private var modelContext
   @Query private var payees: [BudgetPayee]
+  @Query private var envelopes: [BudgetEnvelope]
   var scheduledRecords: [BudgetTransaction]
   var records: [SimpleFINImportRecord]
   var occurrences: [BudgetScheduleOccurrence]
@@ -45,7 +46,9 @@ struct ReviewInboxScreen: View {
               subtitle: "Review imported transaction · \(transaction.date.formatted(date: .abbreviated, time: .omitted))",
               amount: transaction.amountMinor,
               merchantName: transaction.kind == .transfer ? "" : transaction.payee,
-              merchantDomain: transaction.kind == .transfer ? nil : transaction.merchantDomain
+              merchantDomain: transaction.kind == .transfer ? nil : transaction.merchantDomain,
+              kind: transaction.kind,
+              categoryName: envelopes.first { $0.id == transaction.envelopeID }?.name
             )
           }
         }
@@ -65,7 +68,9 @@ struct ReviewInboxScreen: View {
                 subtitle: "Review imported transaction · \(transaction.date.formatted(date: .abbreviated, time: .omitted))",
                 amount: transaction.amountMinor,
                 merchantName: transaction.kind == .transfer ? "" : transaction.payee,
-                merchantDomain: transaction.kind == .transfer ? nil : transaction.merchantDomain
+                merchantDomain: transaction.kind == .transfer ? nil : transaction.merchantDomain,
+                kind: transaction.kind,
+                categoryName: envelopes.first { $0.id == transaction.envelopeID }?.name
               )
             }
           case .bankRecord(let record, let related):
@@ -82,7 +87,8 @@ struct ReviewInboxScreen: View {
                 title: record.payee.isEmpty ? "Bank transaction" : record.payee,
                 subtitle: related == nil ? "Resolve bank match" : "Resolve bank match and scheduled bill",
                 amount: record.amountMinor,
-                merchantName: record.payee
+                merchantName: record.payee,
+                kind: record.amountMinor >= 0 ? .inflow : .expense
               )
             }
           case .scheduled(let occurrence, let schedule):
@@ -91,7 +97,9 @@ struct ReviewInboxScreen: View {
                 title: schedule.payee,
                 subtitle: "Scheduled for \(occurrence.scheduledFor.formatted(date: .abbreviated, time: .omitted))",
                 amount: -schedule.amountMinor,
-                merchantName: schedule.kind == .transfer ? "" : schedule.payee
+                merchantName: schedule.kind == .transfer ? "" : schedule.payee,
+                kind: schedule.kind,
+                categoryName: envelopes.first { $0.id == schedule.envelopeID }?.name
               )
               HStack {
                 Button("Record Transaction", systemImage: "plus") {
@@ -156,14 +164,17 @@ struct ReviewInboxScreen: View {
 
   private func reviewRow(
     title: String, subtitle: String, amount: Int64,
-    merchantName: String, merchantDomain: String? = nil
+    merchantName: String, merchantDomain: String? = nil,
+    kind: BudgetTransactionKind? = nil, categoryName: String? = nil
   ) -> some View {
     HStack(spacing: 12) {
       MerchantLogoView(
         merchantName: merchantName,
         domain: merchantName.isEmpty ? nil : PayeeDirectory.logoDomain(
           for: merchantName, transactionDomain: merchantDomain, payees: payees
-        )
+        ),
+        kind: kind,
+        categoryName: categoryName
       )
       VStack(alignment: .leading, spacing: 4) {
         Text(title).foregroundStyle(.primary)

@@ -333,6 +333,7 @@ private struct BudgetHomeView: View {
       AppAppearance(rawValue: appearanceRaw)?.colorScheme
     )
     .environment(\.budgetSnapshotRepository, snapshotRepository)
+    .environment(\.payeeLogoDirectory, PayeeLogoDirectory(payees: payees))
     .task {
       try? BudgetCommands.ensureCardPaymentEnvelopes(in: modelContext)
       try? ScheduleReviewPlanner().refresh(in: modelContext)

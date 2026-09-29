@@ -4,6 +4,7 @@ import SwiftData
 struct CalendarScreen: View {
   @Environment(\.modelContext) private var modelContext
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.calendar) private var calendar
   var schedules: [BudgetSchedule]
   var occurrences: [BudgetScheduleOccurrence]
   var accounts: [BudgetAccount]
@@ -13,20 +14,26 @@ struct CalendarScreen: View {
   var returnToTodayRequest: Int = 0
   var onRecord: (ScheduledTransactionDraft) -> Void
   var onSelectTransaction: (UUID) -> Void
-  @State private var months = CalendarTimelineWindow.months(around: Date())
-  @State private var scrollMonth: Date?
+  @State private var timeline = CalendarTimelineWindow(centeredOn: Date())
+  @State private var scrollDay: CalendarDaySlot.ID?
+  @State private var visibleMonth = Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
+  @State private var viewportSize: CGSize = .zero
+  @State private var dayFrames: [Date: CGRect] = [:]
+  @State private var hasPlacedInitialScroll = false
+  @State private var isCalendarScrolling = false
+  @State private var isExtendingTimeline = false
+  @State private var pendingExtension: CalendarTimelineWindow.Direction?
   @State private var editingSchedule: BudgetSchedule?
+  @State private var recordedDays: Set<Date> = []
   @State private var monthTransactions: [BudgetTransaction] = []
   @State private var selectedSnapshot: BudgetSnapshot?
   @State private var snapshotRepository: BudgetSnapshotRepository?
   @State private var refreshVersion = 0
   @State private var isLoadingMonth = false
 
-  private var calendar: Calendar { .current }
   private var currentMonth: Date {
     calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
   }
-  private var visibleMonth: Date { scrollMonth ?? currentMonth }
   private var selectedSchedules: [BudgetSchedule] {
     schedules.filter {
       $0.isActive && ScheduleRecurrence(calendar: calendar).occurs(
@@ -50,39 +57,47 @@ struct CalendarScreen: View {
   var body: some View {
     ScrollViewReader { scrollProxy in
       VStack(spacing: 0) {
-        weekdayHeader
+        CalendarWeekdayHeader(calendar: calendar)
         Divider()
         ScrollView(.vertical) {
-          LazyVStack(alignment: .leading, spacing: 0) {
-            ForEach(months, id: \.self) { month in
-              CalendarTimelineMonth(
-                month: month, selectedDate: $selectedDate,
-                schedules: schedules
-              )
-              .id(month)
-            }
+          CalendarTimelineGrid(
+            days: timeline.days,
+            selectedDate: $selectedDate,
+            schedules: schedules,
+            recordedDays: recordedDays,
+            calendar: calendar
+          )
+        }
+        .coordinateSpace(name: "calendarViewport")
+        .background {
+          GeometryReader { geometry in
+            Color.clear.preference(key: CalendarViewportSizeKey.self, value: geometry.size)
           }
-          .scrollTargetLayout()
         }
         .scrollTargetBehavior(.viewAligned)
-        .scrollPosition(id: $scrollMonth, anchor: .top)
-        .onAppear {
-          let target = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? currentMonth
-          if !months.contains(target) { months = CalendarTimelineWindow.months(around: target) }
-          Task { @MainActor in
-            await Task.yield()
-            scrollProxy.scrollTo(target, anchor: .top)
-          }
+        .scrollPosition(id: $scrollDay, anchor: .top)
+        .onPreferenceChange(CalendarViewportSizeKey.self) { size in
+          viewportSize = size
+          updateVisibleDays(using: dayFrames, scrollProxy: scrollProxy)
         }
-        .onChange(of: scrollMonth) { _, month in
-          guard let month else { return }
-          CalendarTimelineWindow.extend(&months, near: month, calendar: calendar)
+        .onPreferenceChange(CalendarDayFramesKey.self) { frames in
+          dayFrames = frames
+          updateVisibleDays(using: frames, scrollProxy: scrollProxy)
+        }
+        .onAppear {
+          placeInitialScroll(using: scrollProxy)
+        }
+        .onScrollPhaseChange { _, phase in
+          isCalendarScrolling = phase.isScrolling
+          if !phase.isScrolling, let pendingExtension {
+            extendTimeline(pendingExtension, using: scrollProxy)
+          }
         }
         Divider()
         selectedDayAgenda
           .frame(height: 230)
       }
-      .navigationTitle("Calendar")
+      .navigationTitle(visibleMonth.formatted(.dateTime.month(.wide).year()))
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
@@ -98,6 +113,11 @@ struct CalendarScreen: View {
                                 refreshVersion: refreshVersion)) {
         await loadSelectedMonth()
       }
+      .task(id: CalendarDayMarkLoadKey(firstMonth: timeline.firstMonth,
+                                       endMonth: timeline.endMonth,
+                                       refreshVersion: refreshVersion)) {
+        await loadRecordedDays()
+      }
       .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
         refreshVersion += 1
       }
@@ -105,22 +125,6 @@ struct CalendarScreen: View {
         ScheduleEditorScreen(schedule: schedule, accounts: accounts, envelopes: envelopes, currencyCode: currencyCode)
       }
     }
-  }
-
-  private var weekdayHeader: some View {
-    HStack(spacing: 0) {
-      ForEach(0..<7, id: \.self) { index in
-        Text(calendar.veryShortStandaloneWeekdaySymbols[
-          (calendar.firstWeekday - 1 + index) % 7
-        ])
-        .font(.caption2.weight(.semibold))
-        .foregroundStyle(.secondary)
-        .frame(maxWidth: .infinity)
-        .accessibilityHidden(true)
-      }
-    }
-    .padding(.horizontal, 16)
-    .frame(height: 30)
   }
 
   private var selectedDayAgenda: some View {

@@ -166,7 +166,9 @@ struct TransactionSummaryRow: View {
     HStack(spacing: 12) {
       MerchantLogoView(
         merchantName: transaction.kind == .transfer ? "" : transaction.payee,
-        domain: transaction.kind == .transfer ? nil : transaction.merchantDomain
+        domain: transaction.kind == .transfer ? nil : transaction.merchantDomain,
+        kind: transaction.kind,
+        categoryName: transaction.envelopeName
       )
       VStack(alignment: .leading, spacing: 3) {
         Text(transaction.kind == .transfer ? "Transfer" :
@@ -217,7 +219,9 @@ struct TransactionRow: View {
         merchantName: transaction.kind == .transfer ? "" : transaction.payee,
         domain: transaction.kind == .transfer ? nil : PayeeDirectory.logoDomain(
           for: transaction.payee, transactionDomain: transaction.merchantDomain, payees: payees
-        )
+        ),
+        kind: transaction.kind,
+        categoryName: envelopeName
       )
       VStack(alignment: .leading, spacing: 3) {
         Text(title)

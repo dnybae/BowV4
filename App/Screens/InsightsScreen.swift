@@ -264,7 +264,9 @@ struct InsightsScreen: View {
             HStack {
               MerchantLogoView(
                 merchantName: transaction.kind == .transfer ? "" : transaction.payee,
-                domain: transaction.kind == .transfer ? nil : transaction.merchantDomain
+                domain: transaction.kind == .transfer ? nil : PayeeDirectory.logoDomain(
+                  for: transaction.payee, transactionDomain: transaction.merchantDomain, payees: payees
+                )
               )
               VStack(alignment: .leading) {
                 Text(transaction.payee.isEmpty ? transaction.kind.title : transaction.payee)

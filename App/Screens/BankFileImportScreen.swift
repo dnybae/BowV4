@@ -311,6 +311,8 @@ struct BankFileImportScreen: View {
         importSeparately: importSeparately,
         accountID: account.id
       )
+      let container = modelContext.container
+      Task { await MerchantEnrichmentCoordinator.shared.run(container: container) }
       dismiss()
     } catch {
       errorMessage = error.localizedDescription

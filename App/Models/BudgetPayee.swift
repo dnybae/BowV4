@@ -7,10 +7,17 @@ final class BudgetPayee {
   var name: String = ""
   var defaultEnvelopeID: UUID? = nil
   var exactMatchText: String = ""
+  var merchantDomain: String? = nil
+  var brandDescription: String? = nil
 
-  init(name: String, defaultEnvelopeID: UUID? = nil, exactMatchText: String = "") {
+  init(
+    name: String, defaultEnvelopeID: UUID? = nil, exactMatchText: String = "",
+    merchantDomain: String? = nil, brandDescription: String? = nil
+  ) {
     self.name = name
     self.defaultEnvelopeID = defaultEnvelopeID
     self.exactMatchText = exactMatchText
+    self.merchantDomain = merchantDomain
+    self.brandDescription = brandDescription
   }
 }

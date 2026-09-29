@@ -185,6 +185,7 @@ struct BudgetCommands {
     amountMinor: Int64,
     date: Date,
     payee: String,
+    merchantDomain: String? = nil,
     notes: String,
     scheduleID: UUID? = nil,
     scheduledFor: Date? = nil,
@@ -215,6 +216,7 @@ struct BudgetCommands {
       date: date,
       amountMinor: signedAmount,
       payee: payee.trimmingCharacters(in: .whitespacesAndNewlines),
+      merchantDomain: merchantDomain,
       notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
       kind: kind
     )
@@ -262,6 +264,7 @@ struct BudgetCommands {
     amountMinor: Int64,
     date: Date,
     payee: String,
+    merchantDomain: String? = nil,
     notes: String,
     scheduleID: UUID? = nil,
     scheduledFor: Date? = nil,
@@ -294,9 +297,11 @@ struct BudgetCommands {
     transaction.amountMinor = kind == .inflow ? amountMinor : -amountMinor
     transaction.date = date
     let updatedPayee = payee.trimmingCharacters(in: .whitespacesAndNewlines)
-    if transaction.payee != updatedPayee || kind == .transfer {
-      transaction.merchantDomain = nil
+    if transaction.payee != updatedPayee
+        && (transaction.sourceRaw == "simplefin" || transaction.sourceRaw == "bankFile") {
+      transaction.brandLookupAttemptedAt = Date()
     }
+    transaction.merchantDomain = kind == .transfer ? nil : merchantDomain
     transaction.payee = updatedPayee
     transaction.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
     if let scheduleID, let scheduledFor {

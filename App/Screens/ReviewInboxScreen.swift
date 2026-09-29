@@ -3,6 +3,7 @@ import SwiftData
 
 struct ReviewInboxScreen: View {
   @Environment(\.modelContext) private var modelContext
+  @Query private var payees: [BudgetPayee]
   var scheduledRecords: [BudgetTransaction]
   var records: [SimpleFINImportRecord]
   var occurrences: [BudgetScheduleOccurrence]
@@ -158,7 +159,12 @@ struct ReviewInboxScreen: View {
     merchantName: String, merchantDomain: String? = nil
   ) -> some View {
     HStack(spacing: 12) {
-      MerchantLogoView(merchantName: merchantName, domain: merchantDomain)
+      MerchantLogoView(
+        merchantName: merchantName,
+        domain: merchantName.isEmpty ? nil : PayeeDirectory.logoDomain(
+          for: merchantName, transactionDomain: merchantDomain, payees: payees
+        )
+      )
       VStack(alignment: .leading, spacing: 4) {
         Text(title).foregroundStyle(.primary)
         Text(subtitle).font(.caption).foregroundStyle(.secondary)

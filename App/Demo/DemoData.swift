@@ -173,10 +173,10 @@ enum DemoData {
     imported.externalKey = "demo|bookstore"
     imported.needsApproval = true
 
-    insert(BudgetPayee(name: "Whole Foods Market", defaultEnvelopeID: groceries.id, exactMatchText: "WHOLE FOODS"))
+    insert(BudgetPayee(name: "Whole Foods Market", defaultEnvelopeID: groceries.id, exactMatchText: "WHOLE FOODS", merchantDomain: "wholefoodsmarket.com"))
     insert(BudgetPayee(name: "Apartment Rent", defaultEnvelopeID: housing.id, exactMatchText: "APARTMENT RENT ACH"))
-    insert(BudgetPayee(name: "Starbucks", defaultEnvelopeID: dining.id, exactMatchText: "STARBUCKS"))
-    insert(BudgetPayee(name: "Netflix", defaultEnvelopeID: fun.id, exactMatchText: "NETFLIX"))
+    insert(BudgetPayee(name: "Starbucks", defaultEnvelopeID: dining.id, exactMatchText: "STARBUCKS", merchantDomain: "starbucks.com"))
+    insert(BudgetPayee(name: "Netflix", defaultEnvelopeID: fun.id, exactMatchText: "NETFLIX", merchantDomain: "netflix.com"))
 
     let rentSchedule = insert(BudgetSchedule(payee: "Apartment Rent", amountMinor: 145_000, accountID: everyday.id, envelopeID: housing.id, startDate: date(-5, 3), frequency: .monthly, notes: "Due on the 3rd"))
     previousRent?.scheduleID = rentSchedule.id

@@ -42,7 +42,7 @@ actor PayeeDirectoryRepository {
       if !exact.isEmpty && aliases[exact] == nil { aliases[exact] = canonical }
       result[canonical] = PayeeDirectory.Entry(
         name: payee.name, key: canonical, ruleID: payee.id,
-        transactionCount: 0, scheduleCount: 0, isTransferOnly: true
+        transactionCount: 0, scheduleCount: 0, isTransferOnly: false
       )
     }
     var offset = 0

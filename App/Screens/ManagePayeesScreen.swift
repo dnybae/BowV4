@@ -3,6 +3,7 @@ import SwiftData
 
 struct ManagePayeesScreen: View {
   @Environment(\.modelContext) private var modelContext
+  @Query private var payees: [BudgetPayee]
   @State private var searchText = ""
   @State private var showingAdd = false
   @State private var directoryEntries: [PayeeDirectory.Entry] = []
@@ -116,6 +117,10 @@ struct ManagePayeesScreen: View {
       PayeeDetailScreen(payeeKey: entry.key)
     } label: {
       HStack {
+        MerchantLogoView(
+          merchantName: entry.name,
+          domain: payees.first(where: { $0.id == entry.ruleID })?.merchantDomain
+        )
         Text(entry.name)
         Spacer(minLength: 12)
         Text(entry.transactionCount, format: .number)

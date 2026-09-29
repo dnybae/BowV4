@@ -7,7 +7,8 @@ struct PayeeDirectoryChecks {
     let payee = BudgetPayee(
       name: "City Market",
       defaultEnvelopeID: envelopeID,
-      exactMatchText: "CITY MARKET STORE"
+      exactMatchText: "CITY MARKET STORE",
+      merchantDomain: "citymarket.example"
     )
     let first = BudgetTransaction(
       accountID: UUID(),
@@ -40,6 +41,14 @@ struct PayeeDirectoryChecks {
     precondition(entries.count == 1)
     precondition(entries[0].transactionCount == 2)
     precondition(entries[0].scheduleCount == 1)
+    precondition(PayeeDirectory.matchingPayee(for: "CITY MARKET STORE", payees: [payee]) === payee)
+    precondition(PayeeDirectory.logoDomain(
+      for: imported.payee, transactionDomain: nil, payees: [payee]
+    ) == "citymarket.example")
+    payee.merchantDomain = nil
+    precondition(PayeeDirectory.logoDomain(
+      for: imported.payee, transactionDomain: "wrong.example", payees: [payee]
+    ) == nil)
 
     let matcher = PayeeRuleMatcher()
     let rules = PayeeDirectory.ruleItems(payees: [payee], validEnvelopeIDs: [envelopeID])

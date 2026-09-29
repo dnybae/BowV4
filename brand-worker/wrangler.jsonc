@@ -1,0 +1,21 @@
+{
+  "name": "bow-brand-lookup",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-29",
+  "workers_dev": true,
+  "secrets": {
+    "required": ["LOGO_DEV_SECRET_KEY"]
+  },
+  "ratelimits": [
+    {
+      "name": "SEARCH_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 30, "period": 60 }
+    },
+    {
+      "name": "IDENTIFY_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 10, "period": 60 }
+    }
+  ]
+}

@@ -10,6 +10,8 @@ struct PayeeEditorScreen: View {
   var onSaved: () -> Void
   @State private var name: String
   @State private var exactMatchText: String
+  @State private var merchantDomain: String
+  @State private var brandResults: [BrandSearchResult] = []
   @State private var defaultEnvelopeID: UUID?
   @State private var errorMessage: String?
   @State private var showingDelete = false
@@ -20,6 +22,7 @@ struct PayeeEditorScreen: View {
     self.onSaved = onSaved
     _name = State(initialValue: entry?.name ?? "")
     _exactMatchText = State(initialValue: payee?.exactMatchText ?? "")
+    _merchantDomain = State(initialValue: payee?.merchantDomain ?? "")
     _defaultEnvelopeID = State(initialValue: payee?.defaultEnvelopeID)
   }
 
@@ -33,6 +36,41 @@ struct PayeeEditorScreen: View {
         Section("Payee") {
           TextField("Payee Name", text: $name)
             .textInputAutocapitalization(.words)
+          if merchantDomain.isEmpty && !brandResults.isEmpty {
+            ForEach(brandResults) { brand in
+              Button {
+                name = brand.name
+                merchantDomain = brand.domain
+                brandResults = []
+              } label: {
+                HStack(spacing: 12) {
+                  MerchantLogoView(
+                    merchantName: brand.name, domain: brand.domain,
+                    logoURL: brand.compactLogoURL
+                  )
+                  VStack(alignment: .leading, spacing: 2) {
+                    Text(brand.name).foregroundStyle(.primary)
+                    Text(brand.domain).font(.caption).foregroundStyle(.secondary)
+                  }
+                }
+                .contentShape(Rectangle())
+              }
+            }
+          }
+        }
+        Section {
+          TextField("Website domain", text: $merchantDomain)
+            .textInputAutocapitalization(.never)
+            .keyboardType(.URL)
+          if !validDomain {
+            Text("Enter a domain like starbucks.com.")
+              .font(.footnote)
+              .foregroundStyle(.orange)
+          }
+        } header: {
+          Text("Company")
+        } footer: {
+          Text("Choose a company suggestion above or enter its website domain to show the correct logo. Leave blank for a personal payee.")
         }
         Section {
           CategorySelectionField(
@@ -63,7 +101,7 @@ struct PayeeEditorScreen: View {
         }
         ToolbarItem(placement: .confirmationAction) {
           Button("Save") { Task { await save() } }
-            .disabled(trimmedName.isEmpty || isSaving)
+            .disabled(trimmedName.isEmpty || !validDomain || isSaving)
         }
       }
       .confirmationDialog("Delete this payee?", isPresented: $showingDelete) {
@@ -79,7 +117,23 @@ struct PayeeEditorScreen: View {
       } message: {
         Text(errorMessage ?? "")
       }
+      .task(id: trimmedName) {
+        brandResults = []
+        guard merchantDomain.isEmpty, trimmedName.count >= 2,
+              BrandLookupClient.isConfigured else { return }
+        do {
+          try await Task.sleep(for: .milliseconds(200))
+          let results = try await BrandLookupClient.search(trimmedName)
+          try Task.checkCancellation()
+          brandResults = results
+        } catch { }
+      }
     }
+  }
+
+  private var validDomain: Bool {
+    let value = merchantDomain.trimmingCharacters(in: .whitespacesAndNewlines)
+    return value.isEmpty || value.range(of: "^(?:[A-Za-z0-9-]+\\.)+[A-Za-z]{2,}$", options: .regularExpression) != nil
   }
 
   private func save() async {
@@ -129,18 +183,21 @@ struct PayeeEditorScreen: View {
           payee.name = trimmedName
           payee.exactMatchText = exact
           payee.defaultEnvelopeID = defaultEnvelopeID
+          payee.merchantDomain = merchantDomain.isEmpty ? nil : merchantDomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         } else {
           modelContext.insert(BudgetPayee(
             name: trimmedName,
             defaultEnvelopeID: defaultEnvelopeID,
-            exactMatchText: exact
+            exactMatchText: exact,
+            merchantDomain: merchantDomain.isEmpty ? nil : merchantDomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
           ))
         }
       } else {
         modelContext.insert(BudgetPayee(
           name: trimmedName,
           defaultEnvelopeID: defaultEnvelopeID,
-          exactMatchText: exact
+          exactMatchText: exact,
+          merchantDomain: merchantDomain.isEmpty ? nil : merchantDomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         ))
       }
       try modelContext.save()

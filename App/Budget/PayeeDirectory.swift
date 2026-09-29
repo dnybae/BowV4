@@ -41,6 +41,20 @@ struct PayeeDirectory {
     return normalized
   }
 
+  static func matchingPayee(for name: String, payees: [BudgetPayee]) -> BudgetPayee? {
+    let normalized = key(name)
+    guard !normalized.isEmpty else { return nil }
+    return payees.first {
+      key($0.name) == normalized
+        || (!key($0.exactMatchText).isEmpty && key($0.exactMatchText) == normalized)
+    }
+  }
+
+  static func logoDomain(for name: String, transactionDomain: String?, payees: [BudgetPayee]) -> String? {
+    if let payee = matchingPayee(for: name, payees: payees) { return payee.merchantDomain }
+    return transactionDomain
+  }
+
   static func entries(
     payees: [BudgetPayee],
     transactions: [BudgetTransaction],
@@ -56,7 +70,7 @@ struct PayeeDirectory {
         ruleID: payee.id,
         transactionCount: 0,
         scheduleCount: 0,
-        isTransferOnly: true
+        isTransferOnly: false
       )
     }
     for transaction in transactions {

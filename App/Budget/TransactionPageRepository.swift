@@ -41,13 +41,21 @@ actor TransactionPageRepository {
     let envelopes = try modelContext.fetch(FetchDescriptor<BudgetEnvelope>())
     let accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
     let envelopeNames = Dictionary(uniqueKeysWithValues: envelopes.map { ($0.id, $0.name) })
-    let payees = request.payeeKey == nil ? [] : try modelContext.fetch(FetchDescriptor<BudgetPayee>())
+    let payees = try modelContext.fetch(FetchDescriptor<BudgetPayee>())
     var aliases: [String: String] = [:]
+    var domains: [String: String] = [:]
+    var knownPayeeKeys: Set<String> = []
     for payee in payees {
       let canonical = PayeeDirectory.key(payee.name)
       aliases[canonical] = canonical
+      knownPayeeKeys.insert(canonical)
+      if let domain = payee.merchantDomain { domains[canonical] = domain }
       let exact = PayeeDirectory.key(payee.exactMatchText)
-      if !exact.isEmpty { aliases[exact] = canonical }
+      if !exact.isEmpty {
+        aliases[exact] = canonical
+        knownPayeeKeys.insert(exact)
+        if let domain = payee.merchantDomain { domains[exact] = domain }
+      }
     }
     let search = request.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     var items: [TransactionListItem] = []
@@ -121,7 +129,9 @@ actor TransactionPageRepository {
         id: item.id, accountID: item.accountID, transferAccountID: item.transferAccountID,
         envelopeID: item.envelopeID, date: item.date, createdAt: item.createdAt,
         amountMinor: item.amountMinor, payee: item.payee,
-        merchantDomain: item.merchantDomain, kindRaw: item.kindRaw,
+        merchantDomain: knownPayeeKeys.contains(PayeeDirectory.key(item.payee))
+          ? domains[PayeeDirectory.key(item.payee)] : item.merchantDomain,
+        kindRaw: item.kindRaw,
         sourceRaw: item.sourceRaw,
         needsApproval: item.needsApproval,
         accountName: accountNames[item.accountID] ?? "Account",

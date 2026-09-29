@@ -3,6 +3,7 @@ import SwiftData
 import UIKit
 
 struct ContentView: View {
+  @Environment(\.modelContext) private var modelContext
   @AppStorage("bow.demoMode") private var isDemoMode = false
   @AppStorage("bow.demoResetVersion") private var demoResetVersion = 0
   @AppStorage("bow.demoScenario") private var demoScenarioRaw = DemoScenario.showcase.rawValue
@@ -33,6 +34,9 @@ struct ContentView: View {
     }
     .task(id: isDemoMode) {
       if isDemoMode && demoContainer == nil { prepareDemo() }
+      if !isDemoMode {
+        await MerchantEnrichmentCoordinator.shared.run(container: modelContext.container)
+      }
     }
     .onChange(of: demoResetVersion) { _, _ in
       demoContainer = nil
@@ -364,6 +368,7 @@ private struct BudgetHomeView: View {
   private func refreshSimpleFINIfConnected() async {
     guard (try? SimpleFINCredentialStore().load()) != nil else { return }
     _ = try? await SimpleFINSyncCoordinator.shared.sync(in: modelContext)
+    await MerchantEnrichmentCoordinator.shared.run(container: modelContext.container)
   }
 
   private func transaction(for id: UUID) -> BudgetTransaction? {

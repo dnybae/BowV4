@@ -17,6 +17,7 @@ struct TransactionEditorScreen: View {
   @State private var envelopeID: UUID?
   @State private var amount: String
   @State private var payee: String
+  @State private var merchantDomain: String?
   @State private var notes: String
   @State private var date: Date
   @State private var isScheduled = false
@@ -26,8 +27,7 @@ struct TransactionEditorScreen: View {
   @State private var possibleImportedMatchIDs: [UUID] = []
   @State private var autoAssignedEnvelopeID: UUID?
   @State private var linkScheduledBill = true
-  @State private var payeeEntries: [PayeeDirectory.Entry] = []
-  @FocusState private var payeeFocused: Bool
+  @State private var showingPayeeSelection = false
 
   init(
     transaction: BudgetTransaction?,
@@ -52,6 +52,7 @@ struct TransactionEditorScreen: View {
     _envelopeID = State(initialValue: transaction?.envelopeID ?? scheduledDraft?.envelopeID)
     _amount = State(initialValue: transaction.map { BudgetMoney.editable($0.amountMinor) } ?? scheduledDraft.map { BudgetMoney.editable($0.amountMinor) } ?? "")
     _payee = State(initialValue: transaction?.payee ?? scheduledDraft?.payee ?? "")
+    _merchantDomain = State(initialValue: transaction?.merchantDomain)
     _notes = State(initialValue: transaction?.notes ?? scheduledDraft?.notes ?? "")
     _date = State(initialValue: transaction?.date ?? scheduledDraft?.date ?? Date())
   }
@@ -73,23 +74,6 @@ struct TransactionEditorScreen: View {
       return selectedAccount?.kind == .cash ? "Ready to Assign" : "No Category"
     }
     return "Needs Categorization"
-  }
-
-  private var suggestedPayees: [PayeeDirectory.Entry] {
-    let search = payee.trimmingCharacters(in: .whitespacesAndNewlines)
-    return payeeEntries
-      .filter {
-        !$0.isTransferOnly
-          && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search))
-          && PayeeDirectory.key($0.name) != PayeeDirectory.key(search)
-      }
-      .sorted {
-        $0.transactionCount == $1.transactionCount
-          ? $0.name.localizedStandardCompare($1.name) == .orderedAscending
-          : $0.transactionCount > $1.transactionCount
-      }
-      .prefix(5)
-      .map { $0 }
   }
 
   private var matchingSchedule: BudgetSchedule? {
@@ -143,17 +127,22 @@ struct TransactionEditorScreen: View {
               accounts: accounts, excludingID: accountID
             )
           } else {
-            TextField(kind == .expense ? "Payee" : "Source", text: $payee)
-              .textInputAutocapitalization(.words)
-              .focused($payeeFocused)
-            if payeeFocused {
-              ForEach(suggestedPayees) { suggestion in
-                Button(suggestion.name) {
-                  payee = suggestion.name
-                  payeeFocused = false
-                }
+            Button {
+              showingPayeeSelection = true
+            } label: {
+              HStack(spacing: 12) {
+                Text(kind == .expense ? "Payee" : "Source").foregroundStyle(.primary)
+                Spacer(minLength: 12)
+                Text(payee.isEmpty ? "Choose a payee" : payee)
+                  .foregroundStyle(.secondary)
+                  .lineLimit(1)
+                Image(systemName: "chevron.up.chevron.down")
+                  .font(.caption)
+                  .foregroundStyle(.tertiary)
               }
+              .contentShape(Rectangle())
             }
+            .accessibilityLabel("\(kind == .expense ? "Payee" : "Source"), \(payee.isEmpty ? "Choose a payee" : payee)")
           }
           if kind != .transfer || needsEnvelopeForTransfer {
             CategorySelectionField(
@@ -259,8 +248,12 @@ struct TransactionEditorScreen: View {
       .onChange(of: accountID) { _, newAccountID in
         if destinationID == newAccountID { destinationID = nil }
       }
-      .task {
-        payeeEntries = (try? await PayeeDirectoryRepository(modelContainer: modelContext.container).entries()) ?? []
+      .sheet(isPresented: $showingPayeeSelection) {
+        PayeeSelectionSheet(selectedName: payee) { selected in
+          payee = selected.name
+          merchantDomain = selected.merchantDomain
+          showingPayeeSelection = false
+        }
       }
     }
   }
@@ -341,6 +334,7 @@ struct TransactionEditorScreen: View {
           amountMinor: minor,
           date: date,
           payee: payee,
+          merchantDomain: merchantDomain,
           notes: notes,
           scheduleID: linkedScheduleID,
           scheduledFor: linkedScheduledFor,
@@ -355,6 +349,7 @@ struct TransactionEditorScreen: View {
           amountMinor: minor,
           date: date,
           payee: payee,
+          merchantDomain: merchantDomain,
           notes: notes,
           scheduleID: linkedScheduleID,
           scheduledFor: linkedScheduledFor,

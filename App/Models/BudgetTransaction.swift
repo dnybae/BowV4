@@ -23,6 +23,8 @@ final class BudgetTransaction {
   var amountMinor: Int64 = 0
   var payee: String = ""
   var merchantDomain: String? = nil
+  var bankDescription: String? = nil
+  var brandLookupAttemptedAt: Date? = nil
   var notes: String = ""
   var kindRaw: String = BudgetTransactionKind.expense.rawValue
   var isCleared: Bool = false

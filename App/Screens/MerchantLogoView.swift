@@ -3,9 +3,10 @@ import SwiftUI
 struct MerchantLogoView: View {
   var merchantName: String
   var domain: String? = nil
+  var logoURL: URL? = nil
 
   var body: some View {
-    AsyncImage(url: LogoDev.logoURL(domain: domain, merchantName: merchantName)) { phase in
+    AsyncImage(url: logoURL ?? LogoDev.logoURL(domain: domain, merchantName: merchantName)) { phase in
       if let image = phase.image {
         image.resizable().scaledToFit()
       } else {

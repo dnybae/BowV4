@@ -33,6 +33,21 @@ struct PayeeDetailScreen: View {
     List {
       if let entry {
         if let payee = payees.first(where: { $0.id == entry.ruleID }),
+           let domain = payee.merchantDomain {
+          Section("Company") {
+            HStack(spacing: 12) {
+              MerchantLogoView(merchantName: payee.name, domain: domain)
+              VStack(alignment: .leading, spacing: 3) {
+                Text(payee.name).font(.headline)
+                Text(domain).font(.subheadline).foregroundStyle(.secondary)
+              }
+            }
+            if let description = payee.brandDescription, !description.isEmpty {
+              Text(description).font(.subheadline)
+            }
+          }
+        }
+        if let payee = payees.first(where: { $0.id == entry.ruleID }),
            let envelope = envelopes.first(where: { $0.id == payee.defaultEnvelopeID }) {
           Section("Default Envelope") {
             LabeledContent("Envelope", value: envelope.name)

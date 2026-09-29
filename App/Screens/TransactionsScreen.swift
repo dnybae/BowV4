@@ -199,6 +199,7 @@ enum SpendingRoute: Hashable {
 }
 
 struct TransactionRow: View {
+  @Query private var payees: [BudgetPayee]
   var transaction: BudgetTransaction
   var accountName: String
   var envelopeName: String?
@@ -214,7 +215,9 @@ struct TransactionRow: View {
     HStack(spacing: 12) {
       MerchantLogoView(
         merchantName: transaction.kind == .transfer ? "" : transaction.payee,
-        domain: transaction.kind == .transfer ? nil : transaction.merchantDomain
+        domain: transaction.kind == .transfer ? nil : PayeeDirectory.logoDomain(
+          for: transaction.payee, transactionDomain: transaction.merchantDomain, payees: payees
+        )
       )
       VStack(alignment: .leading, spacing: 3) {
         Text(title)

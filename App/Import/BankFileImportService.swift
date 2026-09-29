@@ -144,6 +144,7 @@ struct BankFileImportService {
       kind: kind
     )
     transaction.externalKey = proposal.externalKey
+    transaction.bankDescription = row.payee
     transaction.sourceRaw = "bankFile"
     transaction.isCleared = true
     transaction.needsApproval = true

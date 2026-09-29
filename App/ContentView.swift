@@ -405,6 +405,10 @@ private struct BudgetHomeView: View {
       if calendar.isDate(selectedMonth, equalTo: lastKnownCurrentMonth, toGranularity: .month) {
         selectedMonth = Date()
       }
+      if calendar.isDate(selectedCalendarDate, inSameDayAs: lastKnownCurrentMonth) {
+        selectedCalendarDate = Date()
+        calendarReturnToTodayRequest += 1
+      }
       lastKnownCurrentMonth = Date()
     }
   }

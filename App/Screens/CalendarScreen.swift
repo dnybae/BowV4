@@ -194,7 +194,7 @@ struct CalendarScreen: View {
         }
       }
       .frame(maxWidth: .infinity)
-      .padding(.bottom, 24)
+      .padding(.bottom, 88)
     }
   }
 

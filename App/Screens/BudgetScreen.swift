@@ -40,7 +40,9 @@ struct BudgetScreen: View {
   }
 
   private var lastAccessibleMonth: Date {
-    BudgetMonthAccessPolicy().lastAccessibleMonth(today: Date(), allocations: allocations)
+    BudgetMonthAccessPolicy().lastAccessibleMonth(
+      today: Date(), funding: allocations.map(\.monthFundingItem)
+    )
   }
 
   private var previousSnapshot: BudgetSnapshot? {

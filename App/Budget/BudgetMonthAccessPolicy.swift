@@ -9,22 +9,20 @@ struct BudgetMonthAccessPolicy {
     return viewed < current || assignedMinor > 0
   }
 
-  func assignedMinor(in month: Date, allocations: [BudgetAllocation]) -> Int64 {
+  func assignedMinor(in month: Date, funding: [BudgetMonthFundingItem]) -> Int64 {
     guard let interval = calendar.dateInterval(of: .month, for: month) else { return 0 }
-    return allocations.reduce(Int64(0)) { total, allocation in
-      guard interval.contains(allocation.date) else { return total }
-      let hasSource = allocation.sourceEnvelopeID != nil || allocation.sourceCardID != nil
-      let hasTarget = allocation.targetEnvelopeID != nil || allocation.targetCardID != nil
-      if !hasSource && hasTarget { return total + allocation.amountMinor }
-      if hasSource && !hasTarget { return total - allocation.amountMinor }
+    return funding.reduce(Int64(0)) { total, item in
+      guard interval.contains(item.date) else { return total }
+      if !item.hasSource && item.hasTarget { return total + item.amountMinor }
+      if item.hasSource && !item.hasTarget { return total - item.amountMinor }
       return total
     }
   }
 
-  func lastAccessibleMonth(today: Date, allocations: [BudgetAllocation]) -> Date {
+  func lastAccessibleMonth(today: Date, funding: [BudgetMonthFundingItem]) -> Date {
     var month = calendar.dateInterval(of: .month, for: today)?.start ?? today
-    for _ in 0...allocations.count {
-      guard assignedMinor(in: month, allocations: allocations) > 0,
+    for _ in 0...funding.count {
+      guard assignedMinor(in: month, funding: funding) > 0,
             let next = calendar.date(byAdding: .month, value: 1, to: month) else {
         return month
       }
@@ -32,4 +30,11 @@ struct BudgetMonthAccessPolicy {
     }
     return month
   }
+}
+
+struct BudgetMonthFundingItem {
+  var date: Date
+  var amountMinor: Int64
+  var hasSource: Bool
+  var hasTarget: Bool
 }

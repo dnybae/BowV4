@@ -9,6 +9,7 @@ enum BowDrawerPage: String, Identifiable {
 }
 
 struct BowSideDrawer: View {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Binding var isPresented: Bool
   var allowsEdgeOpen: Bool
   var budgetName: String
@@ -42,7 +43,7 @@ struct BowSideDrawer: View {
           .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
           .shadow(color: .black.opacity(0.16 * progress), radius: 18)
           .offset(x: -width * (1 - progress))
-          .gesture(closeGesture(width: width))
+          .simultaneousGesture(closeGesture(width: width))
           .allowsHitTesting(isPresented)
           .accessibilityHidden(!isPresented)
 
@@ -125,10 +126,14 @@ struct BowSideDrawer: View {
 
   private func openGesture(width: CGFloat) -> some Gesture {
     DragGesture(minimumDistance: 12)
-      .onChanged { openingDrag = max(0, min(width, $0.translation.width)) }
+      .onChanged { value in
+        guard abs(value.translation.width) > abs(value.translation.height) * 1.2 else { return }
+        openingDrag = max(0, min(width, value.translation.width))
+      }
       .onEnded { value in
-        let shouldOpen = value.predictedEndTranslation.width > width * 0.34
-        withAnimation(.snappy) {
+        let shouldOpen = abs(value.translation.width) > abs(value.translation.height) * 1.2
+          && value.predictedEndTranslation.width > width * 0.34
+        withAnimation(reduceMotion ? nil : .snappy) {
           isPresented = shouldOpen
           openingDrag = 0
         }
@@ -137,10 +142,14 @@ struct BowSideDrawer: View {
 
   private func closeGesture(width: CGFloat) -> some Gesture {
     DragGesture(minimumDistance: 12)
-      .onChanged { closingDrag = max(-width, min(0, $0.translation.width)) }
+      .onChanged { value in
+        guard abs(value.translation.width) > abs(value.translation.height) * 1.2 else { return }
+        closingDrag = max(-width, min(0, value.translation.width))
+      }
       .onEnded { value in
-        let shouldClose = value.predictedEndTranslation.width < -width * 0.34
-        withAnimation(.snappy) {
+        let shouldClose = abs(value.translation.width) > abs(value.translation.height) * 1.2
+          && value.predictedEndTranslation.width < -width * 0.34
+        withAnimation(reduceMotion ? nil : .snappy) {
           isPresented = !shouldClose
           closingDrag = 0
         }
@@ -148,6 +157,6 @@ struct BowSideDrawer: View {
   }
 
   private func close() {
-    withAnimation(.snappy) { isPresented = false }
+    withAnimation(reduceMotion ? nil : .snappy) { isPresented = false }
   }
 }

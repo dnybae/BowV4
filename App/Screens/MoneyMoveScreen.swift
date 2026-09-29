@@ -16,9 +16,6 @@ struct MoneyMoveScreen: View {
   @State private var errorMessage: String?
 
   init(
-    accounts: [BudgetAccount],
-    envelopes: [BudgetEnvelope],
-    snapshot: BudgetSnapshot,
     currencyCode: String,
     month: Date,
     source: BudgetBucket,
@@ -50,6 +47,20 @@ struct MoneyMoveScreen: View {
   var body: some View {
     NavigationStack {
       Form {
+        Section {
+          VStack(alignment: .leading, spacing: 7) {
+            Text(month.formatted(.dateTime.month(.wide).year()) + " Budget")
+              .font(.title2.weight(.semibold))
+              .foregroundStyle(.primary)
+            Text("This move is recorded in this month. Remaining balances carry into later months.")
+              .font(.subheadline)
+              .foregroundStyle(.secondary)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.vertical, 6)
+          .accessibilityElement(children: .combine)
+        }
+
         Section {
           BudgetBucketSelectionField(
             title: "From", selection: $source,
@@ -100,11 +111,6 @@ struct MoneyMoveScreen: View {
           ))
         }
 
-        Section {
-          Text("This move changes \(month.formatted(.dateTime.month(.wide).year())). Changes to a past month can affect later months.")
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-        }
       }
       .navigationTitle("Move Money")
       .navigationBarTitleDisplayMode(.inline)
@@ -115,7 +121,7 @@ struct MoneyMoveScreen: View {
       }
       .safeAreaInset(edge: .bottom) {
         Button(action: save) {
-          Text("Move \(BudgetMoney.formatted(enteredMinor ?? 0, currencyCode: currencyCode))")
+          Text("Move \(BudgetMoney.formatted(enteredMinor ?? 0, currencyCode: currencyCode)) in \(month.formatted(.dateTime.month(.wide)))")
             .fontWeight(.semibold)
             .frame(maxWidth: .infinity, minHeight: 44)
         }

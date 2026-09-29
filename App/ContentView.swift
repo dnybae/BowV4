@@ -72,7 +72,13 @@ private struct BudgetHomeView: View {
   @Query private var simpleFINRecords: [SimpleFINImportRecord]
   @AppStorage("bow.appearance") private var appearanceRaw = AppAppearance.system.rawValue
   @State private var selectedMonth = Date()
+  @State private var selectedCalendarDate = Date()
   @State private var selectedTab: HomeTab = .budget
+  @State private var budgetPath: [BudgetRoute] = []
+  @State private var spendingPath: [SpendingRoute] = []
+  @State private var accountsPath: [AccountRoute] = []
+  @State private var budgetReturnToPresentRequest = 0
+  @State private var calendarReturnToTodayRequest = 0
   @State private var activeSheet: BowSheet?
   @State private var showingDrawer = false
   @State private var drawerPage: BowDrawerPage?
@@ -101,13 +107,11 @@ private struct BudgetHomeView: View {
     )
   }
 
-  private var currentSnapshot: BudgetSnapshot {
-    BudgetLedger.snapshot(
-      month: Date(),
-      accounts: accounts,
-      envelopes: envelopes,
-      allocations: allocations,
-      transactions: transactions
+  private var currentAccountReport: AccountBalanceReport {
+    BudgetLedger.accountBalanceReport(
+      before: Date(), inclusive: true,
+      accounts: accounts, transactions: transactions,
+      currencyCode: currencyCode
     )
   }
 
@@ -121,13 +125,23 @@ private struct BudgetHomeView: View {
           set: { tab in
             if tab == .addTransaction {
               activeSheet = .newTransaction
+            } else if tab == selectedTab {
+              switch tab {
+              case .budget:
+                budgetPath.removeAll()
+                budgetReturnToPresentRequest += 1
+              case .calendar:
+                calendarReturnToTodayRequest += 1
+              case .transactions, .accounts, .addTransaction:
+                break
+              }
             } else {
               selectedTab = tab
             }
           }
         )) {
           Tab("Budget", systemImage: "square.grid.2x2.fill", value: .budget) {
-            NavigationStack {
+            NavigationStack(path: $budgetPath) {
               BudgetScreen(
                 currencyCode: currencyCode,
                 groups: groups,
@@ -138,12 +152,14 @@ private struct BudgetHomeView: View {
                 schedules: schedules,
                 snapshot: snapshot,
                 selectedMonth: $selectedMonth,
+                returnToPresentRequest: budgetReturnToPresentRequest,
                 onAddGroup: { activeSheet = .newGroup },
                 onAddEnvelope: { activeSheet = .newEnvelope },
                 onEditEnvelope: { activeSheet = .editEnvelope($0) },
                 onImportYNAB: { activeSheet = .importYNAB },
                 onMoveMoney: { source, target in
-                  activeSheet = .moveMoney(source, target)
+                  let month = Calendar.current.dateInterval(of: .month, for: selectedMonth)?.start ?? selectedMonth
+                  activeSheet = .moveMoney(source, target, month)
                 },
                 onSelectTransaction: { activeSheet = .editTransaction($0) },
                 onEditSchedule: { activeSheet = .editSchedule($0) }
@@ -158,7 +174,7 @@ private struct BudgetHomeView: View {
             }
           }
           Tab("Spending", systemImage: "list.bullet.rectangle", value: .transactions) {
-            NavigationStack {
+            NavigationStack(path: $spendingPath) {
               TransactionsScreen(
                 transactions: transactions,
                 accounts: accounts,
@@ -190,6 +206,8 @@ private struct BudgetHomeView: View {
                 envelopes: envelopes,
                 allocations: allocations,
                 currencyCode: currencyCode,
+                selectedDate: $selectedCalendarDate,
+                returnToTodayRequest: calendarReturnToTodayRequest,
                 onRecord: { activeSheet = .recordScheduled($0) },
                 onSelectTransaction: { activeSheet = .editTransaction($0) }
               )
@@ -203,11 +221,11 @@ private struct BudgetHomeView: View {
             }
           }
           Tab("Accounts", systemImage: accountsTabSymbol, value: .accounts) {
-            NavigationStack {
+            NavigationStack(path: $accountsPath) {
               AccountsScreen(
                 accounts: accounts,
                 transactions: transactions,
-                snapshot: currentSnapshot,
+                balances: currentAccountReport.balances,
                 currencyCode: currencyCode,
                 onAddAccount: { activeSheet = .newAccount },
                 onSelectTransaction: { activeSheet = .editTransaction($0) }
@@ -248,23 +266,27 @@ private struct BudgetHomeView: View {
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .tint(Color.accentColor)
+        .accessibilityHidden(showingDrawer)
         .overlay {
-          if showingDrawer {
-            BowSideDrawer(
-              budgetName: budgetName,
-              onClose: { withAnimation(.snappy) { showingDrawer = false } },
-              onRename: {
-                budgetNameDraft = budgetName
-                showingDrawer = false
-                showingRename = true
-              },
-              onOpen: { page in
-                showingDrawer = false
+          BowSideDrawer(
+            isPresented: $showingDrawer,
+            allowsEdgeOpen: selectedTab == .budget ? budgetPath.isEmpty
+              : selectedTab == .transactions ? spendingPath.isEmpty
+              : selectedTab == .accounts ? accountsPath.isEmpty : true,
+            budgetName: budgetName,
+            onRename: {
+              budgetNameDraft = budgetName
+              showingDrawer = false
+              showingRename = true
+            },
+            onOpen: { page in
+              showingDrawer = false
+              Task { @MainActor in
+                await Task.yield()
                 drawerPage = page
               }
-            )
-            .transition(.opacity)
-          }
+            }
+          )
         }
         .sheet(item: $drawerPage) { page in
           switch page {
@@ -349,13 +371,10 @@ private struct BudgetHomeView: View {
             )
           case .importYNAB:
             YNABImportScreen(groups: groups, envelopes: envelopes)
-          case .moveMoney(let source, let target):
+          case .moveMoney(let source, let target, let month):
             MoneyMoveScreen(
-              accounts: accounts,
-              envelopes: envelopes,
-              snapshot: snapshot,
               currencyCode: currencyCode,
-              month: selectedMonth,
+              month: month,
               source: source,
               target: target
             )
@@ -406,7 +425,7 @@ private enum BowSheet: Identifiable {
   case newEnvelope
   case editEnvelope(UUID)
   case importYNAB
-  case moveMoney(BudgetBucket, BudgetBucket)
+  case moveMoney(BudgetBucket, BudgetBucket, Date)
 
   var id: String {
     switch self {

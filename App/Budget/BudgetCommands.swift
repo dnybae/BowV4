@@ -54,6 +54,11 @@ struct BudgetCommands {
   ) throws -> BudgetAccount {
     guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else { throw BudgetCommandError.missingName }
+    if let profile = try context.fetch(FetchDescriptor<BudgetProfile>()).first,
+       profile.currencyCode != currencyCode { throw BudgetCommandError.currencyMismatch }
+    if kind == .liability && openingBalanceMinor > 0 {
+      throw BudgetCommandError.liabilityRequiresNegativeBalance
+    }
     let account = BudgetAccount(
       name: name.trimmingCharacters(in: .whitespacesAndNewlines),
       kind: kind,
@@ -68,6 +73,50 @@ struct BudgetCommands {
     }
     try context.save()
     return account
+  }
+
+  static func updateAccount(
+    _ account: BudgetAccount,
+    name: String,
+    type: BudgetAccountType,
+    note: String,
+    currentBalanceMinor: Int64,
+    in context: ModelContext
+  ) throws {
+    let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedName.isEmpty else { throw BudgetCommandError.missingName }
+    if account.kind == .liability && currentBalanceMinor > 0 {
+      throw BudgetCommandError.liabilityRequiresNegativeBalance
+    }
+    let now = Date()
+    let accounts = try context.fetch(FetchDescriptor<BudgetAccount>())
+    let transactions = try context.fetch(FetchDescriptor<BudgetTransaction>())
+    let report = BudgetLedger.accountBalanceReport(
+      before: now, inclusive: true, accounts: accounts, transactions: transactions
+    )
+    guard let existingBalance = report.balances[account.id] else {
+      throw BudgetCommandError.invalidTransfer
+    }
+    let (delta, overflow) = currentBalanceMinor.subtractingReportingOverflow(existingBalance)
+    guard !overflow else { throw BudgetCommandError.balanceOverflow }
+    if delta != 0 {
+      let adjustment = BudgetTransaction(
+        accountID: account.id, date: now, amountMinor: delta,
+        payee: "Balance Adjustment", notes: "Current balance updated",
+        kind: delta > 0 ? .inflow : .expense
+      )
+      adjustment.sourceRaw = "balanceAdjustment"
+      context.insert(adjustment)
+      account.lastReconciledAt = nil
+      account.lastReconciledBalanceMinor = nil
+    }
+    account.name = trimmedName
+    account.typeRaw = type.rawValue
+    account.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+    if account.kind == .credit {
+      try ensureCardPaymentEnvelope(for: account, in: context)
+    }
+    try context.save()
   }
 
   static func ensureCardPaymentEnvelopes(in context: ModelContext) throws {
@@ -445,6 +494,9 @@ enum BudgetCommandError: LocalizedError {
   case futureTransactionNeedsSchedule
   case invalidEnvelope
   case scheduledTransferMustLinkTransfer
+  case currencyMismatch
+  case liabilityRequiresNegativeBalance
+  case balanceOverflow
 
   var errorDescription: String? {
     switch self {
@@ -464,6 +516,9 @@ enum BudgetCommandError: LocalizedError {
     case .futureTransactionNeedsSchedule: "Schedule future transactions and record them when they occur."
     case .invalidEnvelope: "Choose a spending envelope. Card payment envelopes are funded automatically or with Move Money."
     case .scheduledTransferMustLinkTransfer: "Record the scheduled transfer, then link the bank entry to that transfer."
+    case .currencyMismatch: "This account must use the budget’s currency."
+    case .liabilityRequiresNegativeBalance: "Enter money owed on a loan as a negative balance."
+    case .balanceOverflow: "That balance change is too large to save safely."
     }
   }
 }

@@ -15,6 +15,7 @@ struct BowForecast {
     let recurrence = ScheduleRecurrence(calendar: calendar)
     let actual = transactions.filter { transaction in
       transaction.date >= firstHistory && transaction.date < currentMonth && transaction.scheduleID == nil
+        && transaction.sourceRaw != "balanceAdjustment"
         && (transaction.kind == .expense || transaction.kind == .inflow)
         && !schedules.contains(where: { schedule in
           schedule.kind == transaction.kind && schedule.accountID == transaction.accountID

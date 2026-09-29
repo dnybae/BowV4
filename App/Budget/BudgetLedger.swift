@@ -10,14 +10,7 @@ struct BudgetLedger {
   ) -> BudgetSnapshot {
     BudgetCalculator().calculate(
       month: month,
-      accounts: accounts.map {
-        AccountLedgerItem(
-          id: $0.id,
-          kind: $0.kind,
-          openingBalanceMinor: $0.openingBalanceMinor,
-          openedAt: $0.openedAt
-        )
-      },
+      accounts: accountItems(accounts),
       envelopes: envelopes.map { EnvelopeLedgerItem(id: $0.id, paymentAccountID: $0.paymentAccountID) },
       allocations: allocations.compactMap { allocation in
         let target: BudgetBucket
@@ -47,18 +40,50 @@ struct BudgetLedger {
           target: target
         )
       },
-      transactions: transactions.map {
-        TransactionLedgerItem(
-          id: $0.id,
-          date: $0.date,
-          createdAt: $0.createdAt,
-          amountMinor: $0.amountMinor,
-          accountID: $0.accountID,
-          transferAccountID: $0.transferAccountID,
-          envelopeID: $0.envelopeID,
-          kind: $0.kind
-        )
-      }
+      transactions: transactionItems(transactions)
     )
+  }
+
+  static func accountBalanceReport(
+    before cutoff: Date,
+    inclusive: Bool = false,
+    accounts: [BudgetAccount],
+    transactions: [BudgetTransaction],
+    currencyCode: String? = nil
+  ) -> AccountBalanceReport {
+    AccountBalanceCalculator().calculate(
+      before: cutoff,
+      inclusive: inclusive,
+      accounts: accountItems(accounts),
+      transactions: transactionItems(transactions),
+      reportingCurrencyCode: currencyCode
+    )
+  }
+
+  private static func accountItems(_ accounts: [BudgetAccount]) -> [AccountLedgerItem] {
+    accounts.map {
+      AccountLedgerItem(
+        id: $0.id,
+        kind: $0.kind,
+        openingBalanceMinor: $0.openingBalanceMinor,
+        openedAt: $0.openedAt,
+        currencyCode: $0.currencyCode
+      )
+    }
+  }
+
+  private static func transactionItems(_ transactions: [BudgetTransaction]) -> [TransactionLedgerItem] {
+    transactions.map {
+      TransactionLedgerItem(
+        id: $0.id,
+        date: $0.date,
+        createdAt: $0.createdAt,
+        amountMinor: $0.amountMinor,
+        accountID: $0.accountID,
+        transferAccountID: $0.transferAccountID,
+        envelopeID: $0.envelopeID,
+        kind: $0.kind
+      )
+    }
   }
 }

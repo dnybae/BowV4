@@ -3,7 +3,7 @@ import SwiftUI
 struct AccountsScreen: View {
   var accounts: [BudgetAccount]
   var transactions: [BudgetTransaction]
-  var snapshot: BudgetSnapshot
+  var balances: [UUID: Int64]
   var currencyCode: String
   var onAddAccount: () -> Void
   var onSelectTransaction: (UUID) -> Void
@@ -38,8 +38,6 @@ struct AccountsScreen: View {
         .frame(maxWidth: .infinity)
       } else {
         VStack(alignment: .leading, spacing: 30) {
-          netWorthCard
-
           if hasOnBudgetAccounts {
             budgetGroup("On Budget") {
               accountGroup(.cash, title: "Cash")
@@ -62,6 +60,18 @@ struct AccountsScreen: View {
     }
     .background(Color(uiColor: .systemGroupedBackground))
     .navigationTitle("Accounts")
+    .navigationDestination(for: AccountRoute.self) { route in
+      if let account = accounts.first(where: { $0.id == route.id }) {
+        AccountDetailScreen(
+          account: account,
+          transactions: transactions,
+          balanceMinor: balances[account.id, default: 0],
+          currencyCode: currencyCode,
+          onSelectTransaction: onSelectTransaction,
+          onEditAccount: { editingAccount = account }
+        )
+      }
+    }
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
         Button("Add Account", systemImage: "plus", action: onAddAccount)
@@ -94,7 +104,7 @@ struct AccountsScreen: View {
   private func accountGroup(_ kind: BudgetAccountKind, title: String) -> some View {
     let matching = accounts.filter { $0.kind == kind }.sorted { $0.name < $1.name }
     if !matching.isEmpty {
-      let total = matching.reduce(0) { $0 + snapshot.accountBalances[$1.id, default: 0] }
+      let total = matching.reduce(0) { $0 + balances[$1.id, default: 0] }
       let formattedTotal = BudgetMoney.formatted(total, currencyCode: currencyCode)
       VStack(alignment: .leading, spacing: 12) {
         Button {
@@ -139,30 +149,6 @@ struct AccountsScreen: View {
     }
   }
 
-  private var netWorthCard: some View {
-    HStack(spacing: 12) {
-      HStack(spacing: 12) {
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Net Worth")
-            .font(.headline)
-          Text("Includes all tracked accounts")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-        }
-        Spacer()
-        Text(BudgetMoney.formatted(snapshot.netWorthMinor, currencyCode: currencyCode))
-          .font(.headline)
-          .monospacedDigit()
-      }
-      .foregroundStyle(.primary)
-      .padding(18)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .background(Color(uiColor: .secondarySystemGroupedBackground),
-                  in: RoundedRectangle(cornerRadius: 24))
-    }
-    .accessibilityElement(children: .combine)
-  }
-
   private func toggleGroup(_ kind: BudgetAccountKind) {
     var updated = collapsedKinds
     if !updated.insert(kind).inserted {
@@ -172,17 +158,8 @@ struct AccountsScreen: View {
   }
 
   private func accountRow(_ account: BudgetAccount) -> some View {
-    let balance = snapshot.accountBalances[account.id, default: 0]
-    return NavigationLink {
-      AccountDetailScreen(
-        account: account,
-        transactions: transactions,
-        balanceMinor: balance,
-        currencyCode: currencyCode,
-        onSelectTransaction: onSelectTransaction,
-        onEditAccount: { editingAccount = account }
-      )
-    } label: {
+    let balance = balances[account.id, default: 0]
+    return NavigationLink(value: AccountRoute(id: account.id)) {
       HStack(spacing: 12) {
         Image(systemName: account.kind.systemImage)
           .font(.subheadline.weight(.semibold))
@@ -213,6 +190,10 @@ struct AccountsScreen: View {
     .buttonStyle(.plain)
     .accessibilityLabel("\(account.name), \(BudgetMoney.formatted(balance, currencyCode: currencyCode))")
   }
+}
+
+struct AccountRoute: Hashable {
+  var id: UUID
 }
 
 private struct AccountDetailScreen: View {
@@ -259,9 +240,7 @@ private struct AccountDetailScreen: View {
           ContentUnavailableView("No transactions yet", systemImage: "list.bullet.rectangle")
         } else {
           ForEach(accountTransactions) { transaction in
-            Button {
-              onSelectTransaction(transaction.id)
-            } label: {
+            if transaction.sourceRaw == "balanceAdjustment" {
               TransactionRow(
                 transaction: transaction,
                 accountName: account.name,
@@ -270,8 +249,21 @@ private struct AccountDetailScreen: View {
                 displayAmountMinor: transaction.transferAccountID == account.id
                   ? -transaction.amountMinor : transaction.amountMinor
               )
+            } else {
+              Button {
+                onSelectTransaction(transaction.id)
+              } label: {
+                TransactionRow(
+                  transaction: transaction,
+                  accountName: account.name,
+                  envelopeName: nil,
+                  currencyCode: currencyCode,
+                  displayAmountMinor: transaction.transferAccountID == account.id
+                    ? -transaction.amountMinor : transaction.amountMinor
+                )
+              }
+              .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
           }
         }
       }

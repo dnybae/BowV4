@@ -26,7 +26,8 @@ struct TransactionsScreen: View {
   private var visibleTransactions: [BudgetTransaction] {
     transactions
       .filter { transaction in
-        filter.includes(TransactionFilterItem(
+        transaction.sourceRaw != "balanceAdjustment"
+          && filter.includes(TransactionFilterItem(
           accountID: transaction.accountID,
           transferAccountID: transaction.transferAccountID,
           envelopeID: transaction.envelopeID,
@@ -52,15 +53,7 @@ struct TransactionsScreen: View {
     List {
       if reviewCount > 0 {
         Section {
-          NavigationLink {
-            ReviewInboxScreen(
-              transactions: transactions, records: simpleFINRecords,
-              occurrences: occurrences, schedules: schedules,
-              accounts: accounts, currencyCode: currencyCode,
-              onSelectTransaction: onSelect, onRecord: onRecord,
-              onEditSchedule: onEditSchedule
-            )
-          } label: {
+          NavigationLink(value: SpendingRoute.reviewInbox) {
             VStack(alignment: .leading, spacing: 4) {
               Text("Transactions Needing Approval")
                 .font(.headline)
@@ -74,7 +67,9 @@ struct TransactionsScreen: View {
           .listRowBackground(Color.accentColor.opacity(0.10))
         }
       }
-      let uncategorizedCount = transactions.filter { $0.kind == .expense && $0.envelopeID == nil }.count
+      let uncategorizedCount = transactions.filter {
+        $0.kind == .expense && $0.envelopeID == nil && $0.sourceRaw != "balanceAdjustment"
+      }.count
       if uncategorizedCount > 0 {
         Section("Needs Attention") {
           Button("Categorize \(uncategorizedCount) transactions", systemImage: "tag") {
@@ -118,6 +113,18 @@ struct TransactionsScreen: View {
     }
     .searchable(text: $searchText, prompt: "Payee, note, account, or envelope")
     .navigationTitle("Spending")
+    .navigationDestination(for: SpendingRoute.self) { route in
+      switch route {
+      case .reviewInbox:
+        ReviewInboxScreen(
+          transactions: transactions, records: simpleFINRecords,
+          occurrences: occurrences, schedules: schedules,
+          accounts: accounts, currencyCode: currencyCode,
+          onSelectTransaction: onSelect, onRecord: onRecord,
+          onEditSchedule: onEditSchedule
+        )
+      }
+    }
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
         Button("Filter Transactions", systemImage: "line.3.horizontal.decrease") {
@@ -137,6 +144,10 @@ struct TransactionsScreen: View {
       )
     }
   }
+}
+
+enum SpendingRoute: Hashable {
+  case reviewInbox
 }
 
 struct TransactionRow: View {

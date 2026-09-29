@@ -14,9 +14,10 @@ struct BudgetCalculator {
     let nextMonth = calendar.date(byAdding: .month, value: 1, to: monthStart) ?? month
     let includedAccounts = accounts.filter { $0.openedAt < nextMonth }
     let accountKinds = Dictionary(uniqueKeysWithValues: includedAccounts.map { ($0.id, $0.kind) })
-    var accountBalances = Dictionary(uniqueKeysWithValues: includedAccounts.map {
-      ($0.id, $0.openingBalanceMinor)
-    })
+    let balanceReport = AccountBalanceCalculator().calculate(
+      before: nextMonth, accounts: accounts, transactions: transactions
+    )
+    let accountBalances = balanceReport.balances
     var cashAvailable = Dictionary(uniqueKeysWithValues: envelopes
       .filter { $0.paymentAccountID == nil }.map { ($0.id, Int64(0)) })
     var cashShortfall: [UUID: Int64] = [:]
@@ -109,12 +110,9 @@ struct BudgetCalculator {
           guard let destinationID = transaction.transferAccountID,
                 accountKinds[destinationID] != nil else { continue }
         }
-        accountBalances[transaction.accountID, default: 0] += transaction.amountMinor
-
         if transaction.kind == .transfer {
           let destinationID = transaction.transferAccountID!
           let destinationKind = accountKinds[destinationID]!
-          accountBalances[destinationID, default: 0] -= transaction.amountMinor
           if kind == .cash && destinationKind == .credit {
             let fundedPayment = min(
               -transaction.amountMinor,
@@ -228,7 +226,7 @@ struct BudgetCalculator {
       readyToAssignMinor: cashTotal - envelopeFunds - cardPaymentFunds - assignedInFuture,
       assignedInFutureMinor: assignedInFuture,
       cashTotalMinor: cashTotal,
-      netWorthMinor: accountBalances.values.reduce(Int64(0), +)
+      netWorthMinor: balanceReport.netWorthMinor
     )
   }
 
@@ -282,6 +280,7 @@ struct AccountLedgerItem {
   var kind: BudgetAccountKind
   var openingBalanceMinor: Int64
   var openedAt: Date
+  var currencyCode: String = "USD"
 }
 
 struct EnvelopeLedgerItem {
@@ -327,7 +326,7 @@ struct BudgetSnapshot {
   var readyToAssignMinor: Int64
   var assignedInFutureMinor: Int64 = 0
   var cashTotalMinor: Int64
-  var netWorthMinor: Int64
+  var netWorthMinor: Int64?
 
   func available(for envelopeID: UUID) -> Int64 {
     cashAvailable[envelopeID, default: 0]

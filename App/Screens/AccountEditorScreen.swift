@@ -4,6 +4,8 @@ import SwiftData
 struct AccountEditorScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
+  @Query private var allAccounts: [BudgetAccount]
+  @Query private var allTransactions: [BudgetTransaction]
   var currencyCode: String
   var account: BudgetAccount?
   var onSaved: ((BudgetAccount) -> Void)?
@@ -12,6 +14,7 @@ struct AccountEditorScreen: View {
   @State private var openingBalance: String
   @State private var note: String
   @State private var errorMessage: String?
+  @State private var loadedCurrentBalance = false
 
   init(currencyCode: String, account: BudgetAccount? = nil,
        suggestedName: String = "", suggestedBalanceMinor: Int64? = nil,
@@ -56,15 +59,20 @@ struct AccountEditorScreen: View {
       }
 
       Section {
-        TextField(account == nil ? "Starting Balance" : "Opening Balance", text: $openingBalance)
+        TextField(account == nil ? "Starting Balance" : "Current Balance", text: $openingBalance)
           .keyboardType(.numbersAndPunctuation)
           .accessibilityHint("Enter zero or a signed amount in \(currencyCode).")
+        if type.kind == .liability && (parsedOpeningBalance ?? 0) > 0 {
+          Text("Enter money owed as a negative balance.")
+            .font(.footnote)
+            .foregroundStyle(.red)
+        }
       } header: {
         Text("Balance")
       } footer: {
         Text(account == nil
           ? "Enter the balance this account should start with. New transactions will change it."
-          : "This is the balance before recorded transactions. Changing it updates net worth and clears the last reconciliation.")
+          : "Changing the current balance records a dated adjustment. Earlier net worth history stays intact.")
       }
 
       Section("Note") {
@@ -73,6 +81,15 @@ struct AccountEditorScreen: View {
       }
     }
     .navigationTitle(account == nil ? "Private Account" : "Edit Account")
+    .onAppear {
+      guard let account, !loadedCurrentBalance else { return }
+      let report = BudgetLedger.accountBalanceReport(
+        before: Date(), inclusive: true,
+        accounts: allAccounts, transactions: allTransactions
+      )
+      openingBalance = BudgetMoney.editableSigned(report.balances[account.id] ?? account.openingBalanceMinor)
+      loadedCurrentBalance = true
+    }
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       if account != nil {
@@ -111,7 +128,9 @@ struct AccountEditorScreen: View {
   }
 
   private var canSave: Bool {
-    !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && parsedOpeningBalance != nil
+    !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      && parsedOpeningBalance != nil
+      && (type.kind != .liability || (parsedOpeningBalance ?? 0) <= 0)
   }
 
   private func save() {
@@ -122,18 +141,10 @@ struct AccountEditorScreen: View {
     do {
       let saved: BudgetAccount
       if let account {
-        account.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        account.typeRaw = type.rawValue
-        account.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        if account.openingBalanceMinor != minor {
-          account.openingBalanceMinor = minor
-          account.lastReconciledAt = nil
-          account.lastReconciledBalanceMinor = nil
-        }
-        if account.kind == .credit {
-          try BudgetCommands.ensureCardPaymentEnvelope(for: account, in: modelContext)
-        }
-        try modelContext.save()
+        try BudgetCommands.updateAccount(
+          account, name: name, type: type, note: note,
+          currentBalanceMinor: minor, in: modelContext
+        )
         saved = account
       } else {
         saved = try BudgetCommands.addAccount(

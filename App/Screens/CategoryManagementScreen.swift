@@ -118,7 +118,6 @@ struct CategoryManagementScreen: View {
     }
     .sheet(item: $movingEnvelope) { envelope in
       MoneyMoveScreen(
-        accounts: accounts, envelopes: envelopes, snapshot: snapshot,
         currencyCode: currencyCode, month: Date(),
         source: .envelope(envelope.id), target: .readyToAssign
       )

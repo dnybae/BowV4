@@ -22,14 +22,8 @@ struct BudgetSummary {
       total + max(0, -snapshot.available(for: envelope.id))
     }
     let interval = calendar.dateInterval(of: .month, for: snapshot.month)
-    assignedThisMonthMinor = allocations.reduce(0) { total, allocation in
-      guard let interval, interval.contains(allocation.date) else { return total }
-      let hasSource = allocation.sourceEnvelopeID != nil || allocation.sourceCardID != nil
-      let hasTarget = allocation.targetEnvelopeID != nil || allocation.targetCardID != nil
-      if !hasSource && hasTarget { return total + allocation.amountMinor }
-      if hasSource && !hasTarget { return total - allocation.amountMinor }
-      return total
-    }
+    assignedThisMonthMinor = BudgetMonthAccessPolicy(calendar: calendar)
+      .assignedMinor(in: snapshot.month, allocations: allocations)
     let cards = accounts.filter { $0.kind == .credit && $0.openedAt < (interval?.end ?? .distantFuture) }
     creditOwedMinor = cards.reduce(0) { total, card in
       total + max(0, -snapshot.accountBalances[card.id, default: 0])

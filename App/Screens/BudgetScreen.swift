@@ -11,6 +11,7 @@ struct BudgetScreen: View {
   var schedules: [BudgetSchedule]
   var snapshot: BudgetSnapshot
   @Binding var selectedMonth: Date
+  var returnToPresentRequest: Int = 0
   var onAddGroup: () -> Void
   var onAddEnvelope: () -> Void
   var onEditEnvelope: (UUID) -> Void
@@ -19,7 +20,6 @@ struct BudgetScreen: View {
   var onSelectTransaction: (UUID) -> Void
   var onEditSchedule: (UUID) -> Void
   @State private var searchText = ""
-  @State private var monthDirection = 1
 
   private var isPastMonth: Bool {
     (Calendar.current.dateInterval(of: .month, for: selectedMonth)?.start ?? selectedMonth)
@@ -31,6 +31,16 @@ struct BudgetScreen: View {
       snapshot: snapshot, envelopes: envelopes,
       accounts: accounts, allocations: allocations
     )
+  }
+
+  private var canAdvance: Bool {
+    BudgetMonthAccessPolicy().canAdvance(
+      from: selectedMonth, today: Date(), assignedMinor: summary.assignedThisMonthMinor
+    )
+  }
+
+  private var lastAccessibleMonth: Date {
+    BudgetMonthAccessPolicy().lastAccessibleMonth(today: Date(), allocations: allocations)
   }
 
   private var previousSnapshot: BudgetSnapshot? {
@@ -78,18 +88,7 @@ struct BudgetScreen: View {
           if !matching.isEmpty {
             Section(group.name) {
               ForEach(matching) { envelope in
-                NavigationLink {
-                  EnvelopeDetailScreen(
-                    envelope: envelope, currencyCode: currencyCode, snapshot: snapshot,
-                    isPastMonth: isPastMonth,
-                    accounts: accounts, envelopes: envelopes,
-                    allocations: allocations, transactions: transactions, schedules: schedules,
-                    onEdit: { onEditEnvelope(envelope.id) },
-                    onMoveMoney: onMoveMoney,
-                    onSelectTransaction: onSelectTransaction,
-                    onEditSchedule: onEditSchedule
-                  )
-                } label: {
+                NavigationLink(value: BudgetRoute.envelope(envelope.id)) {
                   EnvelopeBudgetRow(
                     name: envelope.name,
                     availableMinor: snapshot.available(for: envelope.id),
@@ -114,18 +113,7 @@ struct BudgetScreen: View {
         if !creditCards.isEmpty {
           Section("Credit Card Payments") {
             ForEach(creditCards) { card in
-              NavigationLink {
-                CardPaymentDetailScreen(
-                  card: card, currencyCode: currencyCode, snapshot: snapshot,
-                  isPastMonth: isPastMonth,
-                  accounts: accounts,
-                  envelopes: envelopes,
-                  allocations: allocations, transactions: transactions, schedules: schedules,
-                  onMoveMoney: onMoveMoney,
-                  onSelectTransaction: onSelectTransaction,
-                  onEditSchedule: onEditSchedule
-                )
-              } label: {
+              NavigationLink(value: BudgetRoute.cardPayment(card.id)) {
                 CardPaymentRow(card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode)
               }
             }
@@ -142,11 +130,7 @@ struct BudgetScreen: View {
           }
         }
       }
-      .id(Calendar.current.dateInterval(of: .month, for: selectedMonth)?.start ?? selectedMonth)
-      .transition(reduceMotion ? .opacity : .asymmetric(
-        insertion: .opacity.combined(with: .move(edge: monthDirection > 0 ? .trailing : .leading)),
-        removal: .opacity.combined(with: .move(edge: monthDirection > 0 ? .leading : .trailing))
-      ))
+      .animation(reduceMotion ? nil : .snappy, value: selectedMonth)
       .searchable(text: $searchText, prompt: "Search envelopes or groups")
       .navigationTitle(selectedMonth.formatted(.dateTime.month(.wide).year()))
       .navigationBarTitleDisplayMode(.inline)
@@ -156,6 +140,8 @@ struct BudgetScreen: View {
             .labelStyle(.iconOnly)
           Button("Next Month", systemImage: "chevron.right") { changeMonth(1) }
             .labelStyle(.iconOnly)
+            .disabled(!canAdvance)
+            .accessibilityHint(canAdvance ? "" : "Assign money in this month to plan the next month")
         }
       }
       .simultaneousGesture(DragGesture(minimumDistance: 50).onEnded { value in
@@ -163,6 +149,44 @@ struct BudgetScreen: View {
               abs(value.translation.width) > abs(value.translation.height) * 1.6 else { return }
         changeMonth(value.translation.width < 0 ? 1 : -1)
       })
+      .navigationDestination(for: BudgetRoute.self) { route in
+        switch route {
+        case .envelope(let id):
+          if let envelope = envelopes.first(where: { $0.id == id }) {
+            EnvelopeDetailScreen(
+              envelope: envelope, currencyCode: currencyCode, snapshot: snapshot,
+              isPastMonth: isPastMonth,
+              accounts: accounts, envelopes: envelopes,
+              allocations: allocations, transactions: transactions, schedules: schedules,
+              onEdit: { onEditEnvelope(envelope.id) },
+              onMoveMoney: onMoveMoney,
+              onSelectTransaction: onSelectTransaction,
+              onEditSchedule: onEditSchedule
+            )
+          }
+        case .cardPayment(let id):
+          if let card = accounts.first(where: { $0.id == id }) {
+            CardPaymentDetailScreen(
+              card: card, currencyCode: currencyCode, snapshot: snapshot,
+              isPastMonth: isPastMonth,
+              accounts: accounts,
+              envelopes: envelopes,
+              allocations: allocations, transactions: transactions, schedules: schedules,
+              onMoveMoney: onMoveMoney,
+              onSelectTransaction: onSelectTransaction,
+              onEditSchedule: onEditSchedule
+            )
+          }
+        }
+      }
+      .onChange(of: returnToPresentRequest) { _, _ in
+        let current = Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
+        withAnimation(reduceMotion ? nil : .snappy) { selectedMonth = current }
+      }
+      .onChange(of: lastAccessibleMonth) { _, _ in
+        enforceMonthAccess()
+      }
+      .onAppear { enforceMonthAccess() }
     }
   }
 
@@ -201,10 +225,21 @@ struct BudgetScreen: View {
   }
 
   private func changeMonth(_ amount: Int) {
+    if amount > 0 && !canAdvance { return }
     guard let next = Calendar.current.date(byAdding: .month, value: amount, to: selectedMonth) else { return }
-    monthDirection = amount
     withAnimation(reduceMotion ? nil : .snappy) { selectedMonth = next }
   }
+
+  private func enforceMonthAccess() {
+    let viewed = Calendar.current.dateInterval(of: .month, for: selectedMonth)?.start ?? selectedMonth
+    guard viewed > lastAccessibleMonth else { return }
+    withAnimation(reduceMotion ? nil : .snappy) { selectedMonth = lastAccessibleMonth }
+  }
+}
+
+enum BudgetRoute: Hashable {
+  case envelope(UUID)
+  case cardPayment(UUID)
 }
 
 private struct BudgetOverviewSection: View {

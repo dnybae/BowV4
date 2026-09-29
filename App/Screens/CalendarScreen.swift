@@ -3,6 +3,7 @@ import SwiftData
 
 struct CalendarScreen: View {
   @Environment(\.modelContext) private var modelContext
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   var schedules: [BudgetSchedule]
   var occurrences: [BudgetScheduleOccurrence]
   var transactions: [BudgetTransaction]
@@ -10,13 +11,19 @@ struct CalendarScreen: View {
   var envelopes: [BudgetEnvelope]
   var allocations: [BudgetAllocation]
   var currencyCode: String
+  @Binding var selectedDate: Date
+  var returnToTodayRequest: Int = 0
   var onRecord: (ScheduledTransactionDraft) -> Void
   var onSelectTransaction: (UUID) -> Void
-  @State private var selectedDate = Date()
-  @State private var visibleMonth = Date()
+  @State private var months = CalendarTimelineWindow.months(around: Date())
+  @State private var scrollMonth: Date?
   @State private var editingSchedule: BudgetSchedule?
 
   private var calendar: Calendar { .current }
+  private var currentMonth: Date {
+    calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
+  }
+  private var visibleMonth: Date { scrollMonth ?? currentMonth }
   private var selectedSchedules: [BudgetSchedule] {
     schedules.filter {
       $0.isActive && ScheduleRecurrence(calendar: calendar).occurs(
@@ -44,224 +51,288 @@ struct CalendarScreen: View {
   }
 
   var body: some View {
-    VStack(spacing: 0) {
-      CalendarMonthPanel(
-        visibleMonth: $visibleMonth, selectedDate: $selectedDate,
-        schedules: schedules
-      )
-      Divider()
-      ScrollView {
-        LazyVStack(alignment: .leading, spacing: 0) {
-          HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 4) {
-              Text(selectedDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-                .font(.headline)
-              Text("\(selectedSchedules.count) scheduled · \(dayTransactions.count) recorded")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 4) {
-              Text("Spent on this day")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-              Text(BudgetMoney.formatted(spentMinor, currencyCode: currencyCode))
-                .font(.headline)
+    ScrollViewReader { scrollProxy in
+      VStack(spacing: 0) {
+        weekdayHeader
+        Divider()
+        ScrollView(.vertical) {
+          LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(months, id: \.self) { month in
+              CalendarTimelineMonth(
+                month: month, selectedDate: $selectedDate,
+                schedules: schedules, transactions: transactions
+              )
+              .id(month)
             }
           }
-          .padding(.horizontal, 20)
-          .padding(.vertical, 16)
-          .frame(maxWidth: .infinity)
-
-          if selectedSchedules.isEmpty && dayTransactions.isEmpty {
-            ContentUnavailableView(
-              "Nothing on this day",
-              systemImage: "calendar",
-              description: Text("Scheduled bills and recorded transactions will appear here.")
-            )
-            .frame(maxWidth: .infinity)
-          }
-
-          ForEach(selectedSchedules) { schedule in
-            CalendarScheduleRow(
-              schedule: schedule, selectedDate: selectedDate,
-              occurrence: occurrences.first {
-                $0.scheduleID == schedule.id
-                  && calendar.isDate($0.scheduledFor, inSameDayAs: selectedDate)
-              },
-              transactions: transactions, snapshot: selectedSnapshot,
-              currencyCode: currencyCode,
-              onEdit: { editingSchedule = schedule },
-              onRecord: onRecord,
-              onRestore: { occurrence in
-                occurrence.isSkipped = false
-                try? modelContext.save()
-              },
-              onSelectTransaction: onSelectTransaction
-            )
-          }
-
-          if !dayTransactions.isEmpty {
-            Text("Transactions")
-              .font(.caption.weight(.semibold))
-              .foregroundStyle(.secondary)
-              .padding(.horizontal, 20)
-              .padding(.top, 14)
-              .padding(.bottom, 6)
-            ForEach(dayTransactions) { transaction in
-              Button { onSelectTransaction(transaction.id) } label: {
-                TransactionRow(
-                  transaction: transaction,
-                  accountName: accounts.first { $0.id == transaction.accountID }?.name ?? "Account",
-                  envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name,
-                  currencyCode: currencyCode
-                )
-                .padding(.horizontal, 20)
-              }
-              .buttonStyle(.plain)
-              .padding(.vertical, 3)
-            }
+          .scrollTargetLayout()
+        }
+        .scrollTargetBehavior(.viewAligned)
+        .scrollPosition(id: $scrollMonth, anchor: .top)
+        .onAppear {
+          let target = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? currentMonth
+          if !months.contains(target) { months = CalendarTimelineWindow.months(around: target) }
+          Task { @MainActor in
+            await Task.yield()
+            scrollProxy.scrollTo(target, anchor: .top)
           }
         }
+        .onChange(of: scrollMonth) { _, month in
+          guard let month else { return }
+          CalendarTimelineWindow.extend(&months, near: month, calendar: calendar)
+        }
+        Divider()
+        selectedDayAgenda
+          .frame(height: 230)
+      }
+      .navigationTitle("Calendar")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .topBarTrailing) {
+          if !calendar.isDateInToday(selectedDate) || visibleMonth != currentMonth {
+            Button("Today") { returnToToday(using: scrollProxy) }
+          }
+        }
+      }
+      .onChange(of: returnToTodayRequest) { _, _ in
+        returnToToday(using: scrollProxy)
+      }
+      .sheet(item: $editingSchedule) { schedule in
+        ScheduleEditorScreen(schedule: schedule, accounts: accounts, envelopes: envelopes, currencyCode: currencyCode)
+      }
+    }
+  }
+
+  private var weekdayHeader: some View {
+    HStack(spacing: 0) {
+      ForEach(0..<7, id: \.self) { index in
+        Text(calendar.veryShortStandaloneWeekdaySymbols[
+          (calendar.firstWeekday - 1 + index) % 7
+        ])
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity)
-        .padding(.bottom, 24)
+        .accessibilityHidden(true)
       }
     }
-    .navigationTitle("Calendar")
-    .navigationBarTitleDisplayMode(.inline)
-    .toolbar {
-      ToolbarItem(placement: .topBarTrailing) {
-        if !calendar.isDateInToday(selectedDate) {
-          Button("Today") {
-            withAnimation(.snappy) {
-              selectedDate = Date()
-              visibleMonth = Date()
+    .padding(.horizontal, 16)
+    .frame(height: 30)
+  }
+
+  private var selectedDayAgenda: some View {
+    ScrollView {
+      LazyVStack(alignment: .leading, spacing: 0) {
+        HStack(alignment: .firstTextBaseline) {
+          VStack(alignment: .leading, spacing: 4) {
+            Text(selectedDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+              .font(.headline)
+            Text("\(selectedSchedules.count) scheduled · \(dayTransactions.count) recorded")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+          Spacer()
+          VStack(alignment: .trailing, spacing: 4) {
+            Text("Spent on this day")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+            Text(BudgetMoney.formatted(spentMinor, currencyCode: currencyCode))
+              .font(.headline)
+          }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity)
+
+        if selectedSchedules.isEmpty && dayTransactions.isEmpty {
+          ContentUnavailableView(
+            "Nothing on this day",
+            systemImage: "calendar",
+            description: Text("Scheduled bills and recorded transactions will appear here.")
+          )
+          .frame(maxWidth: .infinity)
+        }
+
+        ForEach(selectedSchedules) { schedule in
+          CalendarScheduleRow(
+            schedule: schedule, selectedDate: selectedDate,
+            occurrence: occurrences.first {
+              $0.scheduleID == schedule.id
+                && calendar.isDate($0.scheduledFor, inSameDayAs: selectedDate)
+            },
+            transactions: transactions, snapshot: selectedSnapshot,
+            currencyCode: currencyCode,
+            onEdit: { editingSchedule = schedule },
+            onRecord: onRecord,
+            onRestore: { occurrence in
+              occurrence.isSkipped = false
+              try? modelContext.save()
+            },
+            onSelectTransaction: onSelectTransaction
+          )
+        }
+
+        if !dayTransactions.isEmpty {
+          Text("Transactions")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 20)
+            .padding(.top, 14)
+            .padding(.bottom, 6)
+          ForEach(dayTransactions) { transaction in
+            Button { onSelectTransaction(transaction.id) } label: {
+              TransactionRow(
+                transaction: transaction,
+                accountName: accounts.first { $0.id == transaction.accountID }?.name ?? "Account",
+                envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name,
+                currencyCode: currencyCode
+              )
+              .padding(.horizontal, 20)
             }
+            .buttonStyle(.plain)
+            .padding(.vertical, 3)
           }
         }
       }
+      .frame(maxWidth: .infinity)
+      .padding(.bottom, 24)
     }
-    .sheet(item: $editingSchedule) { schedule in
-      ScheduleEditorScreen(schedule: schedule, accounts: accounts, envelopes: envelopes, currencyCode: currencyCode)
+  }
+
+  private func returnToToday(using proxy: ScrollViewProxy) {
+    let today = Date()
+    let month = calendar.dateInterval(of: .month, for: today)?.start ?? today
+    selectedDate = today
+    if !months.contains(month) {
+      months = CalendarTimelineWindow.months(around: month)
+      scrollMonth = month
+      Task { @MainActor in
+        await Task.yield()
+        proxy.scrollTo(month, anchor: .top)
+      }
+    } else {
+      withAnimation(reduceMotion ? nil : .snappy) {
+        proxy.scrollTo(month, anchor: .top)
+      }
     }
   }
 }
 
-private struct CalendarMonthPanel: View {
-  @Binding var visibleMonth: Date
+private struct CalendarTimelineMonth: View {
+  var month: Date
   @Binding var selectedDate: Date
   var schedules: [BudgetSchedule]
+  var transactions: [BudgetTransaction]
 
   private var calendar: Calendar { .current }
-  private var monthStart: Date { calendar.dateInterval(of: .month, for: visibleMonth)?.start ?? visibleMonth }
   private var days: [CalendarDayCell] {
-    let firstWeekday = calendar.component(.weekday, from: monthStart)
-    let leading = (firstWeekday - calendar.firstWeekday + 7) % 7
-    let count = calendar.range(of: .day, in: .month, for: monthStart)?.count ?? 30
-    let monthKey = monthStart.timeIntervalSince1970
-    var result = (0..<leading).map { CalendarDayCell(id: "\(monthKey)-lead-\($0)", date: nil) }
+    let leading = (calendar.component(.weekday, from: month) - calendar.firstWeekday + 7) % 7
+    let count = calendar.range(of: .day, in: .month, for: month)?.count ?? 30
+    let key = month.timeIntervalSince1970
+    var result = (0..<leading).map { CalendarDayCell(id: "\(key)-lead-\($0)", date: nil) }
     result += (0..<count).compactMap { offset in
-      calendar.date(byAdding: .day, value: offset, to: monthStart).map {
+      calendar.date(byAdding: .day, value: offset, to: month).map {
         CalendarDayCell(id: "\($0.timeIntervalSince1970)", date: $0)
       }
     }
-    let trailing = (7 - result.count % 7) % 7
-    result += (0..<trailing).map { CalendarDayCell(id: "\(monthKey)-trail-\($0)", date: nil) }
+    result += (0..<(7 - result.count % 7) % 7)
+      .map { CalendarDayCell(id: "\(key)-trail-\($0)", date: nil) }
     return result
+  }
+  private var scheduleCounts: [Date: Int] {
+    let recurrence = ScheduleRecurrence(calendar: calendar)
+    var counts: [Date: Int] = [:]
+    for day in days.compactMap(\.date) {
+      counts[day] = schedules.reduce(0) { count, schedule in
+        count + (schedule.isActive && recurrence.occurs(
+          starting: schedule.startDate, frequency: schedule.frequency, on: day
+        ) ? 1 : 0)
+      }
+    }
+    return counts
+  }
+  private var transactionDays: Set<Date> {
+    guard let interval = calendar.dateInterval(of: .month, for: month) else { return [] }
+    return Set(transactions.filter { interval.contains($0.date) }
+      .map { calendar.startOfDay(for: $0.date) })
   }
 
   var body: some View {
-    VStack(spacing: 4) {
-      HStack {
-        Text(visibleMonth.formatted(.dateTime.month(.wide).year()))
-          .font(.title2.weight(.semibold))
-          .minimumScaleFactor(0.75)
-        Spacer()
-        Button("Previous Month", systemImage: "chevron.left") { shiftMonth(-1) }
-          .labelStyle(.iconOnly)
-          .frame(width: 44, height: 44)
-        Button("Next Month", systemImage: "chevron.right") { shiftMonth(1) }
-          .labelStyle(.iconOnly)
-          .frame(width: 44, height: 44)
-      }
-      HStack(spacing: 0) {
-        ForEach(0..<7, id: \.self) { index in
-          Text(calendar.veryShortStandaloneWeekdaySymbols[
-            (calendar.firstWeekday - 1 + index) % 7
-          ])
-          .font(.caption2.weight(.semibold))
-          .foregroundStyle(.secondary)
-          .frame(maxWidth: .infinity)
-        }
-      }
-      .frame(height: 18)
+    let counts = scheduleCounts
+    let recorded = transactionDays
+    VStack(alignment: .leading, spacing: 8) {
+      Text(month.formatted(.dateTime.month(.wide).year()))
+        .font(.title2.weight(.semibold))
+        .padding(.horizontal, 20)
+        .padding(.top, 18)
+        .accessibilityAddTraits(.isHeader)
       LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 0) {
         ForEach(days) { cell in
           if let day = cell.date {
-            dayButton(day)
+            dayButton(day, scheduled: counts[day, default: 0], recorded: recorded.contains(day))
           } else {
-            Color.clear.frame(height: 42)
+            Color.clear.frame(height: 44)
           }
         }
       }
+      .padding(.horizontal, 16)
+      .padding(.bottom, 16)
     }
-    .padding(.horizontal, 16)
-    .padding(.bottom, 8)
-    .contentShape(Rectangle())
-    .gesture(DragGesture(minimumDistance: 35).onEnded { value in
-      guard abs(value.translation.height) > 60,
-            abs(value.translation.height) > abs(value.translation.width) * 1.3 else { return }
-      shiftMonth(value.translation.height < 0 ? 1 : -1)
-    })
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
-  private func dayButton(_ day: Date) -> some View {
-    let dueCount = schedules.filter {
-      $0.isActive && ScheduleRecurrence(calendar: calendar).occurs(
-        starting: $0.startDate, frequency: $0.frequency, on: day
-      )
-    }.count
+  private func dayButton(_ day: Date, scheduled: Int, recorded: Bool) -> some View {
     let isSelected = calendar.isDate(day, inSameDayAs: selectedDate)
     let isToday = calendar.isDateInToday(day)
     return Button {
       selectedDate = day
     } label: {
-      VStack(spacing: 2) {
+      VStack(spacing: 3) {
         Text(day.formatted(.dateTime.day()))
           .font(.system(.callout, design: .rounded, weight: isSelected ? .bold : .medium))
           .foregroundStyle(isSelected ? Color(uiColor: .systemBackground) : (isToday ? Color.red : Color.primary))
-          .frame(width: 28, height: 28)
+          .frame(width: 30, height: 30)
           .background {
             if isSelected { Circle().fill(Color.primary) }
           }
         Circle()
-          .fill(dueCount > 0 ? Color.accentColor : Color.clear)
-          .frame(width: 4, height: 4)
+          .fill(scheduled > 0 || recorded ? Color.accentColor : Color.clear)
+          .frame(width: 5, height: 5)
       }
       .frame(maxWidth: .infinity)
-      .frame(height: 42)
+      .frame(height: 44)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .accessibilityLabel("\(day.formatted(date: .complete, time: .omitted)), \(dueCount) scheduled bills")
+    .accessibilityLabel("\(day.formatted(date: .complete, time: .omitted)), \(scheduled) scheduled bills\(recorded ? ", recorded transactions" : "")")
     .accessibilityAddTraits(isSelected ? .isSelected : [])
-  }
-
-  private func shiftMonth(_ offset: Int) {
-    guard let next = calendar.date(byAdding: .month, value: offset, to: monthStart) else { return }
-    let dayNumber = calendar.component(.day, from: selectedDate)
-    let last = calendar.range(of: .day, in: .month, for: next)?.count ?? 28
-    let selected = calendar.date(byAdding: .day, value: min(dayNumber, last) - 1, to: next) ?? next
-    withAnimation(.snappy) {
-      visibleMonth = next
-      selectedDate = selected
-    }
   }
 }
 
 private struct CalendarDayCell: Identifiable {
   var id: String
   var date: Date?
+}
+
+private enum CalendarTimelineWindow {
+  static func months(around date: Date, calendar: Calendar = .current) -> [Date] {
+    let center = calendar.dateInterval(of: .month, for: date)?.start ?? date
+    return (-6...6).compactMap { calendar.date(byAdding: .month, value: $0, to: center) }
+  }
+
+  static func extend(_ months: inout [Date], near visible: Date, calendar: Calendar) {
+    guard let index = months.firstIndex(of: visible), !months.isEmpty else { return }
+    if index <= 2, let first = months.first {
+      let earlier = (1...6).reversed().compactMap {
+        calendar.date(byAdding: .month, value: -$0, to: first)
+      }
+      months.insert(contentsOf: earlier, at: 0)
+      if months.count > 31 { months.removeLast(min(earlier.count, months.count - 31)) }
+    } else if index >= months.count - 3, let last = months.last {
+      let later = (1...6).compactMap { calendar.date(byAdding: .month, value: $0, to: last) }
+      months.append(contentsOf: later)
+      if months.count > 31 { months.removeFirst(min(later.count, months.count - 31)) }
+    }
+  }
 }
 
 private struct CalendarScheduleRow: View {

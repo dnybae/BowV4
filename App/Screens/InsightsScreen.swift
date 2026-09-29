@@ -24,10 +24,16 @@ struct InsightsScreen: View {
   private var accountKinds: [UUID: BudgetAccountKind] {
     Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.kind) })
   }
+  private var currentNetWorth: AccountBalanceReport {
+    BudgetLedger.accountBalanceReport(
+      before: Date(), inclusive: true,
+      accounts: accounts, transactions: transactions,
+      currencyCode: currencyCode
+    )
+  }
   private var forecast: [BowForecastMonth] {
-    let current = BudgetLedger.snapshot(month: Date(), accounts: accounts, envelopes: envelopes,
-                                        allocations: allocations, transactions: transactions)
-    return BowForecast().project(from: Date(), currentNetWorthMinor: current.netWorthMinor,
+    guard let current = currentNetWorth.netWorthMinor else { return [] }
+    return BowForecast().project(from: Date(), currentNetWorthMinor: current,
                                  transactions: transactions, schedules: schedules)
   }
   private var monthItems: [InsightsMonth] {
@@ -36,16 +42,19 @@ struct InsightsScreen: View {
       let income = items.filter { $0.kind == .inflow && accountKinds[$0.accountID] == .cash }
         .reduce(Int64(0)) { $0 + max(0, $1.amountMinor) }
       let expenses = items.filter { transaction in
-        transaction.kind == .expense || (transaction.kind == .transfer
+        (transaction.kind == .expense && transaction.sourceRaw != "balanceAdjustment"
+          && [.cash, .credit].contains(accountKinds[transaction.accountID]))
+          || (transaction.kind == .transfer
           && accountKinds[transaction.accountID] == .cash
           && [.asset, .liability].contains(accountKinds[transaction.transferAccountID ?? UUID()]))
       }.reduce(Int64(0)) { $0 + max(0, -$1.amountMinor) }
-      let netWorth = BudgetLedger.snapshot(
-        month: month,
-        accounts: accounts,
-        envelopes: envelopes,
-        allocations: allocations,
-        transactions: transactions
+      let next = calendar.date(byAdding: .month, value: 1, to: month) ?? Date()
+      let isCurrent = calendar.isDate(month, equalTo: Date(), toGranularity: .month)
+      let netWorth = BudgetLedger.accountBalanceReport(
+        before: isCurrent ? Date() : next,
+        inclusive: isCurrent,
+        accounts: accounts, transactions: transactions,
+        currencyCode: currencyCode
       ).netWorthMinor
       return InsightsMonth(month: month, incomeMinor: income, expenseMinor: expenses, netWorthMinor: netWorth)
     }
@@ -131,12 +140,26 @@ struct InsightsScreen: View {
 
         VStack(alignment: .leading, spacing: 12) {
           Text("Net Worth").font(.headline)
+          if let value = currentNetWorth.netWorthMinor {
+            Text(BudgetMoney.formatted(value, currencyCode: currencyCode))
+              .font(.title2.weight(.semibold))
+              .monospacedDigit()
+              .accessibilityLabel("Current net worth, \(BudgetMoney.formatted(value, currencyCode: currencyCode))")
+          } else {
+            Text("Net worth unavailable")
+              .font(.subheadline.weight(.semibold))
+            Text("Review account currencies, loan signs, and any missing transfer accounts.")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
           Chart(monthItems) { item in
-            LineMark(x: .value("Month", item.month, unit: .month), y: .value("Net Worth", Double(item.netWorthMinor) / 100))
-              .interpolationMethod(.catmullRom)
-              .foregroundStyle(.tint)
-            PointMark(x: .value("Month", item.month, unit: .month), y: .value("Net Worth", Double(item.netWorthMinor) / 100))
-              .foregroundStyle(.tint)
+            if let value = item.netWorthMinor {
+              LineMark(x: .value("Month", item.month, unit: .month), y: .value("Net Worth", Double(value) / 100))
+                .interpolationMethod(.catmullRom)
+                .foregroundStyle(.tint)
+              PointMark(x: .value("Month", item.month, unit: .month), y: .value("Net Worth", Double(value) / 100))
+                .foregroundStyle(.tint)
+            }
           }
           .frame(height: 190)
           Text("Includes tracking accounts and credit balances.")
@@ -154,9 +177,11 @@ struct InsightsScreen: View {
             .font(.subheadline).foregroundStyle(.secondary)
           Chart {
             ForEach(monthItems.suffix(3)) { item in
-              LineMark(x: .value("Month", item.month, unit: .month),
-                       y: .value("Net Worth", Double(item.netWorthMinor) / 100))
-                .foregroundStyle(.tint)
+              if let value = item.netWorthMinor {
+                LineMark(x: .value("Month", item.month, unit: .month),
+                         y: .value("Net Worth", Double(value) / 100))
+                  .foregroundStyle(.tint)
+              }
             }
             ForEach(forecast) { item in
               LineMark(x: .value("Month", item.month, unit: .month),
@@ -254,7 +279,7 @@ private struct InsightsMonth: Identifiable {
   var month: Date
   var incomeMinor: Int64
   var expenseMinor: Int64
-  var netWorthMinor: Int64
+  var netWorthMinor: Int64?
   var id: Date { month }
 }
 

@@ -196,6 +196,9 @@ enum DemoData {
     cardLink.localAccountID = card.id
     cardLink.reportedBalance = "-520.64"
     cardLink.reportedAt = today
+    let availableLink = insert(SimpleFINAccountLink(remoteKey: "demo-savings", name: "Example Bank Savings", currencyCode: "USD"))
+    availableLink.reportedBalance = "1250.00"
+    availableLink.reportedAt = today
 
     let duplicate = insert(SimpleFINImportRecord(remoteKey: "demo|duplicate", localAccountID: everyday.id, date: match.date, amountMinor: -3_200, payee: "Whole Foods Market"))
     duplicate.status = .review

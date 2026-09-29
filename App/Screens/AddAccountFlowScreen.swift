@@ -31,20 +31,19 @@ struct AddAccountFlowScreen: View {
 
         Section {
           NavigationLink {
-            SimpleFINAccountSetupScreen(onDone: { dismiss() })
+            SimpleFINAccountSetupScreen(isDemoMode: isDemoMode, onDone: { dismiss() })
           } label: {
             optionRow(
               title: "Connect a Bank",
               detail: connections.isEmpty
                 ? "Enter a SimpleFIN setup token, then choose which bank accounts to add."
-                : "Choose another account from your SimpleFIN connection.",
+                : "View your SimpleFIN accounts and choose any new ones to add.",
               symbol: "link"
             )
           }
-          .disabled(isDemoMode)
         } footer: {
           Text(isDemoMode
-            ? "Bank connections are available in your personal budget."
+            ? "Explore a sample bank connection. Demo mode never contacts a bank."
             : "SimpleFIN provides read-only bank data and has a separate signup and fee. Bank updates may arrive about once a day.")
         }
       }

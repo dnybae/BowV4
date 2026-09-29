@@ -88,9 +88,9 @@ struct SimpleFINScreen: View {
             }
             .padding(.vertical, 3)
           }
-          if availableCount > 0 && !isDemoMode {
+          if availableCount > 0 {
             NavigationLink {
-              SimpleFINAccountSetupScreen()
+              SimpleFINAccountSetupScreen(isDemoMode: isDemoMode)
             } label: {
               Label("Add \(availableCount) Available \(availableCount == 1 ? "Account" : "Accounts")", systemImage: "plus")
             }

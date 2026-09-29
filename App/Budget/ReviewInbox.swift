@@ -23,7 +23,9 @@ enum ReviewEntry: Identifiable {
 }
 
 struct ReviewInbox {
-  var items: [ReviewEntry]
+  var bankItems: [ReviewEntry]
+  var scheduledItems: [ReviewEntry]
+  var items: [ReviewEntry] { bankItems + scheduledItems }
 
   init(
     transactions: [BudgetTransaction],
@@ -32,7 +34,18 @@ struct ReviewInbox {
     schedules: [BudgetSchedule],
     calendar: Calendar = .current
   ) {
-    var result = transactions.filter(\.needsApproval).map(ReviewEntry.transaction)
+    let transactionByID = Dictionary(uniqueKeysWithValues: transactions.map { ($0.id, $0) })
+    let unresolved = records.filter {
+      $0.bankState == .posted && (
+        $0.status == .review
+          || ($0.status == .imported && $0.transactionID.flatMap {
+            transactionByID[$0]?.needsApproval
+          } == true)
+      )
+    }
+    let bankTransactionIDs = Set(unresolved.compactMap(\.transactionID))
+    var bank = transactions.filter { $0.needsApproval && !bankTransactionIDs.contains($0.id) }
+      .map(ReviewEntry.transaction)
     let scheduleByID = Dictionary(uniqueKeysWithValues: schedules.map { ($0.id, $0) })
     let pending = occurrences.filter { occurrence in
       guard !occurrence.isSkipped, scheduleByID[occurrence.scheduleID] != nil else { return false }
@@ -43,7 +56,6 @@ struct ReviewInbox {
           } == true
       }
     }
-    let unresolved = records.filter { $0.status == .review }
     var groupedOccurrenceIDs = Set<UUID>()
     for record in unresolved {
       let related = pending.first { occurrence in
@@ -62,13 +74,13 @@ struct ReviewInbox {
             .localizedCaseInsensitiveCompare(record.payee.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
       }
       if let related { groupedOccurrenceIDs.insert(related.id) }
-      result.append(.bankRecord(record, relatedOccurrence: related))
+      bank.append(.bankRecord(record, relatedOccurrence: related))
     }
-    result.append(contentsOf: pending.compactMap { occurrence in
+    scheduledItems = pending.compactMap { occurrence in
       guard !groupedOccurrenceIDs.contains(occurrence.id),
             let schedule = scheduleByID[occurrence.scheduleID] else { return nil }
       return .scheduled(occurrence, schedule)
-    })
-    items = result.sorted { $0.date == $1.date ? $0.id < $1.id : $0.date < $1.date }
+    }.sorted { $0.date == $1.date ? $0.id < $1.id : $0.date < $1.date }
+    bankItems = bank.sorted { $0.date == $1.date ? $0.id < $1.id : $0.date < $1.date }
   }
 }

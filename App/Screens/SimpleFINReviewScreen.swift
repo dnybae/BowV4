@@ -5,120 +5,182 @@ struct SimpleFINReviewScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
   @Query private var accounts: [BudgetAccount]
+  @Query private var envelopes: [BudgetEnvelope]
+  @Query private var payees: [BudgetPayee]
   var record: SimpleFINImportRecord
   var relatedOccurrence: BudgetScheduleOccurrence? = nil
   var relatedSchedule: BudgetSchedule? = nil
   var onRecordScheduledTransfer: ((ScheduledTransactionDraft) -> Void)? = nil
-  @State private var selectedID: UUID?
+  @State private var selected: BankReviewChoice?
+  @State private var envelopeID: UUID?
   @State private var message: String?
   @State private var candidates: [BudgetTransaction] = []
+  @State private var showingIgnoreConfirmation = false
 
   private var account: BudgetAccount? { accounts.first { $0.id == record.localAccountID } }
+  private var currencyCode: String { account?.currencyCode ?? "USD" }
+
   var body: some View {
     Form {
-      Section("Bank Transaction") {
-        LabeledContent("Payee", value: record.payee)
-        LabeledContent("Amount", value: BudgetMoney.formatted(record.amountMinor, currencyCode: account?.currencyCode ?? "USD"))
-        LabeledContent("Date", value: record.date.formatted(date: .abbreviated, time: .omitted))
-        if let account { LabeledContent("Account", value: account.name) }
+      Section {
+        VStack(alignment: .leading, spacing: 6) {
+          Text(record.payee.isEmpty ? "Bank transaction" : record.payee)
+            .font(.title3.weight(.semibold))
+          Text(BudgetMoney.formatted(record.amountMinor, currencyCode: currencyCode))
+            .font(.title2.weight(.bold))
+          Text("\(account?.name ?? "Account") · \(record.date.formatted(date: .abbreviated, time: .omitted))")
+            .font(.subheadline).foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 8)
+      } header: {
+        Text("Posted at your bank")
+      } footer: {
+        Text("Choose what this bank transaction represents. Your choice completes the review.")
+      }
+
+      if relatedSchedule?.kind == .transfer,
+         let relatedOccurrence, let relatedSchedule {
+        Section {
+          Text("Record the scheduled transfer first, then match this bank transaction to it.")
+            .foregroundStyle(.secondary)
+          Button("Record Scheduled Transfer", systemImage: "arrow.left.arrow.right") {
+            onRecordScheduledTransfer?(ScheduledTransactionDraft(
+              scheduleID: relatedSchedule.id,
+              scheduledFor: relatedOccurrence.scheduledFor,
+              accountID: relatedSchedule.accountID,
+              transferAccountID: relatedSchedule.transferAccountID,
+              envelopeID: relatedSchedule.envelopeID, kind: .transfer,
+              amountMinor: relatedSchedule.amountMinor, payee: relatedSchedule.payee,
+              notes: relatedSchedule.notes, date: relatedOccurrence.scheduledFor
+            ))
+          }
+        } header: { Text("Scheduled transfer") }
       }
 
       Section {
         if candidates.isEmpty {
-          Text("No likely Bow transaction was found. You can import this bank transaction or ignore it.")
-            .foregroundStyle(.secondary)
+          Text("No existing transaction looks like this bank item.")
+            .font(.subheadline).foregroundStyle(.secondary)
         }
         ForEach(candidates) { candidate in
           Button {
-            selectedID = candidate.id
+            selected = .match(candidate.id)
           } label: {
-            HStack {
+            HStack(spacing: 12) {
+              Image(systemName: selected == .match(candidate.id)
+                ? "largecircle.fill.circle" : "circle")
+                .foregroundStyle(.tint)
+                .accessibilityHidden(true)
               VStack(alignment: .leading, spacing: 3) {
                 Text(candidate.payee.isEmpty ? "Transfer" : candidate.payee)
                   .foregroundStyle(.primary)
                 Text(candidate.date.formatted(date: .abbreviated, time: .omitted))
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
+                  .font(.caption).foregroundStyle(.secondary)
+                if candidate.amountMinor != record.amountMinor {
+                  Text("Amount differs; matching uses the posted bank amount")
+                    .font(.caption).foregroundStyle(.orange)
+                }
               }
-              Spacer()
+              Spacer(minLength: 6)
               Text(BudgetMoney.formatted(
                 candidate.transferAccountID == record.localAccountID
                   ? -candidate.amountMinor : candidate.amountMinor,
-                currencyCode: account?.currencyCode ?? "USD"
+                currencyCode: currencyCode
               ))
                 .foregroundStyle(.primary)
-              if selectedID == candidate.id {
-                Image(systemName: "checkmark")
-                  .foregroundStyle(.tint)
-                  .accessibilityHidden(true)
-              }
             }
+            .contentShape(Rectangle())
           }
-          .accessibilityAddTraits(selectedID == candidate.id ? .isSelected : [])
+          .buttonStyle(.plain)
+          .accessibilityAddTraits(selected == .match(candidate.id) ? .isSelected : [])
         }
       } header: {
-        Text("Possible Matches")
+        Text("Match an existing transaction")
       } footer: {
-        Text("Linking keeps your existing payee, date, notes, and category. If the amount changed, Bow uses the bank amount. The result will need approval.")
+        Text("Matching keeps the payee, category, and notes you entered. It creates one transaction, and you can unmatch it later.")
+      }
+
+      if relatedSchedule?.kind != .transfer {
+        Section {
+          Button {
+            selected = .addNew
+          } label: {
+            HStack(spacing: 12) {
+              Image(systemName: selected == .addNew ? "largecircle.fill.circle" : "circle")
+                .foregroundStyle(.tint)
+                .accessibilityHidden(true)
+              VStack(alignment: .leading, spacing: 3) {
+                Text("Add as new transaction")
+                  .foregroundStyle(.primary)
+                Text("Use this if you have not entered it before")
+                  .font(.caption).foregroundStyle(.secondary)
+              }
+            }
+            .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .accessibilityAddTraits(selected == .addNew ? .isSelected : [])
+          if selected == .addNew, record.amountMinor < 0 {
+            CategorySelectionField(
+              title: "Category", selection: $envelopeID,
+              envelopes: envelopes, noneTitle: "Needs Categorization"
+            )
+          }
+        }
       }
 
       Section {
-        if relatedSchedule?.kind == .transfer {
-          Text("This bank entry belongs to a scheduled transfer. Record the transfer, then link this bank entry to it.")
-            .font(.footnote).foregroundStyle(.secondary)
-          if let relatedOccurrence, let relatedSchedule {
-            Button("Record Scheduled Transfer", systemImage: "arrow.left.arrow.right") {
-              onRecordScheduledTransfer?(ScheduledTransactionDraft(
-                scheduleID: relatedSchedule.id, scheduledFor: relatedOccurrence.scheduledFor,
-                accountID: relatedSchedule.accountID,
-                transferAccountID: relatedSchedule.transferAccountID,
-                envelopeID: relatedSchedule.envelopeID, kind: .transfer,
-                amountMinor: relatedSchedule.amountMinor, payee: relatedSchedule.payee,
-                notes: relatedSchedule.notes, date: relatedOccurrence.scheduledFor
-              ))
-            }
-          }
-        }
-        Button("Link Selected Transaction", systemImage: "link") {
-          guard let selectedID else { return }
-          resolve(.link(selectedID))
-        }
-        .disabled(selectedID == nil)
-        if relatedSchedule?.kind != .transfer {
-          Button("Import as New Transaction", systemImage: "plus") {
-            resolve(.importNew)
-          }
-        }
         Button("Ignore Bank Transaction", role: .destructive) {
-          resolve(.ignore)
+          showingIgnoreConfirmation = true
         }
+      } footer: {
+        Text("Ignore only if this bank item should not appear in your budget.")
       }
     }
-    .navigationTitle("Review Match")
+    .navigationTitle("Review Transaction")
+    .navigationBarTitleDisplayMode(.inline)
+    .safeAreaInset(edge: .bottom) {
+      Button(primaryTitle) { confirm() }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .frame(maxWidth: .infinity)
+        .disabled(selected == nil)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+        .background(.regularMaterial)
+    }
     .task(id: record.id) {
       do {
         let nearby = try BudgetTransactionLookup.near(
           accountID: record.localAccountID, date: record.date, days: 10, in: modelContext
         )
-        let matches = try nearby.filter { transaction in
-          let id = transaction.id
-          let accountID = record.localAccountID
-          let ignored = SimpleFINImportStatus.ignored.rawValue
-          let other = FetchDescriptor<SimpleFINImportRecord>(predicate: #Predicate {
-            $0.transactionID == id && $0.localAccountID == accountID
-              && $0.statusRaw != ignored
-          })
-          let used = try modelContext.fetch(other).contains { $0.id != record.id }
-          return !used && SimpleFINSyncCoordinator.isPossibleMatch(transaction, for: record)
+        let records = try modelContext.fetch(FetchDescriptor<SimpleFINImportRecord>())
+        let matches = SimpleFINSyncCoordinator.shared.possibleMatches(
+          for: record, among: nearby, records: records
+        )
+        candidates = relatedSchedule?.kind == .transfer
+          ? matches.filter { $0.kind == .transfer } : matches
+        if candidates.isEmpty && relatedSchedule?.kind != .transfer { selected = .addNew }
+        envelopeID = relatedSchedule?.envelopeID
+        if envelopeID == nil {
+          let rules = PayeeDirectory.ruleItems(
+            payees: payees,
+            validEnvelopeIDs: Set(envelopes.filter {
+              !$0.isHidden && $0.paymentAccountID == nil
+            }.map(\.id))
+          )
+          envelopeID = PayeeRuleMatcher().envelopeID(for: record.payee, rules: rules)
         }
-        candidates = (relatedSchedule?.kind == .transfer
-          ? matches.filter { $0.kind == .transfer } : matches)
-          .sorted { abs($0.date.timeIntervalSince(record.date)) < abs($1.date.timeIntervalSince(record.date)) }
       } catch {
         message = error.localizedDescription
       }
     }
-    .alert("Could Not Resolve Match", isPresented: Binding(
+    .confirmationDialog("Ignore this bank transaction?", isPresented: $showingIgnoreConfirmation) {
+      Button("Ignore Transaction", role: .destructive) { resolve(.ignore) }
+    } message: {
+      Text("It will not appear in Spending or affect your budget.")
+    }
+    .alert("Could Not Complete Review", isPresented: Binding(
       get: { message != nil }, set: { if !$0 { message = nil } }
     )) {
       Button("OK") { message = nil }
@@ -127,10 +189,26 @@ struct SimpleFINReviewScreen: View {
     }
   }
 
+  private var primaryTitle: String {
+    switch selected {
+    case .match: "Confirm Match"
+    case .addNew: "Add Transaction"
+    case nil: "Choose an Option"
+    }
+  }
+
+  private func confirm() {
+    switch selected {
+    case .match(let id): resolve(.link(id))
+    case .addNew: resolve(.importNew)
+    case nil: break
+    }
+  }
+
   private func resolve(_ decision: SimpleFINReviewDecision) {
     do {
       try SimpleFINSyncCoordinator.shared.resolve(
-        record, as: decision,
+        record, as: decision, envelopeID: envelopeID,
         scheduleID: relatedOccurrence?.scheduleID,
         scheduledFor: relatedOccurrence?.scheduledFor,
         in: modelContext
@@ -140,4 +218,9 @@ struct SimpleFINReviewScreen: View {
       message = error.localizedDescription
     }
   }
+}
+
+private enum BankReviewChoice: Equatable {
+  case match(UUID)
+  case addNew
 }

@@ -14,7 +14,12 @@ struct SimpleFINMatchPlanner {
         && abs($0.date.timeIntervalSince(date)) <= 10 * 86_400
     }
     let sameAmount = nearby.filter { $0.amountMinor == incoming.amountMinor }
-    if sameAmount.count == 1 { return .linkManual(sameAmount[0].id) }
+    if sameAmount.count == 1,
+       !normalized(sameAmount[0].payee).isEmpty,
+       normalized(sameAmount[0].payee) == normalized(incoming.description) {
+      return .linkManual(sameAmount[0].id)
+    }
+    if sameAmount.count == 1 { return .review([sameAmount[0].id]) }
     if sameAmount.count > 1 { return .review(sameAmount.map(\.id)) }
     let similarPayee = nearby.filter {
       !normalized($0.payee).isEmpty

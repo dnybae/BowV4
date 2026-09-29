@@ -110,11 +110,17 @@ final class SimpleFINSyncCoordinator {
   func resolve(
     _ record: SimpleFINImportRecord,
     as decision: SimpleFINReviewDecision,
+    envelopeID: UUID? = nil,
     scheduleID: UUID? = nil,
     scheduledFor: Date? = nil,
     in context: ModelContext
   ) throws {
-    guard record.status == .review else { return }
+    guard record.bankState == .posted else { return }
+    let existingImported = try record.transactionID.flatMap {
+      try BudgetTransactionLookup.byID($0, in: context)
+    }
+    guard record.status == .review
+      || (record.status == .imported && existingImported?.needsApproval == true) else { return }
     if let scheduleID, let scheduledFor {
       let linkedSchedule = try context.fetch(FetchDescriptor<BudgetSchedule>()).first { $0.id == scheduleID }
       if linkedSchedule?.kind == .transfer {
@@ -144,21 +150,32 @@ final class SimpleFINSyncCoordinator {
     }
     switch decision {
     case .ignore:
+      if let existingImported, record.status == .imported {
+        context.delete(existingImported)
+      }
+      record.transactionID = nil
       record.status = .ignored
     case .importNew:
       guard let account = try context.fetch(FetchDescriptor<BudgetAccount>())
         .first(where: { $0.id == record.localAccountID }) else {
         throw SimpleFINError.invalidResponse
       }
-      let transaction = Self.makeTransaction(
-        account: account, date: record.date,
-        amount: record.amountMinor, payee: record.payee, in: context
-      )
-      transaction.externalKey = record.remoteKey
+      let transaction: BudgetTransaction
+      if let existingImported, record.status == .imported {
+        transaction = existingImported
+        transaction.needsApproval = false
+      } else {
+        transaction = Self.makeTransaction(
+          account: account, date: record.date,
+          amount: record.amountMinor, payee: record.payee, in: context
+        )
+        transaction.externalKey = record.remoteKey
+        try Self.adjustOpeningBalance(for: transaction, account: account)
+        context.insert(transaction)
+      }
+      if transaction.envelopeID == nil { transaction.envelopeID = envelopeID }
       transaction.scheduleID = scheduleID
       transaction.scheduledFor = scheduledFor
-      try Self.adjustOpeningBalance(for: transaction, account: account)
-      context.insert(transaction)
       record.transactionID = transaction.id
       record.status = .imported
     case .link(let id):
@@ -177,6 +194,10 @@ final class SimpleFINSyncCoordinator {
         $0.id != record.id && $0.transactionID == id && $0.status != .ignored
           && (transaction.kind != .transfer || $0.localAccountID == record.localAccountID)
       }) else { throw SimpleFINError.alreadyLinked }
+      record.originalManualSnapshot = try JSONEncoder().encode(ManualTransactionSnapshot(transaction))
+      if let existingImported, record.status == .imported {
+        context.delete(existingImported)
+      }
       if transaction.kind != .transfer {
         transaction.amountMinor = record.amountMinor
         transaction.kindRaw = record.amountMinor < 0
@@ -187,7 +208,7 @@ final class SimpleFINSyncCoordinator {
       } else {
         transaction.isCleared = true
       }
-      transaction.needsApproval = true
+      transaction.needsApproval = false
       if transaction.scheduleID == nil {
         transaction.scheduleID = scheduleID
         transaction.scheduledFor = scheduledFor
@@ -196,6 +217,7 @@ final class SimpleFINSyncCoordinator {
       if transaction.externalKey == nil { transaction.externalKey = record.remoteKey }
       record.transactionID = transaction.id
       record.status = .linked
+      record.matchedAutomatically = false
       if let account = try context.fetch(FetchDescriptor<BudgetAccount>())
         .first(where: { $0.id == record.localAccountID }),
          let reconciled = account.lastReconciledAt,
@@ -204,6 +226,49 @@ final class SimpleFINSyncCoordinator {
         account.lastReconciledBalanceMinor = nil
       }
     }
+    try context.save()
+  }
+
+  func enterPending(
+    _ record: SimpleFINImportRecord, envelopeID: UUID?, in context: ModelContext
+  ) throws {
+    guard record.bankState == .pending, record.transactionID == nil,
+          let account = try context.fetch(FetchDescriptor<BudgetAccount>())
+            .first(where: { $0.id == record.localAccountID }) else { return }
+    let transaction = BudgetTransaction(
+      accountID: account.id, envelopeID: envelopeID, date: record.date,
+      amountMinor: record.amountMinor, payee: record.payee, notes: "",
+      kind: record.amountMinor < 0 ? .expense : .inflow
+    )
+    context.insert(transaction)
+    record.transactionID = transaction.id
+    record.pendingEnteredAt = Date()
+    try context.save()
+  }
+
+  func unmatch(_ record: SimpleFINImportRecord, in context: ModelContext) throws {
+    guard record.status == .linked, let id = record.transactionID,
+          let transaction = try BudgetTransactionLookup.byID(id, in: context) else { return }
+    let original = record.originalManualSnapshot.flatMap {
+      try? JSONDecoder().decode(ManualTransactionSnapshot.self, from: $0)
+    }
+    if transaction.amountMinor == record.amountMinor, let original {
+      transaction.amountMinor = original.amountMinor
+      transaction.kindRaw = original.kindRaw
+    }
+    if transaction.sourceRaw == "manualLinked" {
+      transaction.sourceRaw = original?.sourceRaw ?? "manual"
+    }
+    if transaction.externalKey == record.remoteKey {
+      transaction.externalKey = original?.externalKey
+    }
+    transaction.isCleared = original?.isCleared ?? false
+    transaction.destinationIsCleared = original?.destinationIsCleared ?? false
+    transaction.needsApproval = false
+    record.transactionID = nil
+    record.status = .review
+    record.matchedAutomatically = false
+    record.originalManualSnapshot = nil
     try context.save()
   }
 
@@ -287,23 +352,21 @@ final class SimpleFINSyncCoordinator {
   ) throws -> SimpleFINSyncSummary {
     let links = try context.fetch(FetchDescriptor<SimpleFINAccountLink>())
     let localAccounts = try context.fetch(FetchDescriptor<BudgetAccount>())
-    let postedDates = accounts.flatMap { account in
-      (account.transactions ?? []).filter { $0.pending != true && $0.posted > 0 }.map(\.date)
+    let dates = accounts.flatMap { account in
+      (account.transactions ?? []).filter { $0.pending == true || $0.posted > 0 }.map(\.date)
     }
-    guard let earliest = postedDates.min(), let latest = postedDates.max() else {
+    guard let earliest = dates.min(), let latest = dates.max() else {
       return SimpleFINSyncSummary()
     }
     let start = earliest.addingTimeInterval(-11 * 86_400)
     let end = latest.addingTimeInterval(11 * 86_400)
-    var transactions = try context.fetch(FetchDescriptor<BudgetTransaction>(predicate: #Predicate {
+    let transactions = try context.fetch(FetchDescriptor<BudgetTransaction>(predicate: #Predicate {
       $0.date >= start && $0.date <= end
     }))
-    let records = try context.fetch(FetchDescriptor<SimpleFINImportRecord>(predicate: #Predicate {
-      $0.date >= start && $0.date <= end
-    }))
+    var records = try context.fetch(FetchDescriptor<SimpleFINImportRecord>())
     let schedules = try context.fetch(FetchDescriptor<BudgetSchedule>())
-    var knownKeys = Set(records.map(\.remoteKey))
-    knownKeys.formUnion(transactions.compactMap(\.externalKey))
+    var byKey = Dictionary(uniqueKeysWithValues: records.map { ($0.remoteKey, $0) })
+    let transactionKeys = Set(transactions.compactMap(\.externalKey))
     var candidates = transactions.map { transaction in
       LocalTransactionCandidate(
         id: transaction.id, accountID: transaction.accountID,
@@ -314,9 +377,10 @@ final class SimpleFINSyncCoordinator {
     }
     var summary = SimpleFINSyncSummary()
     let matcher = SimpleFINMatchPlanner()
+    let now = Date()
 
     for remote in accounts where links.contains(where: { $0.remoteKey == remote.remoteKey && $0.localAccountID != nil }) {
-      for item in (remote.transactions ?? []) where item.pending != true && item.posted > 0 {
+      for item in (remote.transactions ?? []) where item.pending == true || item.posted > 0 {
         guard item.amountMinor != nil else { throw SimpleFINError.invalidAmount }
       }
     }
@@ -326,23 +390,80 @@ final class SimpleFINSyncCoordinator {
             let localID = link.localAccountID,
             let account = localAccounts.first(where: { $0.id == localID }),
             remote.currency == account.currencyCode else { continue }
-      for item in (remote.transactions ?? []) where item.pending != true && item.posted > 0 {
+      let items = (remote.transactions ?? []).filter { $0.pending == true || $0.posted > 0 }
+        .sorted { ($0.pending == true ? 0 : 1) < ($1.pending == true ? 0 : 1) }
+      for item in items {
         guard let amount = item.amountMinor else { throw SimpleFINError.invalidAmount }
         let key = Self.transactionKey(account: remote.remoteKey, transaction: item.id)
-        guard knownKeys.insert(key).inserted else { continue }
-        let existingRecord = FetchDescriptor<SimpleFINImportRecord>(
-          predicate: #Predicate { $0.remoteKey == key }
-        )
-        let existingTransaction = FetchDescriptor<BudgetTransaction>(
-          predicate: #Predicate { $0.externalKey == key }
-        )
-        guard try context.fetchCount(existingRecord) == 0,
-              try context.fetchCount(existingTransaction) == 0 else { continue }
         let payee = item.description.trimmingCharacters(in: .whitespacesAndNewlines)
-        let record = SimpleFINImportRecord(
-          remoteKey: key, localAccountID: localID,
-          date: item.date, amountMinor: amount, payee: payee
-        )
+        if item.pending == true {
+          if let existing = byKey[key] {
+            if existing.bankState == .pending {
+              existing.date = item.date
+              existing.amountMinor = amount
+              existing.payee = payee
+              existing.lastSeenAt = now
+              existing.isVisiblePending = true
+            }
+            continue
+          }
+          guard !transactionKeys.contains(key) else { continue }
+          let samePending = records.filter {
+            $0.bankState == .pending && $0.localAccountID == localID
+              && $0.amountMinor == amount
+              && Self.normalized($0.payee) == Self.normalized(payee)
+              && abs($0.date.timeIntervalSince(item.date)) <= 2 * 86_400
+          }
+          let record: SimpleFINImportRecord
+          if samePending.count == 1, let existing = samePending.first {
+            byKey.removeValue(forKey: existing.remoteKey)
+            existing.remoteKey = key
+            record = existing
+          } else {
+            record = SimpleFINImportRecord(
+              remoteKey: key, localAccountID: localID,
+              date: item.date, amountMinor: amount, payee: payee
+            )
+            records.append(record)
+            context.insert(record)
+            summary.pending += 1
+          }
+          record.bankState = .pending
+          record.isVisiblePending = true
+          record.lastSeenAt = now
+          byKey[key] = record
+          continue
+        }
+        guard item.posted > 0 else { continue }
+        if byKey[key]?.bankState == .posted || transactionKeys.contains(key) { continue }
+        let samePending = records.filter {
+          $0.bankState == .pending && $0.localAccountID == localID
+            && !Self.normalized(payee).isEmpty
+            && Self.normalized($0.payee) == Self.normalized(payee)
+            && abs($0.date.timeIntervalSince(item.date)) <= 3 * 86_400
+        }
+        let record: SimpleFINImportRecord
+        if let exact = byKey[key] {
+          record = exact
+        } else if samePending.count == 1, let existing = samePending.first {
+          byKey.removeValue(forKey: existing.remoteKey)
+          existing.remoteKey = key
+          record = existing
+        } else {
+          record = SimpleFINImportRecord(
+            remoteKey: key, localAccountID: localID,
+            date: item.date, amountMinor: amount, payee: payee
+          )
+          records.append(record)
+          context.insert(record)
+        }
+        record.bankState = .posted
+        record.isVisiblePending = false
+        record.lastSeenAt = now
+        record.date = item.date
+        record.amountMinor = amount
+        record.payee = payee
+        byKey[key] = record
         let incoming = BankTransactionCandidate(
           externalKey: key, accountID: localID, amountMinor: amount,
           postedAt: item.date,
@@ -364,8 +485,9 @@ final class SimpleFINSyncCoordinator {
         switch decision {
         case .linkManual(let id) where !otherPossible && !scheduledTransferPossible:
           if let transaction = transactions.first(where: { $0.id == id }) {
+            record.originalManualSnapshot = try JSONEncoder().encode(ManualTransactionSnapshot(transaction))
             transaction.isCleared = true
-            transaction.needsApproval = true
+            transaction.needsApproval = false
             transaction.sourceRaw = "manualLinked"
             transaction.externalKey = key
             if let candidateIndex = candidates.firstIndex(where: { $0.id == id }) {
@@ -374,30 +496,19 @@ final class SimpleFINSyncCoordinator {
             }
             record.transactionID = id
             record.status = .linked
+            record.matchedAutomatically = true
             summary.linked += 1
           }
-        case .createNew where !otherPossible && !scheduledTransferPossible:
-          let transaction = Self.makeTransaction(
-            account: account, date: item.date,
-            amount: amount, payee: payee, in: context
-          )
-          transaction.externalKey = key
-          try Self.adjustOpeningBalance(for: transaction, account: account)
-          context.insert(transaction)
-          transactions.append(transaction)
-          candidates.append(LocalTransactionCandidate(
-            id: transaction.id, accountID: transaction.accountID,
-            amountMinor: transaction.amountMinor, date: transaction.date,
-            payee: transaction.payee, externalKey: key, isManual: false
-          ))
-          record.transactionID = transaction.id
-          record.status = .imported
-          summary.imported += 1
         default:
+          record.transactionID = nil
           record.status = .review
           summary.needsReview += 1
         }
-        context.insert(record)
+      }
+    }
+    for record in records where record.bankState == .pending {
+      if let lastSeen = record.lastSeenAt, now.timeIntervalSince(lastSeen) > 7 * 86_400 {
+        record.isVisiblePending = false
       }
     }
     return summary
@@ -414,7 +525,7 @@ final class SimpleFINSyncCoordinator {
     )
     transaction.sourceRaw = "simplefin"
     transaction.isCleared = true
-    transaction.needsApproval = true
+    transaction.needsApproval = false
     return transaction
   }
 

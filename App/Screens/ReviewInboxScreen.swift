@@ -1,10 +1,18 @@
 import SwiftUI
 import SwiftData
 
+enum ReviewInboxMode {
+  case bank
+  case scheduled
+}
+
 struct ReviewInboxScreen: View {
   @Environment(\.modelContext) private var modelContext
+  @Query(filter: #Predicate<BudgetTransaction> { $0.needsApproval })
+  private var approvals: [BudgetTransaction]
   @Query private var payees: [BudgetPayee]
   @Query private var envelopes: [BudgetEnvelope]
+  var mode: ReviewInboxMode = .bank
   var scheduledRecords: [BudgetTransaction]
   var records: [SimpleFINImportRecord]
   var occurrences: [BudgetScheduleOccurrence]
@@ -16,129 +24,104 @@ struct ReviewInboxScreen: View {
   var onEditSchedule: (UUID) -> Void
   @State private var pendingSkip: BudgetScheduleOccurrence?
   @State private var message: String?
-  @State private var feed = TransactionFeedModel()
-  @State private var refreshVersion = 0
 
-  private var otherItems: [ReviewEntry] {
-    ReviewInbox(
-      transactions: scheduledRecords, records: records,
-      occurrences: occurrences, schedules: schedules
-    ).items.filter {
-      if case .transaction = $0 { return false }
-      return true
-    }
+  private var inbox: ReviewInbox {
+    let known = Set(approvals.map(\.id))
+    return ReviewInbox(
+      transactions: approvals + scheduledRecords.filter { !known.contains($0.id) },
+      records: records, occurrences: occurrences, schedules: schedules
+    )
   }
 
   var body: some View {
     List {
-      if feed.items.isEmpty && otherItems.isEmpty && !feed.isLoading {
+      let entries = mode == .bank ? inbox.bankItems : inbox.scheduledItems
+      if entries.isEmpty {
         ContentUnavailableView(
-          "All Caught Up", systemImage: "checkmark",
-          description: Text("No transactions or scheduled bills need review.")
+          mode == .bank ? "All Caught Up" : "No Bills Due",
+          systemImage: "checkmark",
+          description: Text(mode == .bank
+            ? "No posted bank transactions need a decision."
+            : "Scheduled bills will appear here when they are due.")
         )
       } else {
-        ForEach(feed.items) { transaction in
-          Button {
-            onSelectTransaction(transaction.id)
-          } label: {
-            reviewRow(
-              title: transaction.payee.isEmpty ? "Transaction" : transaction.payee,
-              subtitle: "Review imported transaction · \(transaction.date.formatted(date: .abbreviated, time: .omitted))",
-              amount: transaction.amountMinor,
-              merchantName: transaction.kind == .transfer ? "" : transaction.payee,
-              merchantDomain: transaction.kind == .transfer ? nil : transaction.merchantDomain,
-              kind: transaction.kind,
-              categoryName: envelopes.first { $0.id == transaction.envelopeID }?.name
-            )
-          }
-        }
-        if feed.hasMore {
-          ProgressView("Loading more…")
-            .frame(maxWidth: .infinity)
-            .onAppear { Task { await feed.loadNext() } }
-        }
-        ForEach(otherItems) { item in
-          switch item {
-          case .transaction(let transaction):
-            Button {
-              onSelectTransaction(transaction.id)
-            } label: {
-              reviewRow(
-                title: transaction.payee.isEmpty ? "Transaction" : transaction.payee,
-                subtitle: "Review imported transaction · \(transaction.date.formatted(date: .abbreviated, time: .omitted))",
-                amount: transaction.amountMinor,
-                merchantName: transaction.kind == .transfer ? "" : transaction.payee,
-                merchantDomain: transaction.kind == .transfer ? nil : transaction.merchantDomain,
-                kind: transaction.kind,
-                categoryName: envelopes.first { $0.id == transaction.envelopeID }?.name
-              )
-            }
-          case .bankRecord(let record, let related):
-            NavigationLink {
-              SimpleFINReviewScreen(
-                record: record, relatedOccurrence: related,
-                relatedSchedule: related.flatMap { occurrence in
-                  schedules.first { $0.id == occurrence.scheduleID }
-                },
-                onRecordScheduledTransfer: onRecord
-              )
-            } label: {
-              reviewRow(
-                title: record.payee.isEmpty ? "Bank transaction" : record.payee,
-                subtitle: related == nil ? "Resolve bank match" : "Resolve bank match and scheduled bill",
-                amount: record.amountMinor,
-                merchantName: record.payee,
-                kind: record.amountMinor >= 0 ? .inflow : .expense
-              )
-            }
-          case .scheduled(let occurrence, let schedule):
-            VStack(alignment: .leading, spacing: 10) {
-              reviewRow(
-                title: schedule.payee,
-                subtitle: "Scheduled for \(occurrence.scheduledFor.formatted(date: .abbreviated, time: .omitted))",
-                amount: -schedule.amountMinor,
-                merchantName: schedule.kind == .transfer ? "" : schedule.payee,
-                kind: schedule.kind,
-                categoryName: envelopes.first { $0.id == schedule.envelopeID }?.name
-              )
-              HStack {
-                Button("Record Transaction", systemImage: "plus") {
-                  onRecord(ScheduledTransactionDraft(
-                    scheduleID: schedule.id,
-                    scheduledFor: occurrence.scheduledFor,
-                    accountID: schedule.accountID,
-                    transferAccountID: schedule.transferAccountID,
-                    envelopeID: schedule.envelopeID,
-                    kind: schedule.kind,
-                    amountMinor: schedule.amountMinor,
-                    payee: schedule.payee,
-                    notes: schedule.notes,
-                    date: occurrence.scheduledFor
-                  ))
+        Section {
+          ForEach(entries) { item in
+            switch item {
+            case .transaction(let transaction):
+              Button {
+                onSelectTransaction(transaction.id)
+              } label: {
+                reviewRow(
+                  title: transaction.payee.isEmpty ? "Transaction" : transaction.payee,
+                  subtitle: "Review import · \(transaction.date.formatted(date: .abbreviated, time: .omitted))",
+                  amount: transaction.amountMinor,
+                  merchantName: transaction.kind == .transfer ? "" : transaction.payee,
+                  merchantDomain: transaction.merchantDomain,
+                  kind: transaction.kind,
+                  categoryName: envelopes.first { $0.id == transaction.envelopeID }?.name
+                )
+              }
+            case .bankRecord(let record, let related):
+              NavigationLink {
+                SimpleFINReviewScreen(
+                  record: record, relatedOccurrence: related,
+                  relatedSchedule: related.flatMap { occurrence in
+                    schedules.first { $0.id == occurrence.scheduleID }
+                  },
+                  onRecordScheduledTransfer: onRecord
+                )
+              } label: {
+                reviewRow(
+                  title: record.payee.isEmpty ? "Bank transaction" : record.payee,
+                  subtitle: accounts.first { $0.id == record.localAccountID }?.name ?? "Bank account",
+                  amount: record.amountMinor,
+                  merchantName: record.payee,
+                  kind: record.amountMinor >= 0 ? .inflow : .expense
+                )
+              }
+            case .scheduled(let occurrence, let schedule):
+              VStack(alignment: .leading, spacing: 12) {
+                reviewRow(
+                  title: schedule.payee,
+                  subtitle: "Due \(occurrence.scheduledFor.formatted(date: .abbreviated, time: .omitted))",
+                  amount: -schedule.amountMinor,
+                  merchantName: schedule.kind == .transfer ? "" : schedule.payee,
+                  kind: schedule.kind,
+                  categoryName: envelopes.first { $0.id == schedule.envelopeID }?.name
+                )
+                HStack {
+                  Button("Record", systemImage: "plus") {
+                    onRecord(ScheduledTransactionDraft(
+                      scheduleID: schedule.id,
+                      scheduledFor: occurrence.scheduledFor,
+                      accountID: schedule.accountID,
+                      transferAccountID: schedule.transferAccountID,
+                      envelopeID: schedule.envelopeID, kind: schedule.kind,
+                      amountMinor: schedule.amountMinor, payee: schedule.payee,
+                      notes: schedule.notes, date: occurrence.scheduledFor
+                    ))
+                  }
+                  .buttonStyle(.borderedProminent)
+                  Button("Skip") { pendingSkip = occurrence }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
-                Button("Skip") { pendingSkip = occurrence }
-                  .buttonStyle(.bordered)
+                Button("Edit Schedule", systemImage: "pencil") {
+                  onEditSchedule(schedule.id)
+                }
+                .font(.subheadline)
               }
-              Button("Edit Schedule", systemImage: "pencil") {
-                onEditSchedule(schedule.id)
-              }
-              .font(.subheadline)
+              .padding(.vertical, 4)
             }
-            .padding(.vertical, 4)
+          }
+        } footer: {
+          if mode == .bank {
+            Text("Review each posted bank transaction once. Matching keeps your existing entry; adding creates a new one.")
           }
         }
       }
     }
-    .navigationTitle("Needs Approval")
-    .task(id: refreshVersion) {
-      await feed.reload(container: modelContext.container, searchText: "",
-                        filter: TransactionFilter(needsApprovalOnly: true),
-                        includeUncategorizedCount: false)
-    }
-    .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-      refreshVersion += 1
-    }
+    .navigationTitle(mode == .bank ? "Bank Review" : "Scheduled Bills")
     .navigationBarTitleDisplayMode(.inline)
     .confirmationDialog("Skip this scheduled occurrence?", isPresented: Binding(
       get: { pendingSkip != nil }, set: { if !$0 { pendingSkip = nil } }

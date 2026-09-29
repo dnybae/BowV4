@@ -313,6 +313,17 @@ struct BudgetCommands {
 
   static func deleteTransaction(_ transaction: BudgetTransaction, in context: ModelContext) throws {
     try invalidateReconciliation(accountIDs: [transaction.accountID, transaction.transferAccountID].compactMap { $0 }, from: transaction.date, in: context)
+    let id = transaction.id
+    for record in try context.fetch(FetchDescriptor<SimpleFINImportRecord>(
+      predicate: #Predicate { $0.transactionID == id }
+    )) {
+      record.transactionID = nil
+      if record.bankState == .posted {
+        record.status = record.status == .linked ? .review : .ignored
+      }
+      record.originalManualSnapshot = nil
+      record.matchedAutomatically = false
+    }
     context.delete(transaction)
     try context.save()
   }

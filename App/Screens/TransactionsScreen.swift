@@ -7,6 +7,10 @@ struct TransactionsScreen: View {
   private var simpleFINRecords: [SimpleFINImportRecord]
   @Query(filter: #Predicate<BudgetTransaction> { $0.needsApproval })
   private var approvals: [BudgetTransaction]
+  @Query(filter: #Predicate<BudgetTransaction> {
+    $0.kindRaw == "expense" && $0.envelopeID == nil
+  })
+  private var legacyUncategorized: [BudgetTransaction]
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
   var schedules: [BudgetSchedule]
@@ -23,9 +27,11 @@ struct TransactionsScreen: View {
   @State private var refreshVersion = 0
 
   private var inbox: ReviewInbox {
-    let known = Set(approvals.map(\.id))
+    let approvalIDs = Set(approvals.map(\.id))
+    let reviewTransactions = approvals + legacyUncategorized.filter { !approvalIDs.contains($0.id) }
+    let known = Set(reviewTransactions.map(\.id))
     return ReviewInbox(
-      transactions: approvals + scheduledRecords.filter { !known.contains($0.id) },
+      transactions: reviewTransactions + scheduledRecords.filter { !known.contains($0.id) },
       records: simpleFINRecords,
       occurrences: occurrences, schedules: schedules
     )
@@ -44,7 +50,7 @@ struct TransactionsScreen: View {
               Label {
                 VStack(alignment: .leading, spacing: 3) {
                   Text("Review bank transactions").font(.headline)
-                  Text("\(inbox.bankItems.count) posted \(inbox.bankItems.count == 1 ? "item needs" : "items need") a decision")
+                  Text("\(inbox.bankItems.count) \(inbox.bankItems.count == 1 ? "item needs" : "items need") a decision")
                     .font(.subheadline).foregroundStyle(.secondary)
                 }
               } icon: {
@@ -84,14 +90,6 @@ struct TransactionsScreen: View {
           }
         }
       }
-      if feed.uncategorizedCount > 0 {
-        Section("Needs Attention") {
-          Button("Categorize \(feed.uncategorizedCount) \(feed.uncategorizedCount == 1 ? "transaction" : "transactions")", systemImage: "tag") {
-            searchText = ""
-            filter = TransactionFilter(envelopeScope: .uncategorized)
-          }
-        }
-      }
       if filter.isActive {
         Section {
           HStack {
@@ -118,16 +116,21 @@ struct TransactionsScreen: View {
             Task { await feed.returnToNewest(searchText: searchText, filter: filter) }
           }
         }
-        ForEach(feed.items) { transaction in
-          Button {
-            onSelect(transaction.id)
-          } label: {
-            TransactionSummaryRow(
-              transaction: transaction,
-              currencyCode: currencyCode
-            )
+        ForEach(TransactionDateGroup.make(feed.items)) { group in
+          Section(group.title) {
+            ForEach(group.items) { transaction in
+              Button {
+                onSelect(transaction.id)
+              } label: {
+                TransactionSummaryRow(
+                  transaction: transaction,
+                  currencyCode: currencyCode,
+                  showsDate: false
+                )
+              }
+              .buttonStyle(.plain)
+            }
           }
-          .buttonStyle(.plain)
         }
         if feed.hasMore {
           ProgressView("Loading more…")
@@ -147,7 +150,7 @@ struct TransactionsScreen: View {
         for: occurrences, in: modelContext
       )) ?? []
       await feed.reload(container: modelContext.container, searchText: searchText,
-                        filter: filter)
+                        filter: filter, includeUncategorizedCount: false)
     }
     .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
       refreshVersion += 1
@@ -211,6 +214,7 @@ struct TransactionSummaryRow: View {
   var transaction: TransactionListItem
   var currencyCode: String
   var displayAmountMinor: Int64? = nil
+  var showsDate = true
 
   var body: some View {
     HStack(spacing: 12) {
@@ -224,7 +228,9 @@ struct TransactionSummaryRow: View {
         Text(transaction.kind == .transfer ? "Transfer" :
           transaction.payee.isEmpty ? "Transaction" : transaction.payee)
           .foregroundStyle(.primary)
-        Text("\(transaction.accountName) · \(transaction.date.formatted(date: .abbreviated, time: .omitted))")
+        Text(showsDate
+          ? "\(transaction.accountName) · \(transaction.date.formatted(date: .abbreviated, time: .omitted))"
+          : transaction.accountName)
           .font(.caption).foregroundStyle(.secondary)
         if transaction.needsApproval {
           Text("Needs review").font(.caption).foregroundStyle(.orange)
@@ -233,7 +239,7 @@ struct TransactionSummaryRow: View {
             .font(.caption).foregroundStyle(.tint)
         }
         if transaction.envelopeID == nil && transaction.kind == .expense {
-          Text("Needs categorization").font(.caption).foregroundStyle(.orange)
+          Text("Choose an envelope in Bank Review").font(.caption).foregroundStyle(.orange)
         } else if let envelopeName = transaction.envelopeName {
           Text(envelopeName).font(.caption).foregroundStyle(.secondary)
         }
@@ -293,7 +299,7 @@ struct TransactionRow: View {
             .font(.caption).foregroundStyle(.tint)
         }
         if transaction.envelopeID == nil && transaction.kind == .expense {
-          Text("Needs categorization")
+          Text("Choose an envelope in Bank Review")
             .font(.caption)
             .foregroundStyle(.orange)
         } else if let envelopeName {

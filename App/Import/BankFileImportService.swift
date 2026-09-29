@@ -4,20 +4,18 @@ import SwiftData
 struct BankFileImportSummary {
   var created: Int = 0
   var linked: Int = 0
+  var needsReview: Int = 0
   var skipped: Int = 0
 }
 
 enum BankFileImportError: LocalizedError {
   case previewChanged
   case balanceOverflow
-  case scheduledTransferNeedsRecording
 
   var errorDescription: String? {
     switch self {
     case .previewChanged: "Transactions changed since the preview. Preview the file again before importing."
     case .balanceOverflow: "The historical balance adjustment is too large to import safely."
-    case .scheduledTransferNeedsRecording:
-      "Record the scheduled transfer first, then import the bank file and match its bank entry to that transfer."
     }
   }
 }
@@ -25,7 +23,6 @@ enum BankFileImportError: LocalizedError {
 struct BankFileImportService {
   func save(
     proposals: [BankImportProposal],
-    importSeparately: Set<String>,
     account: BudgetAccount,
     existingKeys: Set<String>,
     payees: [BudgetPayee],
@@ -40,113 +37,143 @@ struct BankFileImportService {
     for id in linkedIDs {
       existingByID[id] = try BudgetTransactionLookup.byID(id, in: context)
     }
-    let validEnvelopeIDs = Set(envelopes.filter { !$0.isHidden && $0.paymentAccountID == nil }.map(\.id))
+    let validEnvelopeIDs = Set(envelopes.filter {
+      !$0.isHidden && $0.paymentAccountID == nil
+    }.map(\.id))
     let schedules = try context.fetch(FetchDescriptor<BudgetSchedule>())
-    let matcher = PayeeRuleMatcher()
     let rules = PayeeDirectory.ruleItems(payees: payees, validEnvelopeIDs: validEnvelopeIDs)
+    let matcher = PayeeRuleMatcher()
     var summary = BankFileImportSummary()
-    var adjustedOpeningBalance = account.openingBalanceMinor
-    for proposal in proposals {
-      guard !existingKeys.contains(proposal.externalKey) else { continue }
-      let willCreate: Bool
-      switch proposal.decision {
-      case .createNew: willCreate = true
-      case .review: willCreate = importSeparately.contains(proposal.externalKey)
-      case .alreadyImported, .linkManual: willCreate = false
-      }
-      let willLinkManual: Bool
-      if case .linkManual = proposal.decision { willLinkManual = true }
-      else { willLinkManual = false }
-      if willCreate || willLinkManual {
-        let isScheduledTransfer = schedules.contains { schedule in
-          guard schedule.isActive && schedule.kind == .transfer,
-                ScheduleRecurrence().occurs(starting: schedule.startDate,
-                                            frequency: schedule.frequency, on: proposal.row.date) else { return false }
-          return (schedule.accountID == account.id && proposal.row.amountMinor == -schedule.amountMinor)
-            || (schedule.transferAccountID == account.id && proposal.row.amountMinor == schedule.amountMinor)
-        }
-        guard !isScheduledTransfer else { throw BankFileImportError.scheduledTransferNeedsRecording }
-      }
-      if willCreate && proposal.row.date < account.openedAt {
-        let (adjusted, overflow) = adjustedOpeningBalance.subtractingReportingOverflow(
-          proposal.row.amountMinor
-        )
-        guard !overflow else { throw BankFileImportError.balanceOverflow }
-        adjustedOpeningBalance = adjusted
-      }
-      guard case .linkManual(let id) = proposal.decision,
-            !existingKeys.contains(proposal.externalKey) else { continue }
-      guard let transaction = existingByID[id],
-            transaction.externalKey == nil,
-            transaction.sourceRaw == "manual" else {
+
+    for proposal in proposals where !existingKeys.contains(proposal.externalKey) {
+      guard case .linkManual(let id) = proposal.decision else { continue }
+      guard let transaction = existingByID[id], transaction.externalKey == nil,
+            transaction.sourceRaw == "manual", transaction.accountID == account.id else {
         throw BankFileImportError.previewChanged
       }
     }
+
     for proposal in proposals {
       if existingKeys.contains(proposal.externalKey) {
         summary.skipped += 1
         continue
       }
+      let row = proposal.row
+      let scheduledTransfer = schedules.contains { schedule in
+        guard schedule.isActive && schedule.kind == .transfer,
+              ScheduleRecurrence().occurs(
+                starting: schedule.startDate, frequency: schedule.frequency, on: row.date
+              ) else { return false }
+        return (schedule.accountID == account.id && row.amountMinor == -schedule.amountMinor)
+          || (schedule.transferAccountID == account.id && row.amountMinor == schedule.amountMinor)
+      }
+      let envelopeID = row.amountMinor < 0
+        ? matcher.envelopeID(for: row.payee, rules: rules) : nil
+      let scheduledExpense = schedules.filter { schedule in
+        schedule.isActive && schedule.kind == .expense
+          && schedule.accountID == account.id
+          && row.amountMinor == -schedule.amountMinor
+          && schedule.payee.localizedCaseInsensitiveCompare(row.payee) == .orderedSame
+          && ScheduleRecurrence().occurs(
+            starting: schedule.startDate, frequency: schedule.frequency, on: row.date
+          )
+      }
+      let matchedSchedule = scheduledExpense.count == 1 ? scheduledExpense.first : nil
+      let scheduleAlreadyRecorded = try matchedSchedule.map { schedule in
+        try BudgetTransactionLookup.scheduled(
+          scheduleID: schedule.id, on: row.date, in: context
+        ) != nil
+      } ?? false
+      let scheduleNeedsReview = scheduledExpense.count > 1 || scheduleAlreadyRecorded
+      let selectedEnvelopeID = matchedSchedule?.envelopeID ?? envelopeID
       switch proposal.decision {
       case .alreadyImported:
         summary.skipped += 1
-      case .linkManual(let id):
-        guard let transaction = existingByID[id] else { continue }
+      case .linkManual(let id) where !scheduledTransfer && scheduledExpense.count <= 1
+        && (row.amountMinor >= 0 || existingByID[id]?.envelopeID != nil)
+        && scheduleCompatible(existingByID[id], with: matchedSchedule):
+        guard let transaction = existingByID[id] else { throw BankFileImportError.previewChanged }
+        let record = record(for: proposal, account: account, in: context)
+        record.originalManualSnapshot = try JSONEncoder().encode(ManualTransactionSnapshot(transaction))
         transaction.externalKey = proposal.externalKey
         transaction.sourceRaw = "manualLinked"
         transaction.isCleared = true
-        transaction.needsApproval = true
-        summary.linked += 1
-      case .review:
-        if importSeparately.contains(proposal.externalKey) {
-          insert(proposal, account: account, rules: rules, matcher: matcher, in: context)
-          summary.created += 1
-        } else {
-          summary.skipped += 1
+        transaction.needsApproval = false
+        if let matchedSchedule, transaction.scheduleID == nil {
+          transaction.scheduleID = matchedSchedule.id
+          transaction.scheduledFor = row.date
         }
-      case .createNew:
-        insert(proposal, account: account, rules: rules, matcher: matcher, in: context)
+        record.transactionID = transaction.id
+        record.status = .linked
+        record.matchedAutomatically = true
+        summary.linked += 1
+        if let reconciled = account.lastReconciledAt, row.date <= reconciled {
+          account.lastReconciledAt = nil
+          account.lastReconciledBalanceMinor = nil
+        }
+      case .createNew where !scheduledTransfer && !scheduleNeedsReview
+        && (row.amountMinor >= 0 || selectedEnvelopeID != nil):
+        let transaction = BudgetTransaction(
+          accountID: account.id, envelopeID: selectedEnvelopeID, date: row.date,
+          amountMinor: row.amountMinor, payee: row.payee, notes: row.memo,
+          kind: row.amountMinor < 0 ? .expense : .inflow
+        )
+        transaction.externalKey = proposal.externalKey
+        transaction.sourceRaw = BankImportOrigin.bankFile.rawValue
+        transaction.isCleared = true
+        if let matchedSchedule {
+          transaction.scheduleID = matchedSchedule.id
+          transaction.scheduledFor = row.date
+        }
+        if row.date < account.openedAt {
+          let (adjusted, overflow) = account.openingBalanceMinor.subtractingReportingOverflow(row.amountMinor)
+          guard !overflow else { throw BankFileImportError.balanceOverflow }
+          account.openingBalanceMinor = adjusted
+        }
+        context.insert(transaction)
+        let record = record(for: proposal, account: account, in: context)
+        record.transactionID = transaction.id
+        record.status = .imported
         summary.created += 1
+      case .linkManual(let id):
+        let record = record(for: proposal, account: account, in: context)
+        record.transactionID = id
+        summary.needsReview += 1
+      case .createNew, .review:
+        _ = record(for: proposal, account: account, in: context)
+        summary.needsReview += 1
       }
-    }
-    let openingChanged = adjustedOpeningBalance != account.openingBalanceMinor
-    account.openingBalanceMinor = adjustedOpeningBalance
-    if openingChanged || proposals.contains(where: {
-      if let reconciled = account.lastReconciledAt {
-        return $0.row.date <= reconciled && !existingKeys.contains($0.externalKey)
+      if let reconciled = account.lastReconciledAt, row.date <= reconciled,
+         case .createNew = proposal.decision, selectedEnvelopeID != nil || row.amountMinor >= 0 {
+        account.lastReconciledAt = nil
+        account.lastReconciledBalanceMinor = nil
       }
-      return false
-    }) {
-      account.lastReconciledAt = nil
-      account.lastReconciledBalanceMinor = nil
     }
     try context.save()
     return summary
   }
 
-  private func insert(
-    _ proposal: BankImportProposal,
-    account: BudgetAccount,
-    rules: [PayeeRuleItem],
-    matcher: PayeeRuleMatcher,
-    in context: ModelContext
-  ) {
+  private func record(
+    for proposal: BankImportProposal, account: BudgetAccount, in context: ModelContext
+  ) -> SimpleFINImportRecord {
     let row = proposal.row
-    let kind: BudgetTransactionKind = row.amountMinor < 0 ? .expense : .inflow
-    let transaction = BudgetTransaction(
-      accountID: account.id,
-      envelopeID: kind == .expense
-        ? matcher.envelopeID(for: row.payee, rules: rules) : nil,
-      date: row.date,
-      amountMinor: row.amountMinor,
-      payee: row.payee,
-      notes: row.memo,
-      kind: kind
+    let record = SimpleFINImportRecord(
+      remoteKey: proposal.externalKey, localAccountID: account.id,
+      date: row.date, amountMinor: row.amountMinor, payee: row.payee
     )
-    transaction.externalKey = proposal.externalKey
-    transaction.sourceRaw = "bankFile"
-    transaction.isCleared = true
-    transaction.needsApproval = true
-    context.insert(transaction)
+    record.origin = .bankFile
+    record.bankState = .posted
+    record.memo = row.memo
+    context.insert(record)
+    return record
+  }
+
+  private func scheduleCompatible(
+    _ transaction: BudgetTransaction?, with schedule: BudgetSchedule?
+  ) -> Bool {
+    guard let schedule else { return true }
+    guard let transaction else { return false }
+    return (transaction.scheduleID == nil || transaction.scheduleID == schedule.id)
+      && (schedule.envelopeID == nil || transaction.envelopeID == schedule.envelopeID)
   }
 }

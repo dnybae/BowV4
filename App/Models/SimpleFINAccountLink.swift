@@ -9,6 +9,7 @@ final class SimpleFINAccountLink {
   var name: String = ""
   var currencyCode: String = "USD"
   var localAccountID: UUID? = nil
+  var importStartDate: Date? = nil
   var reportedBalance: String? = nil
   var reportedAt: Date? = nil
 

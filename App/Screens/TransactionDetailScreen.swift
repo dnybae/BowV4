@@ -12,6 +12,7 @@ struct TransactionDetailScreen: View {
   var currencyCode: String
   @State private var showingEditor = false
   @State private var showingUnmatchConfirmation = false
+  @State private var reviewEnvelopeID: UUID?
   @State private var message: String?
 
   private var bankRecord: SimpleFINImportRecord? {
@@ -25,7 +26,18 @@ struct TransactionDetailScreen: View {
   private var categoryName: String {
     if transaction.kind == .transfer { return "Transfer" }
     return envelopes.first { $0.id == transaction.envelopeID }?.name
-      ?? (transaction.kind == .inflow ? "Ready to Assign" : "Needs Categorization")
+      ?? (transaction.kind == .inflow ? "Ready to Assign" : "Choose an Envelope")
+  }
+
+  private var needsLegacyReview: Bool {
+    bankRecord?.status != .imported
+      && (transaction.needsApproval || (transaction.kind == .expense && transaction.envelopeID == nil))
+  }
+
+  private var canCompleteReview: Bool {
+    transaction.kind != .expense || envelopes.contains {
+      $0.id == reviewEnvelopeID && !$0.isHidden && $0.paymentAccountID == nil
+    }
   }
 
   var body: some View {
@@ -39,7 +51,7 @@ struct TransactionDetailScreen: View {
               .font(.largeTitle.weight(.bold))
             Text(statusTitle)
               .font(.subheadline.weight(.medium))
-              .foregroundStyle(transaction.needsApproval
+              .foregroundStyle(needsLegacyReview
                 ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
           }
           .padding(.vertical, 12)
@@ -78,15 +90,24 @@ struct TransactionDetailScreen: View {
           }
         }
 
-        if transaction.needsApproval {
+        if needsLegacyReview {
           Section {
-            Button("Approve Transaction", systemImage: "checkmark") {
-              transaction.needsApproval = false
-              do { try modelContext.save(); dismiss() }
-              catch { message = error.localizedDescription }
+            if transaction.kind == .expense {
+              CategorySelectionField(
+                title: "Envelope", selection: $reviewEnvelopeID,
+                envelopes: envelopes, noneTitle: "Choose an Envelope"
+              )
             }
+            Button("Complete Review", systemImage: "checkmark") { completeReview() }
+              .disabled(!canCompleteReview)
           } footer: {
-            Text("Approve this imported transaction after checking its details. You can edit it first.")
+            Text("This older transaction needs a one-time check. Expenses must have an envelope before review can finish.")
+          }
+        } else if transaction.needsApproval
+          || (transaction.kind == .expense && transaction.envelopeID == nil) {
+          Section {
+            Text("Finish this transaction in Spending → Bank Review.")
+              .foregroundStyle(.secondary)
           }
         }
       }
@@ -128,14 +149,26 @@ struct TransactionDetailScreen: View {
           dismiss()
         }
       }
+      .onAppear { reviewEnvelopeID = transaction.envelopeID }
     }
   }
 
   private var statusTitle: String {
-    if transaction.needsApproval { return "Needs review" }
+    if needsLegacyReview || transaction.needsApproval
+      || (transaction.kind == .expense && transaction.envelopeID == nil) {
+      return "Needs bank review"
+    }
     if bankRecord?.status == .linked { return "Matched with bank" }
     if bankRecord?.status == .imported || transaction.sourceRaw == "simplefin" { return "Imported from bank" }
     if transaction.sourceRaw == "manualLinked" { return "Matched with bank" }
     return transaction.isCleared ? "Cleared" : "Entered manually"
+  }
+
+  private func completeReview() {
+    guard canCompleteReview else { return }
+    transaction.envelopeID = reviewEnvelopeID
+    transaction.needsApproval = false
+    do { try modelContext.save(); dismiss() }
+    catch { message = error.localizedDescription }
   }
 }

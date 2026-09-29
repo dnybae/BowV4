@@ -8,6 +8,11 @@ struct BankFileImportScreen: View {
   @AppStorage("bow.demoMode") private var isDemoMode = false
   @Query private var accounts: [BudgetAccount]
   @Query private var profiles: [BudgetProfile]
+  @Query private var payees: [BudgetPayee]
+  @Query private var envelopes: [BudgetEnvelope]
+  @Query private var schedules: [BudgetSchedule]
+  @Query(filter: #Predicate<BudgetTransaction> { $0.scheduleID != nil })
+  private var scheduledTransactions: [BudgetTransaction]
   @State private var showingFilePicker = false
   @State private var fileName: String?
   @State private var fileText = ""
@@ -17,12 +22,14 @@ struct BankFileImportScreen: View {
   @State private var qifDateOrder: BankDateOrder = .monthDayYear
   @State private var accountID: UUID?
   @State private var proposals: [BankImportProposal] = []
+  @State private var uncategorizedManualIDs = Set<UUID>()
+  @State private var manualCandidates: [UUID: LocalTransactionCandidate] = [:]
   @State private var reviewCount = 0
   @State private var visibleProposalCount = 100
   @State private var isPreviewing = false
   @State private var isImporting = false
   @State private var previewToken = UUID()
-  @State private var importSeparately: Set<String> = []
+  @State private var importSummary: BankFileImportSummary?
   @State private var errorMessage: String?
 
   private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
@@ -59,8 +66,12 @@ struct BankFileImportScreen: View {
           Text("Choose a CSV, OFX, QFX, or QIF export from your bank.")
         }
 
-        Section("Account") {
-          AccountSelectionField(title: "Import Into", selection: $accountID, accounts: accounts)
+        Section {
+          AccountSelectionField(title: "Bow Account", selection: $accountID, accounts: accounts)
+        } header: {
+          Text("Account")
+        } footer: {
+          Text("Choose the Bow account represented by this bank file.")
         }
 
         if format == .csv, let csvTable {
@@ -107,12 +118,12 @@ struct BankFileImportScreen: View {
 
         if !proposals.isEmpty {
           Section {
-            Text("\(proposals.count) unique rows · \(reviewCount) need duplicate review")
+            Text("\(proposals.count) rows · \(reviewCount) will go to Bank Review")
               .font(.subheadline.weight(.medium))
           } header: {
             Text("Preview")
           } footer: {
-            Text("New transactions need approval. Rows before this account’s opening date are offset in its opening balance so importing history does not change today’s cash balance.")
+            Text("Clear matches and categorized transactions are completed automatically. Anything uncertain waits in Spending → Bank Review. Historical imports preserve today’s cash balance.")
           }
 
           Section("Transactions") {
@@ -127,32 +138,9 @@ struct BankFileImportScreen: View {
                 Text(proposal.row.date.formatted(date: .abbreviated, time: .omitted))
                   .font(.caption)
                   .foregroundStyle(.secondary)
-                switch proposal.decision {
-                case .createNew:
-                  Text("New · needs approval")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                case .linkManual:
-                  Text("Links your manual transaction")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                case .alreadyImported:
-                  Text("Already imported · skipped")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                case .review:
-                  Toggle("Import separately (possible duplicate)", isOn: Binding(
-                    get: { importSeparately.contains(proposal.externalKey) },
-                    set: { enabled in
-                      if enabled {
-                        importSeparately.insert(proposal.externalKey)
-                      } else {
-                        importSeparately.remove(proposal.externalKey)
-                      }
-                    }
-                  ))
+                Text(actionLabel(for: proposal))
                   .font(.caption)
-                }
+                  .foregroundStyle(.secondary)
               }
               .padding(.vertical, 4)
             }
@@ -172,11 +160,8 @@ struct BankFileImportScreen: View {
         }
         ToolbarItem(placement: .confirmationAction) {
           Button("Import") { Task { await importFile() } }
-            .disabled(proposals.isEmpty || selectedAccount == nil || isImporting)
+            .disabled(proposals.isEmpty || selectedAccount == nil || isImporting || importSummary != nil)
         }
-      }
-      .onAppear {
-        if accountID == nil { accountID = accounts.first?.id }
       }
       .onChange(of: accountID) { _, _ in clearPreview() }
       .onChange(of: mapping) { _, _ in clearPreview() }
@@ -190,35 +175,7 @@ struct BankFileImportScreen: View {
           UTType(filenameExtension: "qfx") ?? .data,
           UTType(filenameExtension: "qif") ?? .data
         ]
-      ) { result in
-        Task {
-          do {
-            let url = try result.get()
-            let loaded = try await Task.detached(priority: .userInitiated) { () throws -> (BankFileFormat, String, BankCSVTable?) in
-              guard let format = BankFileFormat(rawValue: url.pathExtension.lowercased()) else {
-                throw BankFileParseError.unsupportedFormat
-              }
-              let accessed = url.startAccessingSecurityScopedResource()
-              defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-              let data = try Data(contentsOf: url)
-              guard let text = String(data: data, encoding: .utf8)
-                ?? String(data: data, encoding: .utf16)
-                ?? String(data: data, encoding: .isoLatin1) else {
-                throw BankFileParseError.unreadableText
-              }
-              return (format, text, format == .csv ? try BankFileParser().csvTable(text) : nil)
-            }.value
-            format = loaded.0
-            fileName = url.lastPathComponent
-            fileText = loaded.1
-            csvTable = loaded.2
-            if let csvTable { mapping = BankCSVMapping.suggested(for: csvTable.headers) }
-            clearPreview()
-          } catch {
-            errorMessage = error.localizedDescription
-          }
-        }
-      }
+      ) { result in handleFileSelection(result) }
       .alert("Couldn’t Import File", isPresented: Binding(
         get: { errorMessage != nil },
         set: { if !$0 { errorMessage = nil } }
@@ -226,6 +183,15 @@ struct BankFileImportScreen: View {
         Button("OK") { errorMessage = nil }
       } message: {
         Text(errorMessage ?? "")
+      }
+      .alert("Import Complete", isPresented: Binding(
+        get: { importSummary != nil }, set: { if !$0 { importSummary = nil } }
+      )) {
+        Button("Done") { dismiss() }
+      } message: {
+        if let importSummary {
+          Text("\(importSummary.created) added, \(importSummary.linked) matched, \(importSummary.needsReview) in Bank Review, and \(importSummary.skipped) skipped. Open Spending to review uncertain transactions.")
+        }
       }
     }
   }
@@ -249,9 +215,42 @@ struct BankFileImportScreen: View {
     previewToken = UUID()
     isPreviewing = false
     proposals = []
+    uncategorizedManualIDs = []
+    manualCandidates = [:]
     reviewCount = 0
     visibleProposalCount = 100
-    importSeparately = []
+    importSummary = nil
+  }
+
+  private func handleFileSelection(_ result: Result<URL, Error>) {
+    Task {
+      do {
+        let url = try result.get()
+        let loaded = try await Task.detached(priority: .userInitiated) {
+          () throws -> (BankFileFormat, String, BankCSVTable?) in
+          guard let format = BankFileFormat(rawValue: url.pathExtension.lowercased()) else {
+            throw BankFileParseError.unsupportedFormat
+          }
+          let accessed = url.startAccessingSecurityScopedResource()
+          defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+          let data = try Data(contentsOf: url)
+          let text = String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .utf16)
+            ?? String(data: data, encoding: .isoLatin1)
+          guard let text else { throw BankFileParseError.unreadableText }
+          let table = format == .csv ? try BankFileParser().csvTable(text) : nil
+          return (format, text, table)
+        }.value
+        format = loaded.0
+        fileName = url.lastPathComponent
+        fileText = loaded.1
+        csvTable = loaded.2
+        if let csvTable { mapping = BankCSVMapping.suggested(for: csvTable.headers) }
+        clearPreview()
+      } catch {
+        errorMessage = error.localizedDescription
+      }
+    }
   }
 
   private func preview() async {
@@ -283,16 +282,16 @@ struct BankFileImportScreen: View {
       let planned = await Task.detached(priority: .userInitiated) {
         BankImportPlanner().plan(
           rows: rows, accountID: accountID,
-          existing: bundle.existing, manualTransfers: bundle.transfers
+          existing: bundle.existing, manualTransfers: bundle.transfers,
+          stagedKeys: bundle.stagedKeys
         )
       }.value
       guard previewToken == token else { return }
       proposals = planned
-      reviewCount = planned.reduce(0) { count, proposal in
-        if case .review = proposal.decision { count + 1 } else { count }
-      }
+      uncategorizedManualIDs = bundle.uncategorizedManualIDs
+      manualCandidates = Dictionary(uniqueKeysWithValues: bundle.existing.map { ($0.id, $0) })
+      reviewCount = planned.filter(needsReview).count
       visibleProposalCount = 100
-      importSeparately = []
     } catch {
       guard previewToken == token else { return }
       clearPreview()
@@ -306,14 +305,71 @@ struct BankFileImportScreen: View {
     isImporting = true
     defer { isImporting = false }
     do {
-      _ = try await BankFileImportRepository(modelContainer: modelContext.container).save(
+      importSummary = try await BankFileImportRepository(modelContainer: modelContext.container).save(
         proposals: proposals,
-        importSeparately: importSeparately,
         accountID: account.id
       )
-      dismiss()
     } catch {
       errorMessage = error.localizedDescription
+    }
+  }
+
+  private func needsReview(_ proposal: BankImportProposal) -> Bool {
+    guard let account = selectedAccount else { return false }
+    if case .alreadyImported = proposal.decision { return false }
+    if schedules.contains(where: { schedule in
+      guard schedule.isActive && schedule.kind == .transfer,
+            ScheduleRecurrence().occurs(
+              starting: schedule.startDate, frequency: schedule.frequency,
+              on: proposal.row.date
+            ) else { return false }
+      return (schedule.accountID == account.id && proposal.row.amountMinor == -schedule.amountMinor)
+        || (schedule.transferAccountID == account.id && proposal.row.amountMinor == schedule.amountMinor)
+    }) { return true }
+    let scheduled = schedules.filter { schedule in
+      schedule.isActive && schedule.kind == .expense
+        && schedule.accountID == account.id
+        && proposal.row.amountMinor == -schedule.amountMinor
+        && schedule.payee.localizedCaseInsensitiveCompare(proposal.row.payee) == .orderedSame
+        && ScheduleRecurrence().occurs(
+          starting: schedule.startDate, frequency: schedule.frequency,
+          on: proposal.row.date
+        )
+    }
+    if scheduled.count > 1 { return true }
+    switch proposal.decision {
+    case .alreadyImported: return false
+    case .linkManual(let id):
+      if uncategorizedManualIDs.contains(id) { return true }
+      if let schedule = scheduled.first, let manual = manualCandidates[id] {
+        return (manual.scheduleID != nil && manual.scheduleID != schedule.id)
+          || (schedule.envelopeID != nil && manual.envelopeID != schedule.envelopeID)
+      }
+      return false
+    case .review: return true
+    case .createNew:
+      if proposal.row.amountMinor >= 0 { return false }
+      if let schedule = scheduled.first,
+         scheduledTransactions.contains(where: { transaction in
+           transaction.scheduleID == schedule.id
+             && transaction.scheduledFor.map {
+               Calendar.current.isDate($0, inSameDayAs: proposal.row.date)
+             } == true
+         }) { return true }
+      if scheduled.count == 1 && scheduled[0].envelopeID != nil { return false }
+      let ids = Set(envelopes.filter { !$0.isHidden && $0.paymentAccountID == nil }.map(\.id))
+      let rules = PayeeDirectory.ruleItems(payees: payees, validEnvelopeIDs: ids)
+      return PayeeRuleMatcher().envelopeID(for: proposal.row.payee, rules: rules) == nil
+    }
+  }
+
+  private func actionLabel(for proposal: BankImportProposal) -> String {
+    if needsReview(proposal) { return "Bank Review · choose a match or envelope" }
+    switch proposal.decision {
+    case .alreadyImported: return "Already in Bow · skipped"
+    case .linkManual: return "Matches your existing entry"
+    case .createNew: return "Adds automatically"
+    case .review: return "Bank Review"
     }
   }
 }

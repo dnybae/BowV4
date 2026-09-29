@@ -51,7 +51,7 @@ struct CategoryScopeSelectionField: View {
   private var selectedName: String {
     switch selection {
     case .all: "All Categories"
-    case .uncategorized: "Needs Categorization"
+    case .uncategorized: "Uncategorized legacy items"
     case .envelope(let id): envelopes.first(where: { $0.id == id })?.name ?? "All Categories"
     }
   }
@@ -80,13 +80,10 @@ struct CategoryScopeSelectionField: View {
           return nil
         }(),
         noneTitle: "All Categories",
-        showsUncategorized: true,
-        isUncategorizedSelected: selection == .uncategorized
+        showsUncategorized: false,
+        isUncategorizedSelected: false
       ) { id in
         selection = id.map(TransactionEnvelopeScope.envelope) ?? .all
-        showingSelection = false
-      } onSelectUncategorized: {
-        selection = .uncategorized
         showingSelection = false
       }
     }

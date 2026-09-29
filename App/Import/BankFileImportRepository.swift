@@ -5,7 +5,6 @@ import SwiftData
 actor BankFileImportRepository {
   func save(
     proposals: [BankImportProposal],
-    importSeparately: Set<String>,
     accountID: UUID
   ) throws -> BankFileImportSummary {
     let context = ModelContext(modelContainer)
@@ -33,8 +32,11 @@ actor BankFileImportRepository {
       offset += batch.count
       if batch.count < 512 { break }
     }
+    for record in try context.fetch(FetchDescriptor<SimpleFINImportRecord>()) {
+      existingKeys.insert(record.remoteKey)
+    }
     return try BankFileImportService().save(
-      proposals: proposals, importSeparately: importSeparately,
+      proposals: proposals,
       account: account, existingKeys: existingKeys,
       payees: payees, envelopes: envelopes, in: context
     )

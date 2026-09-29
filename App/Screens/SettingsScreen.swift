@@ -11,7 +11,6 @@ struct SettingsScreen: View {
   @Query private var profiles: [BudgetProfile]
   @Query private var groups: [BudgetGroup]
   @Query private var envelopes: [BudgetEnvelope]
-  @Query private var simpleFINRecords: [SimpleFINImportRecord]
   @State private var showingYNABImport = false
   @State private var showingBankImport = false
   @State private var showingResetDemo = false
@@ -61,16 +60,7 @@ struct SettingsScreen: View {
           NavigationLink {
             SimpleFINScreen()
           } label: {
-            HStack {
-              Label("SimpleFIN Bank Sync", systemImage: "arrow.clockwise")
-              Spacer()
-              let count = simpleFINRecords.filter { $0.status == .review }.count
-              if count > 0 {
-                Text("\(count) to review")
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-              }
-            }
+            Label("SimpleFIN Bank Sync", systemImage: "arrow.clockwise")
           }
           Button("Import Bank File", systemImage: "doc.text") {
             showingBankImport = true

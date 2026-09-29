@@ -5,6 +5,9 @@ struct AccountEditorScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
   @Environment(\.budgetSnapshotRepository) private var sharedRepository
+  @AppStorage("bow.demoMode") private var isDemoMode = false
+  @Query private var simpleFINLinks: [SimpleFINAccountLink]
+  @Query private var simpleFINConnections: [SimpleFINConnection]
   var currencyCode: String
   var account: BudgetAccount?
   var onSaved: ((BudgetAccount) -> Void)?
@@ -14,6 +17,8 @@ struct AccountEditorScreen: View {
   @State private var note: String
   @State private var errorMessage: String?
   @State private var loadedCurrentBalance = false
+  @State private var showingBankLinkPicker = false
+  @State private var showingStopBankSync = false
 
   init(currencyCode: String, account: BudgetAccount? = nil,
        suggestedName: String = "", suggestedBalanceMinor: Int64? = nil,
@@ -78,6 +83,29 @@ struct AccountEditorScreen: View {
         TextField("Optional note", text: $note, axis: .vertical)
           .lineLimit(2...4)
       }
+      if let account, !isDemoMode, !simpleFINConnections.isEmpty {
+        Section {
+          if let link = simpleFINLinks.first(where: { $0.localAccountID == account.id }) {
+            LabeledContent("Bank account", value: link.name)
+            Button("Relink Bank Account", systemImage: "link") {
+              showingBankLinkPicker = true
+            }
+            Button("Unlink Bank Account", role: .destructive) {
+              showingStopBankSync = true
+            }
+          } else {
+            Text("This account is not connected to a bank.")
+              .foregroundStyle(.secondary)
+            Button("Link a Bank Account", systemImage: "link") {
+              showingBankLinkPicker = true
+            }
+          }
+        } header: {
+          Text("Bank Sync")
+        } footer: {
+          Text("Changing or stopping sync keeps transactions already in Bow.")
+        }
+      }
     }
     .navigationTitle(account == nil ? "Private Account" : "Edit Account")
     .task {
@@ -127,6 +155,26 @@ struct AccountEditorScreen: View {
       Button("OK") { errorMessage = nil }
     } message: {
       Text(errorMessage ?? "")
+    }
+    .sheet(isPresented: $showingBankLinkPicker) {
+      if let account {
+        SimpleFINLinkPickerScreen(account: account)
+      }
+    }
+    .confirmationDialog("Unlink this bank account?", isPresented: $showingStopBankSync) {
+      Button("Unlink", role: .destructive) {
+        guard let account,
+              let link = simpleFINLinks.first(where: { $0.localAccountID == account.id })
+        else { return }
+        link.localAccountID = nil
+        do { try modelContext.save() }
+        catch {
+          link.localAccountID = account.id
+          errorMessage = error.localizedDescription
+        }
+      }
+    } message: {
+      Text("The Bow account and its existing transactions stay in place. You can link it again later.")
     }
   }
 

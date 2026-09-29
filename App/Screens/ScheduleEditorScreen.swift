@@ -65,6 +65,11 @@ struct ScheduleEditorScreen: View {
               title: "Category", selection: $envelopeID,
               envelopes: envelopes, noneTitle: "No Category"
             )
+            if kind == .expense && envelopeID == nil {
+              Text("Choose an envelope for this scheduled expense.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
           }
         }
         Section("Schedule") {
@@ -119,6 +124,10 @@ struct ScheduleEditorScreen: View {
     }
     guard let source = accounts.first(where: { $0.id == accountID }) else {
       errorMessage = "Choose an account."
+      return
+    }
+    if kind == .expense && envelopeID == nil {
+      errorMessage = BudgetCommandError.expenseNeedsEnvelope.localizedDescription
       return
     }
     if kind == .transfer {

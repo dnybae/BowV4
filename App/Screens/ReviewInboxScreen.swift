@@ -10,6 +10,10 @@ struct ReviewInboxScreen: View {
   @Environment(\.modelContext) private var modelContext
   @Query(filter: #Predicate<BudgetTransaction> { $0.needsApproval })
   private var approvals: [BudgetTransaction]
+  @Query(filter: #Predicate<BudgetTransaction> {
+    $0.kindRaw == "expense" && $0.envelopeID == nil
+  })
+  private var legacyUncategorized: [BudgetTransaction]
   @Query private var payees: [BudgetPayee]
   @Query private var envelopes: [BudgetEnvelope]
   var mode: ReviewInboxMode = .bank
@@ -26,9 +30,11 @@ struct ReviewInboxScreen: View {
   @State private var message: String?
 
   private var inbox: ReviewInbox {
-    let known = Set(approvals.map(\.id))
+    let approvalIDs = Set(approvals.map(\.id))
+    let reviewTransactions = approvals + legacyUncategorized.filter { !approvalIDs.contains($0.id) }
+    let known = Set(reviewTransactions.map(\.id))
     return ReviewInbox(
-      transactions: approvals + scheduledRecords.filter { !known.contains($0.id) },
+      transactions: reviewTransactions + scheduledRecords.filter { !known.contains($0.id) },
       records: records, occurrences: occurrences, schedules: schedules
     )
   }
@@ -41,7 +47,7 @@ struct ReviewInboxScreen: View {
           mode == .bank ? "All Caught Up" : "No Bills Due",
           systemImage: "checkmark",
           description: Text(mode == .bank
-            ? "No posted bank transactions need a decision."
+            ? "No bank transactions need a decision."
             : "Scheduled bills will appear here when they are due.")
         )
       } else {
@@ -54,7 +60,9 @@ struct ReviewInboxScreen: View {
               } label: {
                 reviewRow(
                   title: transaction.payee.isEmpty ? "Transaction" : transaction.payee,
-                  subtitle: "Review import · \(transaction.date.formatted(date: .abbreviated, time: .omitted))",
+                  subtitle: transaction.envelopeID == nil
+                    ? "Choose an envelope · \(transaction.date.formatted(date: .abbreviated, time: .omitted))"
+                    : "Review existing import · \(transaction.date.formatted(date: .abbreviated, time: .omitted))",
                   amount: transaction.amountMinor,
                   merchantName: transaction.kind == .transfer ? "" : transaction.payee,
                   merchantDomain: transaction.merchantDomain,
@@ -116,7 +124,7 @@ struct ReviewInboxScreen: View {
           }
         } footer: {
           if mode == .bank {
-            Text("Review each posted bank transaction once. Matching keeps your existing entry; adding creates a new one.")
+            Text("Choose a match or an envelope once. Matching keeps your existing entry; adding creates a new one.")
           }
         }
       }

@@ -31,13 +31,13 @@ struct AddAccountFlowScreen: View {
 
         Section {
           NavigationLink {
-            SimpleFINScreen(onDone: { dismiss() })
+            SimpleFINAccountSetupScreen(onDone: { dismiss() })
           } label: {
             optionRow(
-              title: connections.isEmpty ? "Connect with SimpleFIN" : "Link a Bank Account",
+              title: "Connect a Bank",
               detail: connections.isEmpty
-                ? "Connect your bank, then choose which accounts to add to Bow."
-                : "Choose an account from your SimpleFIN connection and link it to Bow.",
+                ? "Enter a SimpleFIN setup token, then choose which bank accounts to add."
+                : "Choose another account from your SimpleFIN connection.",
               symbol: "link"
             )
           }

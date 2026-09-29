@@ -39,13 +39,18 @@ struct ReviewInbox {
     let unresolved = records.filter {
       $0.bankState == .posted && (
         $0.status == .review
-          || ($0.status == .imported && $0.transactionID.flatMap {
-            transactionByID[$0]?.needsApproval
+          || ($0.status == .imported && $0.transactionID.flatMap { id in
+            transactionByID[id].map {
+              $0.needsApproval || ($0.kind == .expense && $0.envelopeID == nil)
+            }
           } == true)
       )
     }
     let bankTransactionIDs = Set(unresolved.compactMap(\.transactionID))
-    var bank = transactions.filter { $0.needsApproval && !bankTransactionIDs.contains($0.id) }
+    var bank = transactions.filter {
+      ($0.needsApproval || ($0.kind == .expense && $0.envelopeID == nil))
+        && !bankTransactionIDs.contains($0.id)
+    }
       .map(ReviewEntry.transaction)
     let scheduleByID = Dictionary(uniqueKeysWithValues: schedules.map { ($0.id, $0) })
     let pending = occurrences.filter { occurrence in

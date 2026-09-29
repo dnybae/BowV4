@@ -13,7 +13,8 @@ struct BankImportPlanner {
     rows: [BankImportRow],
     accountID: UUID,
     existing: [LocalTransactionCandidate],
-    manualTransfers: [LocalTransactionCandidate] = []
+    manualTransfers: [LocalTransactionCandidate] = [],
+    stagedKeys: [String: UUID] = [:]
   ) -> [BankImportProposal] {
     let matcher = BankTransactionMatcher()
     let calendar = Calendar.current
@@ -65,7 +66,9 @@ struct BankImportPlanner {
           && normalized($0.payee) == normalized(row.payee)
       }
       let decision: BankMatchDecision
-      if let linked = byExternalKey[externalKey] {
+      if let stagedID = stagedKeys[externalKey] {
+        decision = .alreadyImported(stagedID)
+      } else if let linked = byExternalKey[externalKey] {
         decision = .alreadyImported(linked.id)
       } else if !transferMatches.isEmpty {
         decision = .review(transferMatches.map(\.id))

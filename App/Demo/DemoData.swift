@@ -153,11 +153,9 @@ enum DemoData {
     transaction("Macy’s", -42_000, .expense, from: floatingCard, envelope: gifts, month: -1, day: 20, domain: "macys.com")
     transaction("Rewards Card Payment", -5_000, .transfer, from: everyday, to: floatingCard, month: 0, day: 14)
     let gift = transaction("Target", -5_800, .expense, from: wallet, envelope: gifts, month: 0, day: 12, domain: "target.com", cleared: false)
-    gift.notes = "Cash purchase to categorize and fund"
+    gift.notes = "Cash purchase to fund"
     transaction("Olive Garden", -18_500, .expense, from: card, envelope: dining, month: 0, day: 17, domain: "olivegarden.com", cleared: false)
     transaction("CVS Pharmacy", -4_600, .expense, from: everyday, envelope: health, month: 0, day: 18, domain: "cvs.com")
-    let uncategorized = transaction("Target", -2_750, .expense, from: everyday, day: 20, domain: "target.com", cleared: false)
-    uncategorized.notes = "Sample uncategorized purchase"
     transaction("Netflix", -1_599, .expense, from: card, envelope: fun, day: 21, domain: "netflix.com")
     let match = transaction("Whole Foods Market", -3_200, .expense, from: everyday, envelope: groceries, day: 22, domain: "wholefoodsmarket.com", cleared: false)
     match.notes = "Manually entered before bank import"
@@ -180,7 +178,7 @@ enum DemoData {
     previousRent?.scheduleID = rentSchedule.id
     previousRent?.scheduledFor = date(-1, 3)
     insert(BudgetSchedule(payee: "Instacart", amountMinor: 13_000, accountID: everyday.id, envelopeID: groceries.id, startDate: today, frequency: .weekly, notes: "Weekly grocery order"))
-    insert(BudgetSchedule(payee: "GEICO", amountMinor: 28_000, accountID: everyday.id, envelopeID: nil, startDate: today, frequency: .once, notes: "Choose an envelope before recording"))
+    insert(BudgetSchedule(payee: "GEICO", amountMinor: 28_000, accountID: everyday.id, envelopeID: transport.id, startDate: today, frequency: .once, notes: "Auto insurance"))
     insert(BudgetSchedule(payee: "Disney+", amountMinor: 12_000, accountID: card.id, envelopeID: fun.id, startDate: date(-2, 18), frequency: .yearly, notes: "Renews annually"))
     let paused = insert(BudgetSchedule(payee: "Planet Fitness", amountMinor: 4_500, accountID: everyday.id, envelopeID: fun.id, startDate: date(-1, 8), frequency: .monthly, notes: "Inactive example"))
     paused.isActive = false
@@ -189,7 +187,7 @@ enum DemoData {
     connection.lastSuccessfulAt = Date().addingTimeInterval(-3_600)
     connection.lastAttemptAt = connection.lastSuccessfulAt
     connection.automaticSync = false
-    connection.lastMessage = "Demo bank data: two posted items need review and one is pending."
+    connection.lastMessage = nil
     let checkingLink = insert(SimpleFINAccountLink(remoteKey: "demo-checking", name: "Example Bank Checking", currencyCode: "USD"))
     checkingLink.localAccountID = everyday.id
     checkingLink.reportedBalance = "3850.20"
@@ -198,7 +196,6 @@ enum DemoData {
     cardLink.localAccountID = card.id
     cardLink.reportedBalance = "-520.64"
     cardLink.reportedAt = today
-    insert(SimpleFINAccountLink(remoteKey: "demo-unmapped", name: "Unmapped Savings", currencyCode: "USD"))
 
     let duplicate = insert(SimpleFINImportRecord(remoteKey: "demo|duplicate", localAccountID: everyday.id, date: match.date, amountMinor: -3_200, payee: "Whole Foods Market"))
     duplicate.status = .review

@@ -7,7 +7,8 @@ struct SimpleFINImportChecks {
   static func main() throws {
     let container = try ModelContainer(
       for: BudgetAccount.self, BudgetTransaction.self, SimpleFINAccountLink.self,
-      SimpleFINImportRecord.self,
+      SimpleFINImportRecord.self, BudgetEnvelope.self, BudgetGroup.self,
+      BudgetSchedule.self, BudgetPayee.self,
       configurations: ModelConfiguration(isStoredInMemoryOnly: true)
     )
     let context = ModelContext(container)
@@ -15,16 +16,22 @@ struct SimpleFINImportChecks {
     let account = BudgetAccount(name: "Checking", kind: .cash, currencyCode: "USD", openingBalanceMinor: 10_000)
     account.openedAt = date.addingTimeInterval(-30 * 86_400)
     context.insert(account)
+    let group = BudgetGroup(name: "Everyday", sortOrder: 0)
+    let food = BudgetEnvelope(groupID: group.id, name: "Food", symbol: "cart", sortOrder: 0)
+    context.insert(group)
+    context.insert(food)
+    context.insert(BudgetPayee(name: "Groceries", defaultEnvelopeID: food.id,
+                               exactMatchText: "Groceries"))
     let link = SimpleFINAccountLink(remoteKey: "connection|bank-account", name: "Bank Checking", currencyCode: "USD")
     link.localAccountID = account.id
     context.insert(link)
 
     let manual = BudgetTransaction(
-      accountID: account.id, date: date, amountMinor: -2_548,
+      accountID: account.id, envelopeID: food.id, date: date, amountMinor: -2_548,
       payee: "Corner Café", notes: "Lunch budget", kind: .expense
     )
     let uncertain = BudgetTransaction(
-      accountID: account.id, date: date, amountMinor: -500,
+      accountID: account.id, envelopeID: food.id, date: date, amountMinor: -500,
       payee: "Coffee", notes: "Keep this", kind: .expense
     )
     context.insert(manual)
@@ -47,18 +54,18 @@ struct SimpleFINImportChecks {
     let coordinator = SimpleFINSyncCoordinator.shared
     let first = try coordinator.importTransactions([remote], in: context)
     try context.save()
-    precondition(first.linked == 1
-      && first.needsReview == 2 && first.pending == 1)
+    precondition(first.linked == 1 && first.imported == 1
+      && first.needsReview == 1 && first.pending == 1)
     precondition(manual.notes == "Lunch budget" && manual.isCleared && !manual.needsApproval)
     let firstTransactions = try context.fetch(FetchDescriptor<BudgetTransaction>())
     let firstRecords = try context.fetch(FetchDescriptor<SimpleFINImportRecord>())
-    precondition(firstTransactions.count == 2, "unreviewed and pending bank items stay out of the ledger")
+    precondition(firstTransactions.count == 3, "categorized imports enter the ledger; review and pending stay out")
     precondition(firstRecords.count == 4)
     let pending = firstRecords.first { $0.bankState == .pending }!
     precondition(pending.isVisiblePending && pending.transactionID == nil)
     let inbox = ReviewInbox(transactions: firstTransactions, records: firstRecords,
                             occurrences: [], schedules: [])
-    precondition(inbox.bankItems.count == 2 && inbox.scheduledItems.isEmpty)
+    precondition(inbox.bankItems.count == 1 && inbox.scheduledItems.isEmpty)
 
     let repeated = try coordinator.importTransactions([remote], in: context)
     precondition(repeated.linked == 0
@@ -80,12 +87,11 @@ struct SimpleFINImportChecks {
 
     let groceries = try context.fetch(FetchDescriptor<SimpleFINImportRecord>())
       .first { $0.payee == "Groceries" }!
-    try coordinator.resolve(groceries, as: .importNew, in: context)
     precondition(groceries.status == .imported)
     let imported = try BudgetTransactionLookup.byID(groceries.transactionID!, in: context)!
     precondition(!imported.needsApproval && imported.isCleared)
 
-    try coordinator.enterPending(pending, envelopeID: nil, in: context)
+    try coordinator.enterPending(pending, envelopeID: food.id, in: context)
     let enteredID = pending.transactionID!
     let entered = try BudgetTransactionLookup.byID(enteredID, in: context)!
     precondition(entered.sourceRaw == "manual" && !entered.isCleared)
@@ -148,6 +154,57 @@ struct SimpleFINImportChecks {
     precondition(incoming.status == .linked && transfer.destinationIsCleared
       && transfer.sourceRaw == "manualLinked" && transfer.externalKey == "transfer-in",
       "unmatching one transfer leg must retain the other bank link")
+
+    link.importStartDate = date.addingTimeInterval(2 * 86_400)
+    let laterActivity = SimpleFINRemoteAccount(
+      id: "bank-account", name: "Bank Checking", connID: "connection", currency: "USD",
+      transactions: [
+        SimpleFINRemoteTransaction(
+          id: "before-start", posted: date.addingTimeInterval(86_400).timeIntervalSince1970,
+          amount: "7.50", description: "Earlier income", transactedAt: nil, pending: false
+        ),
+        SimpleFINRemoteTransaction(
+          id: "after-start", posted: date.addingTimeInterval(3 * 86_400).timeIntervalSince1970,
+          amount: "9.00", description: "Later income", transactedAt: nil, pending: false
+        )
+      ]
+    )
+    let newOnly = try coordinator.importTransactions([laterActivity], in: context)
+    precondition(newOnly.imported == 1)
+    let afterStartRecords = try context.fetch(FetchDescriptor<SimpleFINImportRecord>())
+    precondition(afterStartRecords.contains { $0.payee == "Later income" })
+    precondition(!afterStartRecords.contains { $0.payee == "Earlier income" })
+    link.importStartDate = date
+    let withHistory = try coordinator.importTransactions([laterActivity], in: context)
+    precondition(withHistory.imported == 1,
+                 "choosing available history imports older activity once")
+
+    link.importStartDate = date.addingTimeInterval(10 * 86_400)
+    let earlierPendingDate = date.addingTimeInterval(9 * 86_400)
+    let earlierPending = SimpleFINRemoteAccount(
+      id: "bank-account", name: "Bank Checking", connID: "connection", currency: "USD",
+      transactions: [SimpleFINRemoteTransaction(
+        id: "before-start-pending", posted: 0, amount: "-4.30",
+        description: "Cutoff Pending", transactedAt: earlierPendingDate.timeIntervalSince1970,
+        pending: true
+      )]
+    )
+    let cutoffPendingSummary = try coordinator.importTransactions([earlierPending], in: context)
+    precondition(cutoffPendingSummary.pending == 1,
+                 "current pending authorizations show even if dated before account setup")
+    let earlierPosted = SimpleFINRemoteAccount(
+      id: "bank-account", name: "Bank Checking", connID: "connection", currency: "USD",
+      transactions: [SimpleFINRemoteTransaction(
+        id: "before-start-pending", posted: earlierPendingDate.timeIntervalSince1970,
+        amount: "-4.30", description: "Cutoff Pending",
+        transactedAt: earlierPendingDate.timeIntervalSince1970, pending: false
+      )]
+    )
+    let cutoffPostedSummary = try coordinator.importTransactions([earlierPosted], in: context)
+    let cutoffRecord = try context.fetch(FetchDescriptor<SimpleFINImportRecord>())
+      .first { $0.payee == "Cutoff Pending" }!
+    precondition(cutoffPostedSummary.needsReview == 1 && cutoffRecord.bankState == .posted,
+                 "posting a pending item remains reviewable across the import cutoff")
     print("SimpleFIN import checks passed")
   }
 }

@@ -22,11 +22,6 @@ struct PayeeDetailScreen: View {
     }.sorted { $0.startDate < $1.startDate }
   }
 
-  private var transactionDays: [Date] {
-    Array(Set(feed.items.map { Calendar.current.startOfDay(for: $0.date) }))
-      .sorted(by: >)
-  }
-
   private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
 
   var body: some View {
@@ -78,17 +73,17 @@ struct PayeeDetailScreen: View {
             description: Text("Transactions for this payee will appear here.")
           )
         } else {
-          ForEach(transactionDays, id: \.self) { day in
-            Section(day.formatted(date: .complete, time: .omitted)) {
-              ForEach(feed.items.filter {
-                Calendar.current.isDate($0.date, inSameDayAs: day)
-              }) { transaction in
+          ForEach(TransactionDateGroup.make(feed.items)) { group in
+            Section(group.title) {
+              ForEach(group.items) { transaction in
                 Button {
                   let id = transaction.id
                   let predicate = #Predicate<BudgetTransaction> { $0.id == id }
                   selectedTransaction = try? modelContext.fetch(FetchDescriptor(predicate: predicate)).first
                 } label: {
-                  TransactionSummaryRow(transaction: transaction, currencyCode: currencyCode)
+                  TransactionSummaryRow(
+                    transaction: transaction, currencyCode: currencyCode, showsDate: false
+                  )
                 }
                 .buttonStyle(.plain)
                 .accessibilityHint("Open transaction")

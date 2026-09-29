@@ -18,7 +18,8 @@ struct DemoDataChecks {
     expect(Set(accounts.map(\.kind)) == Set(BudgetAccountKind.allCases), "every account kind is present")
     expect(transactions.contains { $0.kind == .transfer }, "transfers are present")
     expect(transactions.contains { $0.kind == .inflow }, "income is present")
-    expect(transactions.contains { $0.envelopeID == nil && $0.kind == .expense }, "uncategorized expense is present")
+    expect(!transactions.contains { $0.envelopeID == nil && $0.kind == .expense },
+           "sample ledger contains no uncategorized expenses")
     expect(!transactions.contains { $0.sourceRaw == "simplefin" && $0.needsApproval },
            "SimpleFIN posted review items are held outside the ledger")
     expect(Set(schedules.map(\.frequency)) == Set(ScheduleFrequency.allCases), "every recurrence is present")

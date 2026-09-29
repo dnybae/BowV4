@@ -238,6 +238,7 @@ struct AccountRoute: Hashable {
 
 private struct AccountDetailScreen: View {
   @Environment(\.modelContext) private var modelContext
+  @Query private var simpleFINLinks: [SimpleFINAccountLink]
   var account: BudgetAccount
   var balanceMinor: Int64
   var currencyCode: String
@@ -258,6 +259,9 @@ private struct AccountDetailScreen: View {
         }
         .padding(.vertical, 8)
         LabeledContent("Type", value: account.accountType.title)
+        if let link = simpleFINLinks.first(where: { $0.localAccountID == account.id }) {
+          LabeledContent("Bank Sync", value: link.name)
+        }
         if !account.note.isEmpty {
           LabeledContent("Note", value: account.note)
         }
@@ -270,17 +274,21 @@ private struct AccountDetailScreen: View {
           LabeledContent("Statement Balance", value: BudgetMoney.formatted(balance, currencyCode: currencyCode))
         }
       }
-      Section("Ledger") {
-        if feed.items.isEmpty && !feed.isLoading {
+      if feed.items.isEmpty && !feed.isLoading {
+        Section("Ledger") {
           ContentUnavailableView("No transactions yet", systemImage: "list.bullet.rectangle")
-        } else {
-          ForEach(feed.items) { transaction in
+        }
+      } else {
+        ForEach(TransactionDateGroup.make(feed.items)) { group in
+          Section(group.title) {
+            ForEach(group.items) { transaction in
             if transaction.isBalanceAdjustment {
               TransactionSummaryRow(
                 transaction: transaction,
                 currencyCode: currencyCode,
                 displayAmountMinor: transaction.transferAccountID == account.id
-                  ? -transaction.amountMinor : transaction.amountMinor
+                  ? -transaction.amountMinor : transaction.amountMinor,
+                showsDate: false
               )
             } else {
               Button {
@@ -290,13 +298,17 @@ private struct AccountDetailScreen: View {
                   transaction: transaction,
                   currencyCode: currencyCode,
                   displayAmountMinor: transaction.transferAccountID == account.id
-                    ? -transaction.amountMinor : transaction.amountMinor
+                    ? -transaction.amountMinor : transaction.amountMinor,
+                  showsDate: false
                 )
               }
               .buttonStyle(.plain)
             }
           }
-          if feed.hasMore {
+          }
+        }
+        if feed.hasMore {
+          Section {
             ProgressView("Loading more…")
               .frame(maxWidth: .infinity)
               .onAppear { Task { await feed.loadNext() } }

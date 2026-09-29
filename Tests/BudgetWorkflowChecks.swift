@@ -87,6 +87,15 @@ struct BudgetWorkflowChecks {
     )
     context.insert(groceries)
     try context.save()
+    do {
+      try BudgetCommands.addTransaction(
+        kind: .expense, account: checking, destination: nil, envelopeID: nil,
+        amountMinor: 100, date: now, payee: "Missing envelope", notes: "", in: context
+      )
+      preconditionFailure("manual expenses must require an envelope")
+    } catch BudgetCommandError.expenseNeedsEnvelope {
+      // Expected.
+    }
     let afterGroceries = try summary()
     let afterGroceriesSnapshot = try snapshot()
     precondition(afterGroceries.readyToAssignMinor == 4_000,

@@ -149,6 +149,11 @@ struct TransactionEditorScreen: View {
               title: "Category", selection: $envelopeID,
               envelopes: envelopes, noneTitle: categoryNoneTitle
             )
+            if kind == .expense && envelopeID == nil {
+              Text("Choose an envelope before saving this expense.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
           }
           if kind != .transfer && (selectedAccount?.kind == .asset || selectedAccount?.kind == .liability) {
             Text("Categories on tracking accounts are for reference and don't change your budget.")
@@ -200,7 +205,8 @@ struct TransactionEditorScreen: View {
         }
         ToolbarItem(placement: .confirmationAction) {
           Button("Save") { save() }
-            .disabled(accountID == nil || amount.isEmpty)
+            .disabled(accountID == nil || amount.isEmpty
+              || (kind == .expense && envelopeID == nil))
         }
       }
       .confirmationDialog(

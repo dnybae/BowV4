@@ -9,6 +9,7 @@ final class SimpleFINImportRecord {
   var localAccountID: UUID = UUID()
   var transactionID: UUID? = nil
   var statusRaw: String = "review"
+  var originRaw: String = "simplefin"
   var bankStateRaw: String = "posted"
   var isVisiblePending: Bool = false
   var lastSeenAt: Date? = nil
@@ -17,6 +18,7 @@ final class SimpleFINImportRecord {
   var date: Date = Date()
   var amountMinor: Int64 = 0
   var payee: String = ""
+  var memo: String = ""
 
   init(remoteKey: String, localAccountID: UUID, date: Date, amountMinor: Int64, payee: String) {
     self.remoteKey = remoteKey
@@ -35,6 +37,16 @@ final class SimpleFINImportRecord {
     get { ImportedBankState(rawValue: bankStateRaw) ?? .posted }
     set { bankStateRaw = newValue.rawValue }
   }
+
+  var origin: BankImportOrigin {
+    get { BankImportOrigin(rawValue: originRaw) ?? .simplefin }
+    set { originRaw = newValue.rawValue }
+  }
+}
+
+enum BankImportOrigin: String {
+  case simplefin
+  case bankFile
 }
 
 enum ImportedBankState: String {
@@ -56,6 +68,8 @@ struct ManualTransactionSnapshot: Codable {
   var destinationIsCleared: Bool
   var sourceRaw: String
   var externalKey: String?
+  var scheduleID: UUID?
+  var scheduledFor: Date?
 
   init(_ transaction: BudgetTransaction) {
     amountMinor = transaction.amountMinor
@@ -64,5 +78,7 @@ struct ManualTransactionSnapshot: Codable {
     destinationIsCleared = transaction.destinationIsCleared
     sourceRaw = transaction.sourceRaw
     externalKey = transaction.externalKey
+    scheduleID = transaction.scheduleID
+    scheduledFor = transaction.scheduledFor
   }
 }

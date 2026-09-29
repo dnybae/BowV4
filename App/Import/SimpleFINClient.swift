@@ -147,6 +147,7 @@ struct SimpleFINClient {
     components.path = (components.path as NSString).appendingPathComponent("accounts")
     components.queryItems = [
       URLQueryItem(name: "version", value: "2"),
+      URLQueryItem(name: "pending", value: "1"),
       URLQueryItem(name: "start-date", value: String(Int(startDate.timeIntervalSince1970))),
       URLQueryItem(name: "end-date", value: String(Int(Date().timeIntervalSince1970) + 1))
     ]

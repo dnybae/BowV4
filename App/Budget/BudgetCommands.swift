@@ -347,6 +347,9 @@ struct BudgetCommands {
     amountMinor: Int64
   ) throws {
     guard amountMinor > 0 else { throw BudgetCommandError.invalidAmount }
+    if kind == .expense && envelopeID == nil {
+      throw BudgetCommandError.expenseNeedsEnvelope
+    }
     if kind == .transfer {
       guard let destination, destination.id != account.id,
             destination.currencyCode == account.currencyCode else {
@@ -488,6 +491,7 @@ enum BudgetCommandError: LocalizedError {
   case cardPaymentEnvelopeProtected
   case futureTransactionNeedsSchedule
   case invalidEnvelope
+  case expenseNeedsEnvelope
   case scheduledTransferMustLinkTransfer
   case currencyMismatch
   case liabilityRequiresNegativeBalance
@@ -510,6 +514,7 @@ enum BudgetCommandError: LocalizedError {
     case .cardPaymentEnvelopeProtected: "Credit card payment envelopes are managed with their accounts."
     case .futureTransactionNeedsSchedule: "Schedule future transactions and record them when they occur."
     case .invalidEnvelope: "Choose a spending envelope. Card payment envelopes are funded automatically or with Move Money."
+    case .expenseNeedsEnvelope: "Choose an envelope for this expense."
     case .scheduledTransferMustLinkTransfer: "Record the scheduled transfer, then link the bank entry to that transfer."
     case .currencyMismatch: "This account must use the budget’s currency."
     case .liabilityRequiresNegativeBalance: "Enter money owed on a loan as a negative balance."

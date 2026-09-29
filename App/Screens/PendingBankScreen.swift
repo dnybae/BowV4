@@ -100,12 +100,12 @@ private struct PendingBankDetailScreen: View {
         Section {
           if record.amountMinor < 0 {
             CategorySelectionField(
-              title: "Category", selection: $envelopeID,
-              envelopes: envelopes, noneTitle: "Needs Categorization"
+              title: "Envelope", selection: $envelopeID,
+              envelopes: envelopes, noneTitle: "Choose an Envelope"
             )
           }
         } footer: {
-          Text("Enter Now creates a manual transaction and affects your budget immediately.")
+          Text("Record Now creates a manual transaction and affects your budget immediately. Choose an envelope for an expense.")
         }
       }
     }
@@ -122,11 +122,12 @@ private struct PendingBankDetailScreen: View {
             message = error.localizedDescription
           }
         } label: {
-          Text("Enter Now")
+          Text("Record Now")
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
+        .disabled(record.amountMinor < 0 && envelopeID == nil)
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
         .background(.regularMaterial)

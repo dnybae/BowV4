@@ -64,6 +64,8 @@ struct LocalTransactionCandidate: Sendable {
   var payee: String
   var externalKey: String?
   var isManual: Bool
+  var envelopeID: UUID? = nil
+  var scheduleID: UUID? = nil
 }
 
 enum BankMatchDecision: Equatable, Sendable {

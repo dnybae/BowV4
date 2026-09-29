@@ -111,18 +111,26 @@ struct CardPaymentDetailScreen: View {
         }
       }
 
-      Section("Card Activity") {
-        if feed.items.isEmpty && !feed.isLoading {
+      if feed.items.isEmpty && !feed.isLoading {
+        Section("Card Activity") {
           Text("No transactions yet").foregroundStyle(.secondary)
-        } else {
-          ForEach(feed.items) { transaction in
-            Button { onSelectTransaction(transaction.id) } label: {
-              TransactionSummaryRow(transaction: transaction, currencyCode: currencyCode)
+        }
+      } else {
+        ForEach(TransactionDateGroup.make(feed.items)) { group in
+          Section(group.title) {
+            ForEach(group.items) { transaction in
+              Button { onSelectTransaction(transaction.id) } label: {
+                TransactionSummaryRow(
+                  transaction: transaction, currencyCode: currencyCode, showsDate: false
+                )
+              }
+              .buttonStyle(.plain)
+              .disabled(isPastMonth)
             }
-            .buttonStyle(.plain)
-            .disabled(isPastMonth)
           }
-          if feed.hasMore {
+        }
+        if feed.hasMore {
+          Section {
             ProgressView("Loading more…")
               .frame(maxWidth: .infinity)
               .onAppear { Task { await feed.loadNext() } }

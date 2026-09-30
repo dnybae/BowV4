@@ -40,6 +40,8 @@ struct BudgetSummaryChecks {
     expect(BudgetSummary.assignedShare(assignedMinor: 500, readyToAssignMinor: 0) == 1, "fully assigned is 100%")
     expect(BudgetSummary.assignedShare(assignedMinor: 500, readyToAssignMinor: -800) == 1,
            "over-assigned cash is capped at 100%")
+    expect(snapshot.carriedIn(for: groceries.id) == 69_320, "carried in is Available less this month's assigned and activity")
+    expect(snapshot.carriedIn(for: gifts.id) == -8_800, "carried in reflects shortfall not explained by this month")
     print("Budget summary checks passed")
   }
 

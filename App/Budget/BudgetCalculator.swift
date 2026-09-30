@@ -375,6 +375,12 @@ struct BudgetSnapshot: Sendable {
       - cashShortfall[envelopeID, default: 0]
       - creditShortfall[envelopeID, default: 0]
   }
+
+  /// What the envelope started the month with: the part of Available that this month's
+  /// assignments and activity don't account for.
+  func carriedIn(for envelopeID: UUID) -> Int64 {
+    available(for: envelopeID) - assigned[envelopeID, default: 0] - activity[envelopeID, default: 0]
+  }
 }
 
 struct CardEnvelopeKey: Hashable {

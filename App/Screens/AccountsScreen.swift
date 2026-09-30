@@ -8,6 +8,7 @@ struct AccountsScreen: View {
   var onAddAccount: () -> Void
   var onViewInsights: () -> Void
   var onSelectTransaction: (UUID) -> Void
+  @Query private var simpleFINLinks: [SimpleFINAccountLink]
   @AppStorage("bow.collapsedAccountGroups") private var collapsedAccountGroups = ""
   @State private var editingAccount: BudgetAccount?
 
@@ -67,7 +68,10 @@ struct AccountsScreen: View {
         .padding(.bottom, 32)
       }
     }
-    .background(Bow.mist)
+    .background {
+      Bow.mist.overlay(alignment: .top) { SkyBackground(mood: .mint) }
+        .ignoresSafeArea()
+    }
     .navigationTitle("Accounts")
     .navigationDestination(for: AccountRoute.self) { route in
       if let account = accounts.first(where: { $0.id == route.id }) {
@@ -145,47 +149,44 @@ struct AccountsScreen: View {
               accountRow(account)
               if account.id != matching.last?.id {
                 Divider()
+                  .overlay(Bow.line)
                   .padding(.leading, 64)
               }
             }
           }
-          .background(Bow.card,
-                      in: RoundedRectangle(cornerRadius: 24))
+          .bowCard()
         }
       }
     }
   }
 
   private var netWorthCard: some View {
-    Button(action: onViewInsights) {
-      HStack(spacing: 12) {
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Net Worth")
-            .font(.headline)
-          Text("View Insights")
-            .font(.subheadline)
-            .foregroundStyle(Bow.inkSoft)
-        }
-        Spacer(minLength: 8)
+    VStack(spacing: Bow.Space.s3) {
+      VStack(spacing: Bow.Space.s1) {
+        Text("Net worth")
+          .font(.bowHeadline)
+          .foregroundStyle(Bow.inkSoft)
         Text(netWorthText)
-          .font(.headline)
+          .font(.bowHero)
           .monospacedDigit()
+          .foregroundStyle(Bow.ink)
           .lineLimit(1)
-          .minimumScaleFactor(0.75)
-        Image(systemName: "chevron.right")
-          .font(.caption.weight(.semibold))
-          .foregroundStyle(Bow.inkFaint)
-          .accessibilityHidden(true)
+          .minimumScaleFactor(0.5)
       }
-      .foregroundStyle(Bow.ink)
-      .padding(18)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .background(Bow.card,
-                  in: RoundedRectangle(cornerRadius: 24))
-      .contentShape(RoundedRectangle(cornerRadius: 24))
+      .accessibilityElement(children: .combine)
+
+      Button(action: onViewInsights) {
+        HStack(spacing: Bow.Space.s1) {
+          Text("View insights")
+          Image(systemName: "chevron.right")
+            .font(.footnote.weight(.semibold))
+            .accessibilityHidden(true)
+        }
+      }
+      .bowSecondaryButton(size: .regular)
     }
-    .buttonStyle(.plain)
-    .accessibilityLabel("Net Worth, \(netWorthText). View Insights")
+    .frame(maxWidth: .infinity)
+    .padding(.vertical, Bow.Space.s6)
   }
 
   private func toggleGroup(_ kind: BudgetAccountKind) {
@@ -196,25 +197,40 @@ struct AccountsScreen: View {
     collapsedAccountGroups = updated.map(\.rawValue).sorted().joined(separator: ",")
   }
 
+  private func syncDescription(for account: BudgetAccount) -> String {
+    guard let link = simpleFINLinks.first(where: { $0.localAccountID == account.id }) else {
+      return "Updated by you"
+    }
+    guard let reportedAt = link.reportedAt else { return "Linked to bank sync" }
+    return "Synced \(reportedAt.formatted(.relative(presentation: .named)))"
+  }
+
   private func accountRow(_ account: BudgetAccount) -> some View {
     let balance = balances[account.id, default: 0]
+    let balanceText = BudgetMoney.formatted(balance, currencyCode: currencyCode)
+    let syncText = syncDescription(for: account)
     return NavigationLink(value: AccountRoute(id: account.id)) {
-      HStack(spacing: 12) {
+      HStack(spacing: Bow.Space.s3) {
         Image(systemName: account.kind.systemImage)
-          .font(.subheadline.weight(.semibold))
-          .foregroundStyle(Color(uiColor: .systemBackground))
-          .frame(width: 38, height: 38)
-          .background(Color.accentColor, in: Circle())
+          .font(.system(size: 15, weight: .semibold))
+          .foregroundStyle(Bow.bowInk)
+          .frame(width: 36, height: 36)
+          .background(Bow.bowTint, in: Circle())
           .accessibilityHidden(true)
-        Text(account.name)
-          .foregroundStyle(Bow.ink)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .multilineTextAlignment(.leading)
-        Text(BudgetMoney.formatted(balance, currencyCode: currencyCode))
-          .font(.subheadline.weight(.semibold))
-          .foregroundStyle(account.kind == .cash && balance >= 0
-            ? Color.accentColor : Bow.ink)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(account.name)
+            .font(.bowBody)
+            .foregroundStyle(Bow.ink)
+          Text(syncText)
+            .font(.bowFootnote)
+            .foregroundStyle(Bow.inkSoft)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(.leading)
+        Text(balanceText)
+          .font(.bowAmount)
           .monospacedDigit()
+          .foregroundStyle(Bow.ink)
           .lineLimit(1)
           .minimumScaleFactor(0.85)
         Image(systemName: "chevron.right")
@@ -222,12 +238,12 @@ struct AccountsScreen: View {
           .foregroundStyle(Bow.inkFaint)
           .accessibilityHidden(true)
       }
-      .padding(.horizontal, 16)
-      .padding(.vertical, 14)
+      .padding(.horizontal, Bow.Space.s4)
+      .padding(.vertical, Bow.Space.s3)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .accessibilityLabel("\(account.name), \(BudgetMoney.formatted(balance, currencyCode: currencyCode))")
+    .accessibilityLabel("\(account.name), \(balanceText), \(syncText)")
   }
 }
 
@@ -246,38 +262,86 @@ private struct AccountDetailScreen: View {
   @State private var showingReconciliation = false
   @State private var feed = TransactionFeedModel()
 
+  private var link: SimpleFINAccountLink? {
+    simpleFINLinks.first { $0.localAccountID == account.id }
+  }
+
+  private var detailCaption: String {
+    var parts: [String] = []
+    if let link {
+      if let reportedAt = link.reportedAt {
+        parts.append("Synced with \(link.name) \(reportedAt.formatted(.relative(presentation: .named))).")
+      } else {
+        parts.append("Linked to \(link.name).")
+      }
+    }
+    let onBudget = account.kind == .cash || account.kind == .credit
+    parts.append("\(account.accountType.title), \(onBudget ? "on budget" : "off budget").")
+    if !account.note.isEmpty { parts.append(account.note) }
+    return parts.joined(separator: " ")
+  }
+
+  private func stat(_ title: String, value: String) -> some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(title)
+        .font(.bowFootnote)
+        .foregroundStyle(Bow.inkSoft)
+      Text(value)
+        .font(.bowAmount)
+        .monospacedDigit()
+        .foregroundStyle(Bow.ink)
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+    }
+    .accessibilityElement(children: .combine)
+  }
+
   var body: some View {
     List {
       Section {
-        VStack(alignment: .leading, spacing: 6) {
-          Text("Current Balance")
-            .font(.subheadline)
-            .foregroundStyle(Bow.inkSoft)
-          Text(BudgetMoney.formatted(balanceMinor, currencyCode: currencyCode))
-            .font(.title.weight(.semibold))
-            .fontDesign(.rounded).monospacedDigit()
-        }
-        .padding(.vertical, 8)
-        LabeledContent("Type", value: account.accountType.title)
-        if let link = simpleFINLinks.first(where: { $0.localAccountID == account.id }) {
-          LabeledContent("Bank Sync", value: link.name)
-        }
-        if !account.note.isEmpty {
-          LabeledContent("Note", value: account.note)
-        }
-        Button("Reconcile Account", systemImage: "checkmark.circle") {
-          showingReconciliation = true
-        }
-        if let date = account.lastReconciledAt,
-           let balance = account.lastReconciledBalanceMinor {
-          LabeledContent("Last Reconciled", value: date.formatted(date: .abbreviated, time: .omitted))
-          LabeledContent("Statement Balance") {
-            Text(BudgetMoney.formatted(balance, currencyCode: currencyCode))
-              .fontDesign(.rounded).monospacedDigit()
+        VStack(alignment: .leading, spacing: Bow.Space.s4) {
+          VStack(alignment: .leading, spacing: Bow.Space.s1) {
+            Text("Balance")
+              .font(.bowSubhead.weight(.semibold))
+              .foregroundStyle(Bow.inkSoft)
+            Text(BudgetMoney.formatted(balanceMinor, currencyCode: currencyCode))
+              .font(.bowHero)
+              .monospacedDigit()
+              .foregroundStyle(Bow.ink)
+              .lineLimit(1)
+              .minimumScaleFactor(0.5)
           }
+          .accessibilityElement(children: .combine)
+
+          if link?.reportedBalance != nil || account.lastReconciledBalanceMinor != nil {
+            HStack(alignment: .top, spacing: Bow.Space.s4) {
+              if let reported = link?.reportedBalance {
+                stat("Bank says", value: BudgetMoney.formatted(bankAmount: reported, currencyCode: currencyCode))
+              }
+              if let date = account.lastReconciledAt, let balance = account.lastReconciledBalanceMinor {
+                stat("Reconciled \(date.formatted(.dateTime.month(.abbreviated).day()))",
+                     value: BudgetMoney.formatted(balance, currencyCode: currencyCode))
+              }
+            }
+          }
+
+          Button("Reconcile", systemImage: "checkmark") {
+            showingReconciliation = true
+          }
+          .bowSecondaryButton()
+          .frame(maxWidth: .infinity)
         }
+        .padding(Bow.Space.s5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .bowCard(radius: Bow.Radius.xl)
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+      } footer: {
+        Text(detailCaption)
+          .font(.bowFootnote)
+          .foregroundStyle(Bow.inkSoft)
       }
-      .listRowBackground(Bow.card)
+
       if feed.items.isEmpty && !feed.isLoading {
         Section("Ledger") {
           ContentUnavailableView("No transactions yet", systemImage: "list.bullet.rectangle")

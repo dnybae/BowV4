@@ -21,7 +21,7 @@ struct TransactionDateGroup: Identifiable {
         calendar.date(byAdding: .day, value: -1, to: now) ?? now) {
         title = "Yesterday"
       } else {
-        title = day.formatted(date: .complete, time: .omitted)
+        title = day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
       }
       return TransactionDateGroup(day: day, items: byDay[day] ?? [], title: title)
     }

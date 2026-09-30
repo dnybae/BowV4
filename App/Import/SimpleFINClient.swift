@@ -78,10 +78,33 @@ struct SimpleFINRemoteTransaction: Decodable, Sendable {
   var description: String
   var transactedAt: TimeInterval?
   var pending: Bool?
+  var extra: [String: SimpleFINJSONValue]? = nil
 
   enum CodingKeys: String, CodingKey {
-    case id, posted, amount, description, pending
+    case id, posted, amount, description, pending, extra
     case transactedAt = "transacted_at"
+  }
+
+  /// The protocol allows `posted` to be 0 for pending transactions even when `pending` is missing.
+  var isPending: Bool { pending == true || posted <= 0 }
+
+  /// Memo-style text a bank passes through `extra`, used as the transaction's notes.
+  var memo: String {
+    let keys = ["memo", "note", "notes", "Memo", "Note", "Notes"]
+    for key in keys {
+      if let text = extra?[key]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+         !text.isEmpty, text.caseInsensitiveCompare(description) != .orderedSame {
+        return String(text.prefix(500))
+      }
+    }
+    return ""
+  }
+
+  var extraJSON: Data? {
+    guard let extra, !extra.isEmpty else { return nil }
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = .sortedKeys
+    return try? encoder.encode(extra)
   }
 
   var date: Date {
@@ -100,6 +123,80 @@ struct SimpleFINRemoteTransaction: Decodable, Sendable {
       return nil
     }
     return Int64(NSDecimalNumber(decimal: cents).stringValue)
+  }
+}
+
+// Banks don't always follow the spec exactly, so decoding is lenient: one malformed
+// account or transaction is skipped instead of failing the whole sync.
+
+extension SimpleFINAccountSet {
+  enum CodingKeys: String, CodingKey { case accounts, errlist, errors }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    accounts = try container.decode([SimpleFINLossy<SimpleFINRemoteAccount>].self, forKey: .accounts)
+      .compactMap(\.value)
+    errlist = (try? container.decode([SimpleFINLossy<SimpleFINRemoteError>].self, forKey: .errlist))?
+      .compactMap(\.value)
+    errors = (try? container.decode([SimpleFINLossy<String>].self, forKey: .errors))?
+      .compactMap(\.value)
+  }
+}
+
+extension SimpleFINRemoteAccount {
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decodeLenientString(forKey: .id)
+    name = (try? container.decodeLenientString(forKey: .name)) ?? ""
+    connID = try? container.decodeLenientString(forKey: .connID)
+    currency = try container.decodeLenientString(forKey: .currency)
+    balance = try? container.decodeLenientString(forKey: .balance)
+    balanceDate = container.decodeLenientTimestamp(forKey: .balanceDate)
+    transactions = (try? container.decode([SimpleFINLossy<SimpleFINRemoteTransaction>].self, forKey: .transactions))?
+      .compactMap(\.value)
+  }
+}
+
+extension SimpleFINRemoteTransaction {
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decodeLenientString(forKey: .id)
+    guard !id.isEmpty else {
+      throw DecodingError.dataCorruptedError(forKey: .id, in: container, debugDescription: "Empty id")
+    }
+    amount = try container.decodeLenientString(forKey: .amount)
+    posted = container.decodeLenientTimestamp(forKey: .posted) ?? 0
+    description = (try? container.decodeLenientString(forKey: .description)) ?? ""
+    transactedAt = container.decodeLenientTimestamp(forKey: .transactedAt)
+    pending = try? container.decode(Bool.self, forKey: .pending)
+    if case .object(let object)? = try? container.decode(SimpleFINJSONValue.self, forKey: .extra) {
+      extra = object
+    }
+  }
+}
+
+private struct SimpleFINLossy<Value: Decodable>: Decodable {
+  var value: Value?
+
+  init(from decoder: Decoder) throws {
+    value = try? Value(from: decoder)
+  }
+}
+
+private extension KeyedDecodingContainer {
+  func decodeLenientString(forKey key: Key) throws -> String {
+    if let text = try? decode(String.self, forKey: key) { return text }
+    if let number = try? decode(Int64.self, forKey: key) { return String(number) }
+    if let number = try? decode(Double.self, forKey: key), number.isFinite { return String(number) }
+    throw DecodingError.keyNotFound(key, .init(codingPath: codingPath, debugDescription: "Missing text"))
+  }
+
+  func decodeLenientTimestamp(forKey key: Key) -> TimeInterval? {
+    if let number = try? decode(TimeInterval.self, forKey: key) { return number }
+    if let text = try? decode(String.self, forKey: key) {
+      return TimeInterval(text.trimmingCharacters(in: .whitespaces))
+    }
+    return nil
   }
 }
 

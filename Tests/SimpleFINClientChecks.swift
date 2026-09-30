@@ -26,6 +26,30 @@ struct SimpleFINClientChecks {
       description: "Bad precision", transactedAt: nil, pending: false
     )
     precondition(invalidAmount.amountMinor == nil)
+
+    let messy = Data("""
+      {
+        "accounts": [{
+          "id":"card","name":"Card","currency":"USD",
+          "transactions":[
+            {"id":"no-flag","posted":0,"amount":"-4.00","description":"Auth"},
+            {"id":"null-description","posted":"1800000000","amount":-12.34,"description":null},
+            {"posted":1800000000,"amount":"-1.00","description":"No id"},
+            {"id":"memo","posted":1800000000,"amount":"-2.00","description":"Shop",
+             "extra":{"memo":"Birthday gift","category":"5411"}}
+          ]
+        }]
+      }
+      """.utf8)
+    let messyTransactions = try JSONDecoder().decode(SimpleFINAccountSet.self, from: messy)
+      .accounts.first?.transactions ?? []
+    precondition(messyTransactions.map(\.id) == ["no-flag", "null-description", "memo"])
+    precondition(messyTransactions[0].isPending)
+    precondition(!messyTransactions[1].isPending && messyTransactions[1].amountMinor == -1_234)
+    precondition(messyTransactions[1].description.isEmpty)
+    precondition(messyTransactions[2].memo == "Birthday gift")
+    precondition(messyTransactions[2].extraJSON.flatMap { String(data: $0, encoding: .utf8) }
+      == #"{"category":"5411","memo":"Birthday gift"}"#)
     print("SimpleFIN client checks passed")
   }
 }

@@ -256,7 +256,7 @@ final class SimpleFINSyncCoordinator {
             .first(where: { $0.id == record.localAccountID }) else { return }
     let transaction = BudgetTransaction(
       accountID: account.id, envelopeID: envelopeID, date: record.date,
-      amountMinor: record.amountMinor, payee: record.payee, notes: "",
+      amountMinor: record.amountMinor, payee: record.payee, notes: record.memo,
       kind: record.amountMinor < 0 ? .expense : .inflow
     )
     context.insert(transaction)
@@ -389,7 +389,7 @@ final class SimpleFINSyncCoordinator {
     let links = try context.fetch(FetchDescriptor<SimpleFINAccountLink>())
     let localAccounts = try context.fetch(FetchDescriptor<BudgetAccount>())
     let dates = accounts.flatMap { account in
-      (account.transactions ?? []).filter { $0.pending == true || $0.posted > 0 }.map(\.date)
+      (account.transactions ?? []).filter { $0.amountMinor != nil }.map(\.date)
     }
     let start = (dates.min() ?? Date()).addingTimeInterval(-11 * 86_400)
     let end = (dates.max() ?? Date()).addingTimeInterval(11 * 86_400)
@@ -421,21 +421,16 @@ final class SimpleFINSyncCoordinator {
     let now = Date()
     var checkedLocalIDs = Set<UUID>()
 
-    for remote in accounts where links.contains(where: { $0.remoteKey == remote.remoteKey && $0.localAccountID != nil }) {
-      for item in (remote.transactions ?? []) where item.pending == true || item.posted > 0 {
-        guard item.amountMinor != nil else { throw SimpleFINError.invalidAmount }
-      }
-    }
-
     for remote in accounts {
       guard let link = links.first(where: { $0.remoteKey == remote.remoteKey }),
             let localID = link.localAccountID,
             let account = localAccounts.first(where: { $0.id == localID }),
             remote.currency == account.currencyCode else { continue }
       if remote.transactions != nil { checkedLocalIDs.insert(localID) }
+      // Transactions with an unreadable amount are skipped so the rest of the account still syncs.
       let items = (remote.transactions ?? []).filter { item in
-          if item.pending == true { return true }
-          guard item.posted > 0 else { return false }
+          guard item.amountMinor != nil else { return false }
+          if item.isPending { return true }
           if link.importStartDate.map({ item.date >= $0 }) ?? true { return true }
           let key = Self.transactionKey(account: remote.remoteKey, transaction: item.id)
           if byKey[key]?.bankState == .pending { return true }
@@ -446,17 +441,18 @@ final class SimpleFINSyncCoordinator {
               && abs($0.date.timeIntervalSince(item.date)) <= 3 * 86_400
           }
         }
-        .sorted { ($0.pending == true ? 0 : 1) < ($1.pending == true ? 0 : 1) }
+        .sorted { ($0.isPending ? 0 : 1) < ($1.isPending ? 0 : 1) }
       for item in items {
-        guard let amount = item.amountMinor else { throw SimpleFINError.invalidAmount }
+        guard let amount = item.amountMinor else { continue }
         let key = Self.transactionKey(account: remote.remoteKey, transaction: item.id)
         let payee = item.description.trimmingCharacters(in: .whitespacesAndNewlines)
-        if item.pending == true {
+        if item.isPending {
           if let existing = byKey[key] {
             if existing.bankState == .pending {
               existing.date = item.date
               existing.amountMinor = amount
               existing.payee = payee
+              existing.apply(extraFrom: item)
               existing.lastSeenAt = now
               existing.isVisiblePending = true
             }
@@ -484,12 +480,12 @@ final class SimpleFINSyncCoordinator {
             summary.pending += 1
           }
           record.bankState = .pending
+          record.apply(extraFrom: item)
           record.isVisiblePending = true
           record.lastSeenAt = now
           byKey[key] = record
           continue
         }
-        guard item.posted > 0 else { continue }
         if byKey[key]?.bankState == .posted || transactionKeys.contains(key) { continue }
         let samePending = records.filter {
           $0.bankState == .pending && $0.localAccountID == localID
@@ -518,6 +514,7 @@ final class SimpleFINSyncCoordinator {
         record.date = item.date
         record.amountMinor = amount
         record.payee = payee
+        record.apply(extraFrom: item)
         byKey[key] = record
         let incoming = BankTransactionCandidate(
           externalKey: key, accountID: localID, amountMinor: amount,
@@ -607,6 +604,7 @@ final class SimpleFINSyncCoordinator {
             envelopeID: envelopeID, origin: .simplefin
           )
           transaction.externalKey = key
+          transaction.notes = record.memo
           if let scheduledExpense, envelopeID != nil {
             transaction.scheduleID = scheduledExpense.id
             transaction.scheduledFor = transactionDate
@@ -673,6 +671,14 @@ final class SimpleFINSyncCoordinator {
       .joined(separator: " ")
       .split(whereSeparator: \.isWhitespace)
       .joined(separator: " ")
+  }
+}
+
+private extension SimpleFINImportRecord {
+  nonisolated func apply(extraFrom item: SimpleFINRemoteTransaction) {
+    if let json = item.extraJSON { extraJSON = json }
+    let memo = item.memo
+    if !memo.isEmpty { self.memo = memo }
   }
 }
 

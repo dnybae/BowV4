@@ -19,6 +19,8 @@ final class SimpleFINImportRecord {
   var amountMinor: Int64 = 0
   var payee: String = ""
   var memo: String = ""
+  /// The raw `extra` object SimpleFIN sent, kept so future features (like location) can use it.
+  var extraJSON: Data? = nil
 
   init(remoteKey: String, localAccountID: UUID, date: Date, amountMinor: Int64, payee: String) {
     self.remoteKey = remoteKey

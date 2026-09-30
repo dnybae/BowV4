@@ -65,7 +65,7 @@ enum TransactionStatusScope: String, Hashable, Sendable, CaseIterable {
   var title: String {
     switch self {
     case .all: "All"
-    case .needsAttention: "Needs Attention"
+    case .needsAttention: "Needs attention"
     case .matched: "Matched"
     }
   }

@@ -53,36 +53,38 @@ struct TransactionFilterScreen: View {
   var body: some View {
     NavigationStack {
       Form {
-        Section("Account") {
-          AccountSelectionField(
-            title: "Account", selection: $draft.accountID,
-            accounts: accounts, noneTitle: "All Accounts"
-          )
-        }
-        .listRowBackground(Bow.card)
-
-        Section("Category") {
-          CategoryScopeSelectionField(selection: $draft.envelopeScope, envelopes: envelopes)
-        }
-        .listRowBackground(Bow.card)
-
-        Section("Status") {
+        Section("Show") {
           Picker("Show", selection: $draft.status) {
             ForEach(TransactionStatusScope.allCases, id: \.self) { status in
               Text(status.title).tag(status)
             }
           }
-          .pickerStyle(.menu)
+          .pickerStyle(.segmented)
+          .labelsHidden()
+        }
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+
+        Section("Account") {
+          AccountSelectionField(
+            title: "Account", selection: $draft.accountID,
+            accounts: accounts, noneTitle: "All accounts"
+          )
         }
         .listRowBackground(Bow.card)
 
-        Section("Date range") {
-          Toggle("From Date", isOn: $usesStartDate)
+        Section("Envelopes") {
+          CategoryScopeSelectionField(selection: $draft.envelopeScope, envelopes: envelopes)
+        }
+        .listRowBackground(Bow.card)
+
+        Section("Dates") {
+          Toggle("From a date", isOn: $usesStartDate)
           if usesStartDate {
             DatePicker("From", selection: $startDate, displayedComponents: .date)
               .datePickerStyle(.compact)
           }
-          Toggle("Through Date", isOn: $usesEndDate)
+          Toggle("Through a date", isOn: $usesEndDate)
           if usesEndDate {
             DatePicker("Through", selection: $endDate, displayedComponents: .date)
               .datePickerStyle(.compact)
@@ -91,17 +93,17 @@ struct TransactionFilterScreen: View {
         .listRowBackground(Bow.card)
 
         Section {
-          CurrencyAmountField("Minimum", minor: $minimumMinor, currencyCode: currencyCode)
-          CurrencyAmountField("Maximum", minor: $maximumMinor, currencyCode: currencyCode)
+          CurrencyAmountField("At least", minor: $minimumMinor, currencyCode: currencyCode)
+          CurrencyAmountField("At most", minor: $maximumMinor, currencyCode: currencyCode)
         } header: {
-          Text("Amount (\(currencyCode))")
+          Text("Amount")
         } footer: {
-          Text("Leave at zero for no limit. Outflows are filtered by their absolute value.")
+          Text("Leave at zero for no limit. Outflows are compared by their size, so “at least 50” finds −50 and up.")
         }
         .listRowBackground(Bow.card)
 
         Section {
-          Button("Clear All Filters") {
+          Button("Clear all filters") {
             filters = TransactionFilter()
             dismiss()
           }
@@ -109,7 +111,7 @@ struct TransactionFilterScreen: View {
         .listRowBackground(Bow.card)
       }
       .bowListBackground()
-      .navigationTitle("Filter Transactions")
+      .navigationTitle("Filter")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {

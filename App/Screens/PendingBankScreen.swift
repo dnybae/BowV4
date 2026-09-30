@@ -62,7 +62,7 @@ struct PendingBankScreen: View {
   }
 }
 
-private struct PendingBankDetailScreen: View {
+struct PendingBankDetailScreen: View {
   @Environment(\.modelContext) private var modelContext
   var record: SimpleFINImportRecord
   var accounts: [BudgetAccount]

@@ -26,70 +26,32 @@ struct TransactionsScreen: View {
   @State private var scheduledRecords: [BudgetTransaction] = []
   @State private var refreshVersion = 0
 
-  private var inbox: ReviewInbox {
+  private var reviewTransactions: [BudgetTransaction] {
     let approvalIDs = Set(approvals.map(\.id))
-    let reviewTransactions = approvals + legacyUncategorized.filter { !approvalIDs.contains($0.id) }
-    let known = Set(reviewTransactions.map(\.id))
+    let unresolved = approvals + legacyUncategorized.filter { !approvalIDs.contains($0.id) }
+    let known = Set(unresolved.map(\.id))
+    return unresolved + scheduledRecords.filter { !known.contains($0.id) }
+  }
+
+  private var inbox: ReviewInbox {
     return ReviewInbox(
-      transactions: reviewTransactions + scheduledRecords.filter { !known.contains($0.id) },
+      transactions: reviewTransactions,
       records: simpleFINRecords,
       occurrences: occurrences, schedules: schedules
     )
   }
 
-  private var pendingCount: Int {
-    simpleFINRecords.filter { $0.bankState == .pending && $0.isVisiblePending }.count
+  private var timeline: SpendingTimeline {
+    SpendingTimeline(
+      transactions: feed.items, reviewTransactions: reviewTransactions,
+      inbox: inbox, records: simpleFINRecords,
+      accounts: accounts, envelopes: envelopes,
+      currencyCode: currencyCode, searchText: searchText, filter: filter
+    )
   }
 
   var body: some View {
     List {
-      if !inbox.bankItems.isEmpty || pendingCount > 0 || !inbox.scheduledItems.isEmpty {
-        Section {
-          if !inbox.bankItems.isEmpty {
-            NavigationLink(value: SpendingRoute.reviewInbox) {
-              Label {
-                VStack(alignment: .leading, spacing: 3) {
-                  Text("Review bank transactions").font(.headline)
-                  Text("\(inbox.bankItems.count) \(inbox.bankItems.count == 1 ? "item needs" : "items need") a decision")
-                    .font(.subheadline).foregroundStyle(.secondary)
-                }
-              } icon: {
-                Image(systemName: "checkmark.circle")
-                  .foregroundStyle(.tint)
-              }
-              .padding(.vertical, 5)
-            }
-          }
-          if pendingCount > 0 {
-            NavigationLink(value: SpendingRoute.pendingBank) {
-              Label {
-                VStack(alignment: .leading, spacing: 3) {
-                  Text("Pending at bank").font(.headline)
-                  Text("\(pendingCount) \(pendingCount == 1 ? "authorization" : "authorizations") · not in your budget")
-                    .font(.subheadline).foregroundStyle(.secondary)
-                }
-              } icon: {
-                Image(systemName: "clock").foregroundStyle(.orange)
-              }
-              .padding(.vertical, 5)
-            }
-          }
-          if !inbox.scheduledItems.isEmpty {
-            NavigationLink(value: SpendingRoute.scheduledBills) {
-              Label {
-                VStack(alignment: .leading, spacing: 3) {
-                  Text("Scheduled bills").font(.headline)
-                  Text("\(inbox.scheduledItems.count) due to record or skip")
-                    .font(.subheadline).foregroundStyle(.secondary)
-                }
-              } icon: {
-                Image(systemName: "calendar").foregroundStyle(.secondary)
-              }
-              .padding(.vertical, 5)
-            }
-          }
-        }
-      }
       if filter.isActive {
         Section {
           HStack {
@@ -99,15 +61,15 @@ struct TransactionsScreen: View {
           }
         }
       }
-      if feed.items.isEmpty && feed.isLoading {
+      if timeline.isEmpty && feed.isLoading {
         ProgressView("Loading transactions…")
           .frame(maxWidth: .infinity)
-      } else if feed.items.isEmpty {
+      } else if timeline.isEmpty {
         ContentUnavailableView(
-          searchText.isEmpty && !filter.isActive ? "No transactions yet" : "No matches",
+          searchText.isEmpty && !filter.isActive ? "No spending activity yet" : "No matches",
           systemImage: "list.bullet.rectangle",
           description: Text(searchText.isEmpty && !filter.isActive
-            ? "Use the plus button to record your first transaction."
+            ? "Transactions, bank activity, and due bills will appear here."
             : "Try a different search or clear your filters.")
         )
       } else {
@@ -116,19 +78,14 @@ struct TransactionsScreen: View {
             Task { await feed.returnToNewest(searchText: searchText, filter: filter) }
           }
         }
-        ForEach(TransactionDateGroup.make(feed.items)) { group in
+        ForEach(timeline.days) { group in
           Section(group.title) {
-            ForEach(group.items) { transaction in
-              Button {
-                onSelect(transaction.id)
-              } label: {
-                TransactionSummaryRow(
-                  transaction: transaction,
-                  currencyCode: currencyCode,
-                  showsDate: false
-                )
-              }
-              .buttonStyle(.plain)
+            ForEach(group.items) { item in
+              SpendingTimelineEntryView(
+                item: item, accounts: accounts, envelopes: envelopes,
+                schedules: schedules, onSelect: onSelect,
+                onRecord: onRecord, onEditSchedule: onEditSchedule
+              )
             }
           }
         }
@@ -156,33 +113,6 @@ struct TransactionsScreen: View {
       refreshVersion += 1
     }
     .navigationTitle("Spending")
-    .navigationDestination(for: SpendingRoute.self) { route in
-      switch route {
-      case .reviewInbox:
-        ReviewInboxScreen(
-          mode: .bank,
-          scheduledRecords: scheduledRecords, records: simpleFINRecords,
-          occurrences: occurrences, schedules: schedules,
-          accounts: accounts, currencyCode: currencyCode,
-          onSelectTransaction: onSelect, onRecord: onRecord,
-          onEditSchedule: onEditSchedule
-        )
-      case .scheduledBills:
-        ReviewInboxScreen(
-          mode: .scheduled,
-          scheduledRecords: scheduledRecords, records: simpleFINRecords,
-          occurrences: occurrences, schedules: schedules,
-          accounts: accounts, currencyCode: currencyCode,
-          onSelectTransaction: onSelect, onRecord: onRecord,
-          onEditSchedule: onEditSchedule
-        )
-      case .pendingBank:
-        PendingBankScreen(
-          records: simpleFINRecords, accounts: accounts,
-          envelopes: envelopes, onSelectTransaction: onSelect
-        )
-      }
-    }
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
         Button("Filter Transactions", systemImage: "line.3.horizontal.decrease") {
@@ -253,12 +183,6 @@ struct TransactionSummaryRow: View {
     .contentShape(Rectangle())
     .accessibilityElement(children: .combine)
   }
-}
-
-enum SpendingRoute: Hashable {
-  case reviewInbox
-  case scheduledBills
-  case pendingBank
 }
 
 struct TransactionRow: View {

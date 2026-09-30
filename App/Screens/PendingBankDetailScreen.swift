@@ -15,15 +15,29 @@ struct PendingBankDetailScreen: View {
   var body: some View {
     Form {
       Section {
-        LabeledContent("Merchant", value: record.payee)
-        LabeledContent("Amount") {
-          Text(BudgetMoney.formatted(
-            record.amountMinor, currencyCode: account?.currencyCode ?? "USD"
-          ))
-            .fontDesign(.rounded).monospacedDigit()
+        HStack(spacing: Bow.Space.s3) {
+          MerchantLogoView(
+            merchantName: record.payee,
+            kind: record.amountMinor < 0 ? .expense : .inflow
+          )
+          VStack(alignment: .leading, spacing: 2) {
+            Text(record.payee.isEmpty ? "Bank item" : record.payee)
+              .font(.bowHeadline)
+              .foregroundStyle(Bow.ink)
+            Text("\(account?.name ?? "Account") · \(record.date.formatted(date: .abbreviated, time: .omitted))")
+              .font(.bowFootnote)
+              .foregroundStyle(Bow.inkSoft)
+          }
+          Spacer(minLength: Bow.Space.s2)
+          Text(BudgetMoney.formatted(record.amountMinor, currencyCode: account?.currencyCode ?? "USD"))
+            .font(.bowTitle)
+            .monospacedDigit()
+            .foregroundStyle(Bow.inkSoft)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
         }
-        LabeledContent("Date", value: record.date.formatted(date: .abbreviated, time: .omitted))
-        LabeledContent("Account", value: account?.name ?? "Account")
+        .padding(.vertical, Bow.Space.s2)
+        .accessibilityElement(children: .combine)
       } header: {
         Text("Pending at bank")
       } footer: {
@@ -33,7 +47,7 @@ struct PendingBankDetailScreen: View {
 
       if let transactionID = record.transactionID {
         Section {
-          Button("View Entered Transaction", systemImage: "arrow.up.right") {
+          Button("View entered transaction", systemImage: "arrow.up.right") {
             onSelectTransaction(transactionID)
           }
         } footer: {
@@ -45,17 +59,17 @@ struct PendingBankDetailScreen: View {
           if record.amountMinor < 0 {
             CategorySelectionField(
               title: "Envelope", selection: $envelopeID,
-              envelopes: envelopes, noneTitle: "Choose an Envelope"
+              envelopes: envelopes, noneTitle: "Choose an envelope"
             )
           }
         } footer: {
-          Text("Record Now creates a manual transaction and affects your budget immediately. Choose an envelope for an expense.")
+          Text("Record now creates a manual transaction and affects your budget immediately. Choose an envelope for an expense.")
         }
         .listRowBackground(Bow.card)
       }
     }
     .bowListBackground()
-    .navigationTitle("Pending Bank Item")
+    .navigationTitle("Pending at bank")
     .navigationBarTitleDisplayMode(.inline)
     .safeAreaInset(edge: .bottom) {
       if record.transactionID == nil {
@@ -68,17 +82,16 @@ struct PendingBankDetailScreen: View {
             message = error.localizedDescription
           }
         } label: {
-          Text("Record Now")
+          Text("Record now")
             .frame(maxWidth: .infinity)
         }
         .bowPrimaryButton()
         .disabled(record.amountMinor < 0 && envelopeID == nil)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .background(.regularMaterial)
+        .padding(.horizontal, Bow.Space.s4)
+        .padding(.bottom, Bow.Space.s2)
       }
     }
-    .alert("Could Not Enter Transaction", isPresented: Binding(
+    .alert("Couldn’t enter transaction", isPresented: Binding(
       get: { message != nil }, set: { if !$0 { message = nil } }
     )) {
       Button("OK") { message = nil }

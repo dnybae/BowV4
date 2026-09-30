@@ -24,16 +24,31 @@ struct SimpleFINReviewScreen: View {
   var body: some View {
     Form {
       Section {
-        VStack(alignment: .leading, spacing: 6) {
-          Text(record.payee.isEmpty ? "Bank transaction" : record.payee)
-            .font(.title3.weight(.semibold))
+        HStack(spacing: Bow.Space.s3) {
+          MerchantLogoView(
+            merchantName: record.payee,
+            domain: PayeeDirectory.logoDomain(for: record.payee, transactionDomain: nil, payees: payees),
+            kind: record.amountMinor < 0 ? .expense : .inflow,
+            categoryName: nil
+          )
+          VStack(alignment: .leading, spacing: 2) {
+            Text(record.payee.isEmpty ? "Bank transaction" : record.payee)
+              .font(.bowHeadline)
+              .foregroundStyle(Bow.ink)
+            Text("\(account?.name ?? "Account") · \(record.date.formatted(date: .abbreviated, time: .omitted))")
+              .font(.bowFootnote)
+              .foregroundStyle(Bow.inkSoft)
+          }
+          Spacer(minLength: Bow.Space.s2)
           Text(BudgetMoney.formatted(record.amountMinor, currencyCode: currencyCode))
-            .font(.title2.weight(.bold))
-            .fontDesign(.rounded).monospacedDigit()
-          Text("\(account?.name ?? "Account") · \(record.date.formatted(date: .abbreviated, time: .omitted))")
-            .font(.subheadline).foregroundStyle(Bow.inkSoft)
+            .font(.bowTitle)
+            .monospacedDigit()
+            .foregroundStyle(Bow.ink)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, Bow.Space.s2)
+        .accessibilityElement(children: .combine)
       } header: {
         Text(record.origin == .bankFile ? "From a bank file" : "Posted at your bank")
       } footer: {
@@ -52,7 +67,7 @@ struct SimpleFINReviewScreen: View {
           } else {
             Text("Record the scheduled transfer first, then match this bank transaction to it.")
               .foregroundStyle(Bow.inkSoft)
-            Button("Record Scheduled Transfer", systemImage: "arrow.left.arrow.right") {
+            Button("Record scheduled transfer", systemImage: "arrow.left.arrow.right") {
               onRecordScheduledTransfer?(ScheduledTransactionDraft(
                 scheduleID: relatedSchedule.id,
                 scheduledFor: relatedOccurrence.scheduledFor,
@@ -108,7 +123,7 @@ struct SimpleFINReviewScreen: View {
            candidates.first(where: { $0.id == id })?.envelopeID == nil {
           CategorySelectionField(
             title: "Envelope", selection: $envelopeID,
-            envelopes: envelopes, noneTitle: "Choose an Envelope"
+            envelopes: envelopes, noneTitle: "Choose an envelope"
           )
         }
         } header: {
@@ -150,17 +165,17 @@ struct SimpleFINReviewScreen: View {
           if selected == .addNew, record.amountMinor < 0 {
             CategorySelectionField(
               title: "Envelope", selection: $envelopeID,
-              envelopes: envelopes, noneTitle: "Choose an Envelope"
+              envelopes: envelopes, noneTitle: "Choose an envelope"
             )
           }
         } header: {
-          Text(record.status == .imported ? "Complete review" : "Add to Spending")
+          Text(record.status == .imported ? "Complete review" : "Add to spending")
         }
         .listRowBackground(Bow.card)
       }
 
       Section {
-        Button("Ignore Bank Transaction", role: .destructive) {
+        Button("Ignore bank transaction", role: .destructive) {
           showingIgnoreConfirmation = true
         }
       } footer: {
@@ -169,7 +184,7 @@ struct SimpleFINReviewScreen: View {
       .listRowBackground(Bow.card)
     }
     .bowListBackground()
-    .navigationTitle("Review Transaction")
+    .navigationTitle("Review")
     .navigationBarTitleDisplayMode(.inline)
     .safeAreaInset(edge: .bottom) {
       Button {
@@ -180,20 +195,19 @@ struct SimpleFINReviewScreen: View {
       }
         .bowPrimaryButton()
         .disabled(selected == nil || needsEnvelope)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .background(.regularMaterial)
+        .padding(.horizontal, Bow.Space.s4)
+        .padding(.bottom, Bow.Space.s2)
     }
     .task(id: record.id) { loadCandidates() }
     .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
       loadCandidates()
     }
     .confirmationDialog("Ignore this bank transaction?", isPresented: $showingIgnoreConfirmation) {
-      Button("Ignore Transaction", role: .destructive) { resolve(.ignore) }
+      Button("Ignore transaction", role: .destructive) { resolve(.ignore) }
     } message: {
       Text("It will not appear in Spending or affect your budget.")
     }
-    .alert("Could Not Complete Review", isPresented: Binding(
+    .alert("Couldn’t complete review", isPresented: Binding(
       get: { message != nil }, set: { if !$0 { message = nil } }
     )) {
       Button("OK") { message = nil }
@@ -204,9 +218,14 @@ struct SimpleFINReviewScreen: View {
 
   private var primaryTitle: String {
     switch selected {
-    case .match: "Confirm Match"
-    case .addNew: record.status == .imported ? "Complete Review" : "Add Transaction"
-    case nil: "Choose an Option"
+    case .match: "Confirm match"
+    case .addNew:
+      if let name = envelopes.first(where: { $0.id == envelopeID })?.name, record.amountMinor < 0 {
+        "Add to \(name)"
+      } else {
+        record.status == .imported ? "Complete review" : "Add transaction"
+      }
+    case nil: "Choose an option"
     }
   }
 

@@ -33,7 +33,10 @@ struct EnvelopeEditorScreen: View {
     NavigationStack {
       Form {
         Section("Envelope") {
-          TextField("Name", text: $name)
+          LabeledContent("Name") {
+            TextField("Envelope name", text: $name)
+              .multilineTextAlignment(.trailing)
+          }
           Picker("Group", selection: $groupID) {
             ForEach(groups) { group in
               Text(group.name).tag(Optional(group.id))
@@ -42,22 +45,24 @@ struct EnvelopeEditorScreen: View {
         }
         .listRowBackground(Bow.card)
         Section {
-          CurrencyAmountField("Monthly Target", minor: $targetAmountMinor, currencyCode: currencyCode)
+          CurrencyAmountField("Amount each month", minor: $targetAmountMinor, currencyCode: currencyCode)
           Toggle("Set target date", isOn: $hasTargetDate)
           if hasTargetDate {
             DatePicker("Target date", selection: $targetDate, displayedComponents: .date)
           }
+        } header: {
+          Text("Target")
         } footer: {
           if let envelope, envelope.scheduledTargetMinor > 0 {
-            Text("Scheduled transactions add \(BudgetMoney.formatted(envelope.scheduledTargetMinor, currencyCode: currencyCode)) this month on top of this target. A target does not assign money to this envelope.")
+            Text("A target is a plan. It shows what to assign each month but does not move money by itself. Scheduled transactions add \(BudgetMoney.formatted(envelope.scheduledTargetMinor, currencyCode: currencyCode)) this month on top of it.")
           } else {
-            Text("Optional planning goal. A target does not assign money to this envelope.")
+            Text("A target is a plan. It shows what to assign each month but does not move money by itself.")
           }
         }
         .listRowBackground(Bow.card)
       }
       .bowListBackground()
-      .navigationTitle(envelope == nil ? "Add Envelope" : "Edit Envelope")
+      .navigationTitle(envelope?.name ?? "New envelope")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -69,7 +74,7 @@ struct EnvelopeEditorScreen: View {
               || groupID == nil)
         }
       }
-      .alert("Couldn’t Save Envelope", isPresented: Binding(
+      .alert("Couldn’t save envelope", isPresented: Binding(
         get: { errorMessage != nil },
         set: { if !$0 { errorMessage = nil } }
       )) {

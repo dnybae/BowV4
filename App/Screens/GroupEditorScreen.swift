@@ -25,13 +25,13 @@ struct GroupEditorScreen: View {
         .listRowBackground(Bow.card)
         if group != nil {
           Section {
-            Button("Delete Group", role: .destructive) { showingDelete = true }
+            Button("Delete group", role: .destructive) { showingDelete = true }
           }
           .listRowBackground(Bow.card)
         }
       }
       .bowListBackground()
-      .navigationTitle(group == nil ? "Add Group" : "Edit Group")
+      .navigationTitle(group == nil ? "New group" : "Edit group")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -42,7 +42,7 @@ struct GroupEditorScreen: View {
             .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
       }
-      .alert("Couldn’t Save Group", isPresented: Binding(
+      .alert("Couldn’t save group", isPresented: Binding(
         get: { errorMessage != nil },
         set: { if !$0 { errorMessage = nil } }
       )) {
@@ -51,7 +51,7 @@ struct GroupEditorScreen: View {
         Text(errorMessage ?? "")
       }
       .confirmationDialog("Delete this empty group?", isPresented: $showingDelete) {
-        Button("Delete Group", role: .destructive) {
+        Button("Delete group", role: .destructive) {
           guard let group else { return }
           do {
             try BudgetCommands.deleteEmptyGroup(group, in: modelContext)

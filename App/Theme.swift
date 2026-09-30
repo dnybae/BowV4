@@ -280,14 +280,14 @@ struct PulseTarget<Content: View>: View {
 
 extension View {
     /// Main action: system Liquid Glass prominent button, tinted ink. One per screen.
-    func bowPrimaryButton() -> some View {
+    func bowPrimaryButton(size: ControlSize = .large) -> some View {
         self.buttonStyle(.glassProminent).tint(Bow.button)
             .foregroundStyle(Bow.onButton)
-            .buttonBorderShape(.capsule).controlSize(.large)
+            .buttonBorderShape(.capsule).controlSize(size)
     }
     /// Secondary action: system Liquid Glass button.
-    func bowSecondaryButton() -> some View {
-        self.buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(.large)
+    func bowSecondaryButton(size: ControlSize = .large) -> some View {
+        self.buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(size)
     }
     /// Put on a List or Form so the Bow background (or a SkyBackground) shows through.
     func bowListBackground<Background: View>(@ViewBuilder _ background: () -> Background = { Bow.mist }) -> some View {

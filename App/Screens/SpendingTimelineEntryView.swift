@@ -10,6 +10,8 @@ struct SpendingTimelineEntryView: View {
   var onSelect: (UUID) -> Void
   var onRecord: (ScheduledTransactionDraft) -> Void
   var onEditSchedule: (UUID) -> Void
+  /// Shows Skip and Record buttons under scheduled bills, for the Needs attention section.
+  var showsInlineActions = false
   @State private var showingScheduledActions = false
   @State private var message: String?
 
@@ -37,8 +39,19 @@ struct SpendingTimelineEntryView: View {
           )
         } label: { row }
       case .scheduled(let occurrence, let schedule):
-        Button { showingScheduledActions = true } label: { row }
-          .buttonStyle(.plain)
+        VStack(alignment: .trailing, spacing: Bow.Space.s2) {
+          Button { showingScheduledActions = true } label: { row }
+            .buttonStyle(.plain)
+          if showsInlineActions {
+            HStack(spacing: Bow.Space.s2) {
+              Button("Skip") { skip(occurrence) }
+                .bowSecondaryButton(size: .small)
+              Button("Record") { record(occurrence, schedule) }
+                .bowPrimaryButton(size: .small)
+            }
+            .padding(.bottom, Bow.Space.s1)
+          }
+        }
           .swipeActions(edge: .leading) {
             Button("Record", systemImage: "plus") { record(occurrence, schedule) }
               .tint(.accentColor)

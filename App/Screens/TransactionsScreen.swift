@@ -50,6 +50,14 @@ struct TransactionsScreen: View {
     )
   }
 
+  private var attentionSummary: String {
+    switch timeline.needsAttention.count {
+    case 0: "All caught up"
+    case 1: "1 thing needs you"
+    case let count: "\(count) things need you"
+    }
+  }
+
   var body: some View {
     List {
       if filter.isActive {
@@ -80,6 +88,26 @@ struct TransactionsScreen: View {
           }
           .listRowBackground(Bow.card)
         }
+        if !timeline.needsAttention.isEmpty {
+          Section {
+            ForEach(timeline.needsAttention) { item in
+              SpendingTimelineEntryView(
+                item: item, accounts: accounts, envelopes: envelopes,
+                schedules: schedules, onSelect: onSelect,
+                onRecord: onRecord, onEditSchedule: onEditSchedule,
+                showsInlineActions: true
+              )
+            }
+          } header: {
+            HStack {
+              Text("Needs attention")
+              Spacer()
+              Text(timeline.needsAttention.count, format: .number)
+                .monospacedDigit()
+            }
+          }
+          .listRowBackground(Bow.card)
+        }
         ForEach(timeline.days) { group in
           Section(group.title) {
             ForEach(group.items) { item in
@@ -99,7 +127,9 @@ struct TransactionsScreen: View {
         }
       }
     }
-    .bowListBackground()
+    .bowListBackground {
+      Bow.mist.overlay(alignment: .top) { SkyBackground(mood: .dawn, height: 320, showsTrail: false) }
+    }
     .searchable(text: $searchText, prompt: "Payee, note, account, or envelope")
     .task(id: TransactionFeedKey(searchText: searchText, filter: filter,
                                  refreshVersion: refreshVersion)) {
@@ -117,6 +147,7 @@ struct TransactionsScreen: View {
       refreshVersion += 1
     }
     .navigationTitle("Spending")
+    .navigationSubtitle(attentionSummary)
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
         Button("Filter Transactions", systemImage: "line.3.horizontal.decrease") {

@@ -1,9 +1,12 @@
 import Foundation
 
 struct SpendingTimeline {
+  /// Bank items to review and scheduled bills that are due, shown ahead of the ledger.
+  var needsAttention: [SpendingTimelineItem]
+  /// Everything else, grouped by day.
   var days: [SpendingTimelineDay]
 
-  var isEmpty: Bool { days.isEmpty }
+  var isEmpty: Bool { needsAttention.isEmpty && days.isEmpty }
 
   init(
     transactions: [TransactionListItem],
@@ -192,7 +195,11 @@ struct SpendingTimeline {
       visibleIDs.insert(id)
     }
 
-    days = SpendingTimelineDay.make(items, calendar: calendar, now: now)
+    needsAttention = items.filter { $0.status?.needsAttention == true }
+      .sorted { $0.date == $1.date ? $0.id < $1.id : $0.date > $1.date }
+    days = SpendingTimelineDay.make(
+      items.filter { $0.status?.needsAttention != true }, calendar: calendar, now: now
+    )
   }
 }
 
@@ -273,7 +280,7 @@ struct SpendingTimelineDay: Identifiable {
         calendar.date(byAdding: .day, value: -1, to: now) ?? now) {
         title = "Yesterday"
       } else {
-        title = day.formatted(date: .complete, time: .omitted)
+        title = day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
       }
       let sorted = (byDay[day] ?? []).sorted { left, right in
         let leftNeedsAttention = left.status?.needsAttention == true

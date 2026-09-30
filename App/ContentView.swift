@@ -163,7 +163,7 @@ private struct BudgetHomeView: View {
                 onCoverOverspending: { scope in
                   activeSheet = .coverOverspending(displayedBudgetMonth, scope)
                 },
-                onSelectTransaction: { activeSheet = .editTransaction($0) },
+                onSelectTransaction: { activeSheet = .transactionDetail($0) },
                 onEditSchedule: { activeSheet = .editSchedule($0) }
                 )
               } else {
@@ -217,7 +217,7 @@ private struct BudgetHomeView: View {
                 selectedDate: $selectedCalendarDate,
                 returnToTodayRequest: calendarReturnToTodayRequest,
                 onRecord: { activeSheet = .recordScheduled($0) },
-                onSelectTransaction: { activeSheet = .editTransaction($0) }
+                onSelectTransaction: { activeSheet = .transactionDetail($0) }
               )
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -236,7 +236,7 @@ private struct BudgetHomeView: View {
                 currencyCode: currencyCode,
                 onAddAccount: { activeSheet = .newAccount },
                 onViewInsights: { showingInsights = true },
-                onSelectTransaction: { activeSheet = .editTransaction($0) }
+                onSelectTransaction: { activeSheet = .transactionDetail($0) }
                 )
               } else {
                 if let ledgerError {
@@ -307,7 +307,7 @@ private struct BudgetHomeView: View {
             )
           case .transactionDetail(let id):
             if let transaction = transaction(for: id) {
-              TransactionDetailScreen(
+              TransactionDetailSheet(
                 transaction: transaction,
                 accounts: accounts, envelopes: envelopes,
                 payees: payees, currencyCode: currencyCode

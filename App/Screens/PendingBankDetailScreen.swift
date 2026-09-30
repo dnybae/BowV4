@@ -3,6 +3,7 @@ import SwiftData
 
 struct PendingBankDetailScreen: View {
   @Environment(\.modelContext) private var modelContext
+  @Query private var payees: [BudgetPayee]
   var record: SimpleFINImportRecord
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
@@ -44,6 +45,18 @@ struct PendingBankDetailScreen: View {
         Text("The final posted amount and date may differ. Bow will check for a match when it posts.")
       }
       .listRowBackground(Bow.card)
+
+      if !record.payee.isEmpty {
+        Section {
+          NavigationLink {
+            PayeeDetailScreen(payeeKey: PayeeDirectory.canonicalKey(for: record.payee, payees: payees))
+          } label: {
+            LabeledContent("Payee", value: record.payee)
+          }
+          .accessibilityHint("Opens payee details")
+        }
+        .listRowBackground(Bow.card)
+      }
 
       if let transactionID = record.transactionID {
         Section {

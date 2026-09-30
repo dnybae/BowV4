@@ -14,6 +14,7 @@ struct PayeeDetailScreen: View {
   @State private var selectedTransaction: BudgetTransaction?
   @State private var selectedSchedule: BudgetSchedule?
   @State private var entry: PayeeDirectory.Entry?
+  @State private var hasLoadedEntry = false
   @State private var feed = TransactionFeedModel()
   @State private var activity: PayeeActivity?
   @State private var activityVersion = 0
@@ -141,9 +142,10 @@ struct PayeeDetailScreen: View {
             Link(destination: websiteURL) {
               Label("Visit \(websiteURL.host() ?? "website")", systemImage: "safari")
             }
-          } else if let webSearchURL {
+          }
+          if let webSearchURL {
             Link(destination: webSearchURL) {
-              Label("Search the web", systemImage: "magnifyingglass")
+              Label("Search this payee on the web", systemImage: "magnifyingglass")
             }
           }
         }
@@ -192,7 +194,7 @@ struct PayeeDetailScreen: View {
                   )
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint("Open transaction")
+                .accessibilityHint("Opens transaction details")
               }
             }
             .listRowBackground(Bow.card)
@@ -203,6 +205,16 @@ struct PayeeDetailScreen: View {
               .onAppear { Task { await feed.loadNext() } }
           }
         }
+      } else if hasLoadedEntry {
+        ContentUnavailableView(
+          "Payee Not Found", systemImage: "person.crop.circle.badge.questionmark",
+          description: Text("It may have been merged with another payee or renamed.")
+        )
+        .listRowBackground(Color.clear)
+      } else {
+        ProgressView()
+          .frame(maxWidth: .infinity)
+          .listRowBackground(Color.clear)
       }
     }
     .bowListBackground()
@@ -210,6 +222,7 @@ struct PayeeDetailScreen: View {
     .task(id: "\(payeeKey)|\(reloadVersion)") {
       let repository = PayeeDirectoryRepository(modelContainer: modelContext.container)
       entry = (try? await repository.entries())?.first { $0.key == payeeKey }
+      hasLoadedEntry = true
       await feed.reload(container: modelContext.container, searchText: "",
                         filter: TransactionFilter(), scopedPayeeKey: payeeKey,
                         includeUncategorizedCount: false)
@@ -233,14 +246,14 @@ struct PayeeDetailScreen: View {
         PayeeEditorScreen(entry: entry, payee: payee) { dismiss() }
       }
     }
-    .sheet(item: $selectedTransaction) { transaction in
-      TransactionEditorScreen(
+    .navigationDestination(item: $selectedTransaction) { transaction in
+      TransactionDetailScreen(
         transaction: transaction,
-        accounts: accounts,
-        envelopes: envelopes,
-        payees: payees,
-        currencyCode: currencyCode
+        accounts: accounts, envelopes: envelopes,
+        payees: payees, currencyCode: currencyCode
       )
+      // Opening this payee again from its own transaction would only loop.
+      .environment(\.currentPayeeKey, payeeKey)
     }
     .sheet(isPresented: $showingMerge) {
       if let entry {

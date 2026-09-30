@@ -4,6 +4,7 @@ import SwiftData
 struct TransactionDetailScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
+  @Environment(\.currentPayeeKey) private var currentPayeeKey
   @Query private var records: [SimpleFINImportRecord]
   var transaction: BudgetTransaction
   var accounts: [BudgetAccount]
@@ -41,149 +42,173 @@ struct TransactionDetailScreen: View {
   }
 
   var body: some View {
-    NavigationStack {
-      Form {
+    Form {
+      Section {
+        VStack(spacing: Bow.Space.s2) {
+          MerchantLogoView(
+            merchantName: transaction.kind == .transfer ? "" : transaction.payee,
+            domain: transaction.kind == .transfer ? nil : PayeeDirectory.logoDomain(
+              for: transaction.payee, transactionDomain: transaction.merchantDomain, payees: payees
+            ),
+            kind: transaction.kind,
+            envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name,
+            size: 52
+          )
+          Text(transaction.payee.isEmpty ? "Transaction" : transaction.payee)
+            .font(.bowHeadline)
+            .foregroundStyle(Bow.ink)
+          MoneyText(minor: transaction.amountMinor, currencyCode: currencyCode)
+            .bowHeroFont()
+            .monospacedDigit()
+            .foregroundStyle(Bow.ink)
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+          Text(transaction.date.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+            .font(.bowSubhead)
+            .foregroundStyle(Bow.inkSoft)
+          Text(statusTitle)
+            .font(.bowFootnote.weight(.medium))
+            .foregroundStyle(needsLegacyReview ? Bow.needsInk : Bow.inkSoft)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Bow.Space.s4)
+        .accessibilityElement(children: .combine)
+      }
+      .listRowBackground(Bow.card)
+
+      Section {
+        payeeRow
+        LabeledContent("Envelope", value: envelopeName)
+        LabeledContent("Account", value: accountName)
+        if !transaction.notes.isEmpty {
+          LabeledContent("Notes", value: transaction.notes)
+        }
+        LabeledContent("Cleared") {
+          if transaction.isCleared {
+            Label("Cleared", systemImage: "checkmark")
+              .foregroundStyle(Bow.fundedInk)
+          } else {
+            Text("Not cleared")
+          }
+        }
+      }
+      .listRowBackground(Bow.card)
+
+      if let record = bankRecord, record.status == .linked {
         Section {
-          VStack(spacing: Bow.Space.s2) {
-            MerchantLogoView(
-              merchantName: transaction.kind == .transfer ? "" : transaction.payee,
-              domain: transaction.kind == .transfer ? nil : PayeeDirectory.logoDomain(
-                for: transaction.payee, transactionDomain: transaction.merchantDomain, payees: payees
-              ),
-              kind: transaction.kind,
-              envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name,
-              size: 52
+          LabeledContent("Bank description", value: record.payee)
+          LabeledContent("Posted amount") {
+          Text(BudgetMoney.formatted(
+              record.amountMinor, currencyCode: currencyCode
+          ))
+            .fontDesign(.rounded).monospacedDigit()
+        }
+          LabeledContent("Posted", value: record.date.formatted(date: .abbreviated, time: .omitted))
+          LabeledContent("Matched", value: record.matchedAutomatically ? "Automatically" : "During review")
+          Button("Unmatch bank transaction", role: .destructive) {
+            showingUnmatchConfirmation = true
+          }
+        } header: {
+          Text("From your bank")
+        } footer: {
+          Text("Unmatching keeps your entered transaction and returns the bank item to review.")
+        }
+        .listRowBackground(Bow.card)
+      } else if bankRecord?.status == .imported {
+        Section("From your bank") {
+          Text("Added from a posted bank transaction.")
+            .foregroundStyle(Bow.inkSoft)
+        }
+        .listRowBackground(Bow.card)
+      }
+
+      if needsLegacyReview {
+        Section {
+          if transaction.kind == .expense {
+            EnvelopeSelectionField(
+              title: "Envelope", selection: $reviewEnvelopeID,
+              envelopes: envelopes, noneTitle: "Choose an envelope"
             )
-            Text(transaction.payee.isEmpty ? "Transaction" : transaction.payee)
-              .font(.bowHeadline)
-              .foregroundStyle(Bow.ink)
-            MoneyText(minor: transaction.amountMinor, currencyCode: currencyCode)
-              .bowHeroFont()
-              .monospacedDigit()
-              .foregroundStyle(Bow.ink)
-              .lineLimit(1)
-              .minimumScaleFactor(0.5)
-            Text(transaction.date.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-              .font(.bowSubhead)
-              .foregroundStyle(Bow.inkSoft)
-            Text(statusTitle)
-              .font(.bowFootnote.weight(.medium))
-              .foregroundStyle(needsLegacyReview ? Bow.needsInk : Bow.inkSoft)
           }
-          .frame(maxWidth: .infinity)
-          .padding(.vertical, Bow.Space.s4)
-          .accessibilityElement(children: .combine)
+          Button("Complete review", systemImage: "checkmark") { completeReview() }
+            .disabled(!canCompleteReview)
+        } footer: {
+          Text("This older transaction needs a one-time check. Expenses must have an envelope before review can finish.")
         }
         .listRowBackground(Bow.card)
-
+      } else if transaction.needsApproval
+        || (transaction.kind == .expense && transaction.envelopeID == nil) {
         Section {
-          LabeledContent("Envelope", value: envelopeName)
-          LabeledContent("Account", value: accountName)
-          if !transaction.notes.isEmpty {
-            LabeledContent("Notes", value: transaction.notes)
-          }
-          LabeledContent("Cleared") {
-            if transaction.isCleared {
-              Label("Cleared", systemImage: "checkmark")
-                .foregroundStyle(Bow.fundedInk)
-            } else {
-              Text("Not cleared")
-            }
-          }
+          Text("Finish this transaction in Spending → Bank Review.")
+            .foregroundStyle(Bow.inkSoft)
         }
         .listRowBackground(Bow.card)
+      }
+    }
+    .bowListBackground()
+    .navigationTitle("Transaction")
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbar {
+      ToolbarItem(placement: .topBarTrailing) {
+        Button("Edit", systemImage: "pencil") { showingEditor = true }
+      }
+    }
+    .sheet(isPresented: $showingEditor) {
+      TransactionEditorScreen(
+        transaction: transaction, accounts: accounts,
+        envelopes: envelopes, payees: payees, currencyCode: currencyCode
+      )
+    }
+    .confirmationDialog("Unmatch this bank transaction?", isPresented: $showingUnmatchConfirmation) {
+      Button("Unmatch", role: .destructive) {
+        guard let bankRecord else { return }
+        do { try SimpleFINSyncCoordinator.shared.unmatch(bankRecord, in: modelContext) }
+        catch { message = error.localizedDescription }
+      }
+    } message: {
+      Text("The manual transaction stays in Spending. The posted bank item returns to Bank Review.")
+    }
+    .alert("Couldn’t update transaction", isPresented: Binding(
+      get: { message != nil }, set: { if !$0 { message = nil } }
+    )) {
+      Button("OK") { message = nil }
+    } message: {
+      Text(message ?? "")
+    }
+    .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+      let id = transaction.id
+      if (try? BudgetTransactionLookup.byID(id, in: modelContext)) == nil {
+        dismiss()
+      }
+    }
+    .onAppear { reviewEnvelopeID = transaction.envelopeID }
+  }
 
-        if let record = bankRecord, record.status == .linked {
-          Section {
-            LabeledContent("Bank description", value: record.payee)
-            LabeledContent("Posted amount") {
-            Text(BudgetMoney.formatted(
-                record.amountMinor, currencyCode: currencyCode
-            ))
-              .fontDesign(.rounded).monospacedDigit()
-          }
-            LabeledContent("Posted", value: record.date.formatted(date: .abbreviated, time: .omitted))
-            LabeledContent("Matched", value: record.matchedAutomatically ? "Automatically" : "During review")
-            Button("Unmatch bank transaction", role: .destructive) {
-              showingUnmatchConfirmation = true
-            }
-          } header: {
-            Text("From your bank")
-          } footer: {
-            Text("Unmatching keeps your entered transaction and returns the bank item to review.")
-          }
-          .listRowBackground(Bow.card)
-        } else if bankRecord?.status == .imported {
-          Section("From your bank") {
-            Text("Added from a posted bank transaction.")
-              .foregroundStyle(Bow.inkSoft)
-          }
-          .listRowBackground(Bow.card)
-        }
-
-        if needsLegacyReview {
-          Section {
-            if transaction.kind == .expense {
-              EnvelopeSelectionField(
-                title: "Envelope", selection: $reviewEnvelopeID,
-                envelopes: envelopes, noneTitle: "Choose an envelope"
+  /// Transfers and blank payees have no payee page. Opened from a payee's own page, the row
+  /// isn't a link, so the user can't loop payee → transaction → same payee.
+  @ViewBuilder
+  private var payeeRow: some View {
+    if transaction.kind != .transfer, !transaction.payee.isEmpty {
+      let key = PayeeDirectory.canonicalKey(for: transaction.payee, payees: payees)
+      if key == currentPayeeKey {
+        LabeledContent("Payee", value: transaction.payee)
+      } else {
+        NavigationLink {
+          PayeeDetailScreen(payeeKey: key)
+        } label: {
+          LabeledContent("Payee") {
+            HStack(spacing: Bow.Space.s2) {
+              MerchantLogoView(
+                merchantName: transaction.payee, domain: transaction.merchantDomain,
+                kind: transaction.kind, size: 24
               )
+              Text(transaction.payee)
+                .lineLimit(1)
             }
-            Button("Complete review", systemImage: "checkmark") { completeReview() }
-              .disabled(!canCompleteReview)
-          } footer: {
-            Text("This older transaction needs a one-time check. Expenses must have an envelope before review can finish.")
           }
-          .listRowBackground(Bow.card)
-        } else if transaction.needsApproval
-          || (transaction.kind == .expense && transaction.envelopeID == nil) {
-          Section {
-            Text("Finish this transaction in Spending → Bank Review.")
-              .foregroundStyle(Bow.inkSoft)
-          }
-          .listRowBackground(Bow.card)
         }
+        .accessibilityHint("Opens payee details")
       }
-      .bowListBackground()
-      .navigationTitle("Transaction")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("Done") { dismiss() }
-        }
-        ToolbarItem(placement: .topBarTrailing) {
-          Button("Edit", systemImage: "pencil") { showingEditor = true }
-        }
-      }
-      .sheet(isPresented: $showingEditor) {
-        TransactionEditorScreen(
-          transaction: transaction, accounts: accounts,
-          envelopes: envelopes, payees: payees, currencyCode: currencyCode
-        )
-      }
-      .confirmationDialog("Unmatch this bank transaction?", isPresented: $showingUnmatchConfirmation) {
-        Button("Unmatch", role: .destructive) {
-          guard let bankRecord else { return }
-          do { try SimpleFINSyncCoordinator.shared.unmatch(bankRecord, in: modelContext) }
-          catch { message = error.localizedDescription }
-        }
-      } message: {
-        Text("The manual transaction stays in Spending. The posted bank item returns to Bank Review.")
-      }
-      .alert("Couldn’t update transaction", isPresented: Binding(
-        get: { message != nil }, set: { if !$0 { message = nil } }
-      )) {
-        Button("OK") { message = nil }
-      } message: {
-        Text(message ?? "")
-      }
-      .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-        let id = transaction.id
-        if (try? BudgetTransactionLookup.byID(id, in: modelContext)) == nil {
-          dismiss()
-        }
-      }
-      .onAppear { reviewEnvelopeID = transaction.envelopeID }
     }
   }
 
@@ -205,4 +230,33 @@ struct TransactionDetailScreen: View {
     do { try modelContext.save(); dismiss() }
     catch { message = error.localizedDescription }
   }
+}
+
+/// Transaction details presented on their own: adds the navigation stack and a Done button.
+struct TransactionDetailSheet: View {
+  @Environment(\.dismiss) private var dismiss
+  var transaction: BudgetTransaction
+  var accounts: [BudgetAccount]
+  var envelopes: [BudgetEnvelope]
+  var payees: [BudgetPayee]
+  var currencyCode: String
+
+  var body: some View {
+    NavigationStack {
+      TransactionDetailScreen(
+        transaction: transaction, accounts: accounts, envelopes: envelopes,
+        payees: payees, currencyCode: currencyCode
+      )
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Done") { dismiss() }
+        }
+      }
+    }
+  }
+}
+
+extension EnvironmentValues {
+  /// The payee whose page is showing, so its own transactions don't link back to it.
+  @Entry var currentPayeeKey: String? = nil
 }

@@ -11,8 +11,29 @@ struct AddAccountFlowScreen: View {
     NavigationStack {
       List {
         Section {
-          Text("Choose how you want to track this account.")
-            .foregroundStyle(Bow.inkSoft)
+          Text("How do you want to track it?")
+            .font(.bowLargeTitle)
+            .foregroundStyle(Bow.ink)
+            .accessibilityAddTraits(.isHeader)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: Bow.Space.s4, leading: Bow.Space.s1, bottom: 0, trailing: Bow.Space.s1))
+        }
+
+        Section {
+          NavigationLink {
+            SimpleFINAccountSetupScreen(isDemoMode: isDemoMode, onDone: { dismiss() })
+          } label: {
+            optionRow(
+              title: "Connect a bank",
+              detail: connections.isEmpty
+                ? "Sync balances and transactions through SimpleFIN. You review each one before it counts."
+                : "View your SimpleFIN accounts and choose any new ones to add.",
+              note: isDemoMode
+                ? "Explore a sample bank connection. Demo mode never contacts a bank."
+                : "SimpleFIN is read-only and has a separate signup and fee. Updates arrive about once a day.",
+              symbol: "link"
+            )
+          }
         }
         .listRowBackground(Bow.card)
 
@@ -21,37 +42,17 @@ struct AddAccountFlowScreen: View {
             AccountEditorScreen(currencyCode: currencyCode) { _ in dismiss() }
           } label: {
             optionRow(
-              title: "Private Account",
-              detail: "Enter balances and transactions yourself, or import a bank file later.",
-              symbol: "wallet.pass"
+              title: "Track it yourself",
+              detail: "Enter a balance and add transactions by hand, or import a bank file.",
+              note: "Works with any bank. Stays on this iPhone.",
+              symbol: "pencil"
             )
           }
-        } footer: {
-          Text("Works with any bank. Your account details stay in Bow on this iPhone.")
-        }
-        .listRowBackground(Bow.card)
-
-        Section {
-          NavigationLink {
-            SimpleFINAccountSetupScreen(isDemoMode: isDemoMode, onDone: { dismiss() })
-          } label: {
-            optionRow(
-              title: "Connect a Bank",
-              detail: connections.isEmpty
-                ? "Enter a SimpleFIN setup token, then choose which bank accounts to add."
-                : "View your SimpleFIN accounts and choose any new ones to add.",
-              symbol: "link"
-            )
-          }
-        } footer: {
-          Text(isDemoMode
-            ? "Explore a sample bank connection. Demo mode never contacts a bank."
-            : "SimpleFIN provides read-only bank data and has a separate signup and fee. Bank updates may arrive about once a day.")
         }
         .listRowBackground(Bow.card)
       }
       .bowListBackground()
-      .navigationTitle("Add Account")
+      .navigationTitle("Add account")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -61,25 +62,30 @@ struct AddAccountFlowScreen: View {
     }
   }
 
-  private func optionRow(title: String, detail: String, symbol: String) -> some View {
-    HStack(alignment: .top, spacing: 16) {
+  private func optionRow(title: String, detail: String, note: String, symbol: String) -> some View {
+    HStack(alignment: .top, spacing: Bow.Space.s4) {
       Image(systemName: symbol)
-        .font(.title3)
-        .foregroundStyle(.tint)
-        .frame(width: 28)
+        .font(.system(size: 18, weight: .medium))
+        .foregroundStyle(Bow.bowInk)
+        .frame(width: 44, height: 44)
+        .background(Bow.bowTint, in: Circle())
         .accessibilityHidden(true)
-      VStack(alignment: .leading, spacing: 6) {
+      VStack(alignment: .leading, spacing: Bow.Space.s1) {
         Text(title)
-          .font(.headline)
+          .font(.bowHeadline)
           .foregroundStyle(Bow.ink)
         Text(detail)
-          .font(.subheadline)
+          .font(.bowSubhead)
+          .foregroundStyle(Bow.inkSoft)
+          .fixedSize(horizontal: false, vertical: true)
+        Text(note)
+          .font(.bowFootnote)
           .foregroundStyle(Bow.inkSoft)
           .fixedSize(horizontal: false, vertical: true)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.vertical, 8)
     }
+    .padding(.vertical, Bow.Space.s3)
     .accessibilityElement(children: .combine)
   }
 }

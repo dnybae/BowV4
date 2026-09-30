@@ -106,6 +106,7 @@ struct SpendingTimeline {
         merchantDomain: transaction.merchantDomain,
         kind: transaction.kind,
         status: status,
+        isMatched: transaction.sourceRaw == "manualLinked",
         source: pendingRecord != nil && !needsReview
           ? .pending(pendingRecord!) : .transaction(transaction.id)
       ))
@@ -213,6 +214,7 @@ struct SpendingTimelineItem: Identifiable {
   var merchantDomain: String?
   var kind: BudgetTransactionKind
   var status: SpendingTimelineStatus?
+  var isMatched = false
   var source: Source
 }
 
@@ -232,6 +234,14 @@ enum SpendingTimelineStatus {
     case .pending: "Pending at bank · Not in budget"
     case .pendingEntered: "Pending at bank · Entered in budget"
     case .scheduled: "Scheduled · Record or skip"
+    }
+  }
+
+  var systemImage: String {
+    switch self {
+    case .bankReview, .transactionReview, .chooseEnvelope: "exclamationmark.circle.fill"
+    case .pending, .pendingEntered: "clock"
+    case .scheduled: "calendar.badge.clock"
     }
   }
 

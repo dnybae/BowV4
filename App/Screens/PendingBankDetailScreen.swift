@@ -1,67 +1,6 @@
 import SwiftUI
 import SwiftData
 
-struct PendingBankScreen: View {
-  var records: [SimpleFINImportRecord]
-  var accounts: [BudgetAccount]
-  var envelopes: [BudgetEnvelope]
-  var onSelectTransaction: (UUID) -> Void
-
-  private var pending: [SimpleFINImportRecord] {
-    records.filter { $0.bankState == .pending && $0.isVisiblePending }
-      .sorted { $0.date > $1.date }
-  }
-
-  var body: some View {
-    List {
-      Section {
-        Text("These bank authorizations may change or disappear before they post. They do not affect your budget unless you choose Enter Now.")
-          .font(.subheadline).foregroundStyle(.secondary)
-      }
-      if pending.isEmpty {
-        ContentUnavailableView(
-          "No Pending Bank Items", systemImage: "clock",
-          description: Text("Pending authorizations will appear here after your next bank sync.")
-        )
-      } else {
-        Section("Pending at bank") {
-          ForEach(pending) { record in
-            NavigationLink {
-              PendingBankDetailScreen(
-                record: record, accounts: accounts, envelopes: envelopes,
-                onSelectTransaction: onSelectTransaction
-              )
-            } label: {
-              HStack(spacing: 12) {
-                Image(systemName: "clock")
-                  .foregroundStyle(.orange)
-                  .frame(width: 32)
-                  .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
-                  Text(record.payee.isEmpty ? "Bank item" : record.payee)
-                  Text("\(accounts.first { $0.id == record.localAccountID }?.name ?? "Account") · \(record.date.formatted(date: .abbreviated, time: .omitted))")
-                    .font(.caption).foregroundStyle(.secondary)
-                  if record.transactionID != nil {
-                    Text("Entered in budget")
-                      .font(.caption).foregroundStyle(.tint)
-                  }
-                }
-                Spacer(minLength: 8)
-                Text(BudgetMoney.formatted(
-                  record.amountMinor,
-                  currencyCode: accounts.first { $0.id == record.localAccountID }?.currencyCode ?? "USD"
-                ))
-              }
-            }
-          }
-        }
-      }
-    }
-    .navigationTitle("Pending at Bank")
-    .navigationBarTitleDisplayMode(.inline)
-  }
-}
-
 struct PendingBankDetailScreen: View {
   @Environment(\.modelContext) private var modelContext
   var record: SimpleFINImportRecord

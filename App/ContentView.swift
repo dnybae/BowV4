@@ -85,7 +85,6 @@ private struct BudgetHomeView: View {
   @State private var selectedCalendarDate = Date()
   @State private var selectedTab: HomeTab = .budget
   @State private var budgetPath: [BudgetRoute] = []
-  @State private var spendingPath: [SpendingRoute] = []
   @State private var accountsPath: [AccountRoute] = []
   @State private var budgetReturnToPresentRequest = 0
   @State private var calendarReturnToTodayRequest = 0
@@ -173,7 +172,7 @@ private struct BudgetHomeView: View {
             }
           }
           Tab("Spending", systemImage: "list.bullet.rectangle", value: .transactions) {
-            NavigationStack(path: $spendingPath) {
+            NavigationStack {
               TransactionsScreen(
                 accounts: accounts,
                 envelopes: envelopes,

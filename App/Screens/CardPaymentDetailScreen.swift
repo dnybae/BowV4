@@ -13,6 +13,7 @@ struct CardPaymentDetailScreen: View {
   var allocations: [BudgetAllocation]
   var schedules: [BudgetSchedule]
   var onMoveMoney: (BudgetBucket, BudgetBucket) -> Void
+  var onCoverOverspending: () -> Void
   var onSelectTransaction: (UUID) -> Void
   var onEditSchedule: (UUID) -> Void
   @State private var showingGoalEditor = false
@@ -26,6 +27,15 @@ struct CardPaymentDetailScreen: View {
     let previousOwed = max(0, -previousSnapshot.accountBalances[card.id, default: 0])
     return max(0, previousOwed - max(0, previousSnapshot.paymentAvailable[card.id, default: 0]))
   }
+  private var underfunded: Int64 { max(0, owed - reserved) }
+  /// This month's credit overspending on this card. Covering those envelopes funds the payment.
+  private var overspentOnCard: Int64 {
+    min(underfunded, OverspendingSummary(snapshot: snapshot, envelopes: envelopes, groups: [], cardID: card.id)
+      .creditMinor(onCard: card.id))
+  }
+  /// Debt that no overspent envelope explains, such as a starting balance or debt from earlier months.
+  private var uncoveredDebt: Int64 { underfunded - overspentOnCard }
+  private var hasPayoffGoal: Bool { card.debtMonthlyTargetMinor != nil || card.debtGoalDate != nil }
   private var baseline: Int64 { max(owed, card.debtGoalStartMinor ?? 0) }
   private var debtProgress: Double {
     guard baseline > 0 else { return 1 }
@@ -119,6 +129,51 @@ struct CardPaymentDetailScreen: View {
         .frame(maxWidth: .infinity)
         .listRowBackground(Color.clear)
         .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: Bow.Space.s2, trailing: 0))
+      }
+
+      if underfunded > 0 {
+        Section("Underfunded") {
+          LabeledContent("Total underfunded") {
+            Text(BudgetMoney.formatted(underfunded, currencyCode: currencyCode))
+              .fontWeight(.semibold).fontDesign(.rounded).monospacedDigit()
+              .foregroundStyle(Bow.ink)
+          }
+          if overspentOnCard > 0 {
+            VStack(alignment: .leading, spacing: Bow.Space.s2) {
+              LabeledContent("Overspent envelopes") {
+                Text(BudgetMoney.formatted(overspentOnCard, currencyCode: currencyCode))
+                  .fontDesign(.rounded).monospacedDigit()
+              }
+              Text("Card purchases went over their envelopes. Covering them funds this payment.")
+                .font(.footnote)
+                .foregroundStyle(Bow.inkSoft)
+              Button("Cover overspending", action: onCoverOverspending)
+                .bowPrimaryButton(size: .regular)
+                .disabled(isPastMonth)
+            }
+            .padding(.vertical, Bow.Space.s1)
+          }
+          if uncoveredDebt > 0 {
+            VStack(alignment: .leading, spacing: Bow.Space.s2) {
+              LabeledContent("Carried debt") {
+                Text(BudgetMoney.formatted(uncoveredDebt, currencyCode: currencyCode))
+                  .fontDesign(.rounded).monospacedDigit()
+              }
+              Text(hasPayoffGoal
+                ? "Your payoff goal tracks this debt. Fund the payment a little each month."
+                : "Debt from before this month. A payoff goal spreads it over time.")
+                .font(.footnote)
+                .foregroundStyle(Bow.inkSoft)
+              if !hasPayoffGoal {
+                Button("Set a payoff goal") { showingGoalEditor = true }
+                  .bowSecondaryButton(size: .regular)
+                  .disabled(isPastMonth)
+              }
+            }
+            .padding(.vertical, Bow.Space.s1)
+          }
+        }
+        .listRowBackground(Bow.card)
       }
 
       Section("Debt progress") {

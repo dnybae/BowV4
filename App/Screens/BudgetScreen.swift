@@ -17,6 +17,8 @@ struct BudgetScreen: View {
   var onEditEnvelope: (UUID) -> Void
   var onImportYNAB: () -> Void
   var onMoveMoney: (BudgetBucket, BudgetBucket) -> Void
+  /// Opens the cover overspending sheet, optionally limited to one card's overspending.
+  var onCoverOverspending: (UUID?) -> Void
   var onSelectTransaction: (UUID) -> Void
   var onEditSchedule: (UUID) -> Void
   @State private var searchText = ""
@@ -31,6 +33,10 @@ struct BudgetScreen: View {
       snapshot: snapshot, envelopes: envelopes,
       accounts: accounts, allocations: allocations
     )
+  }
+
+  private var overspending: OverspendingSummary {
+    OverspendingSummary(snapshot: snapshot, envelopes: envelopes, groups: groups)
   }
 
   private var canAdvance: Bool {
@@ -73,24 +79,18 @@ struct BudgetScreen: View {
   }
 
   var body: some View {
-    ScrollViewReader { scrollProxy in
+    ScrollViewReader { _ in
       List {
         BudgetOverviewSection(
           summary: summary,
+          overspending: overspending,
           currencyCode: currencyCode,
-          hasCards: accounts.contains { $0.kind == .credit },
           canMove: !isPastMonth && (snapshot.readyToAssignMinor > 0
             || envelopes.contains { snapshot.available(for: $0.id) > 0 }
             || accounts.contains { $0.kind == .credit && snapshot.paymentAvailable[$0.id, default: 0] > 0 }),
           isPastMonth: isPastMonth,
           onAssign: assignMoney,
-          onShowCards: {
-            searchText = ""
-            Task { @MainActor in
-              await Task.yield()
-              withAnimation(.snappy) { scrollProxy.scrollTo("credit-card-payments", anchor: .top) }
-            }
-          }
+          onCoverOverspending: { onCoverOverspending(nil) }
         )
 
         let scheduled = scheduledTargets
@@ -193,6 +193,7 @@ struct BudgetScreen: View {
               envelopes: envelopes,
               allocations: allocations, schedules: schedules,
               onMoveMoney: onMoveMoney,
+              onCoverOverspending: { onCoverOverspending(card.id) },
               onSelectTransaction: onSelectTransaction,
               onEditSchedule: onEditSchedule
             )
@@ -237,8 +238,8 @@ struct BudgetScreen: View {
       source = nil
     }
     guard let source else { return }
-    if let overspent = envelopes.first(where: { snapshot.available(for: $0.id) < 0 }) {
-      onMoveMoney(source, .envelope(overspent.id))
+    if !overspending.isEmpty {
+      onCoverOverspending(nil)
     } else {
       onMoveMoney(source, .readyToAssign)
     }
@@ -263,27 +264,29 @@ enum BudgetRoute: Hashable {
 }
 
 private struct BudgetOverviewSection: View {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   var summary: BudgetSummary
+  var overspending: OverspendingSummary
   var currencyCode: String
-  var hasCards: Bool
   var canMove: Bool
   var isPastMonth: Bool
   var onAssign: () -> Void
-  var onShowCards: () -> Void
+  var onCoverOverspending: () -> Void
 
   private var isDeficit: Bool { summary.readyToAssignMinor < 0 }
-  /// Rounded down so the ring never claims 100% while money is still waiting for a job.
-  private var jobPercent: Int { Int((summary.assignedShare * 100).rounded(.down)) }
 
-  private var secondaryTotals: String? {
-    var parts: [String] = []
-    if summary.overspentMinor > 0 {
-      parts.append("\(BudgetMoney.formatted(summary.overspentMinor, currencyCode: currencyCode)) overspent")
+  private var overspentTitle: String {
+    overspending.items.count == 1 ? "1 overspent envelope" : "\(overspending.items.count) overspent envelopes"
+  }
+
+  private var overspentMessage: String {
+    let total = BudgetMoney.formatted(overspending.totalMinor, currencyCode: currencyCode)
+    if isPastMonth { return "\(total) was left uncovered when this month ended." }
+    switch (overspending.cashMinor > 0, overspending.creditMinor > 0) {
+    case (true, true): return "\(total) over. Cover it to keep next month’s budget and your card payments on track."
+    case (false, true): return "\(total) over on credit cards. Cover it so your card payments stay funded."
+    default: return "\(total) over. Cover it now or it comes out of next month’s Ready to Assign."
     }
-    if summary.assignedInFutureMinor != 0 {
-      parts.append("\(BudgetMoney.formatted(summary.assignedInFutureMinor, currencyCode: currencyCode)) assigned in future months")
-    }
-    return parts.isEmpty ? nil : parts.joined(separator: " · ")
   }
 
   var body: some View {
@@ -300,13 +303,12 @@ private struct BudgetOverviewSection: View {
               .foregroundStyle(isDeficit ? Bow.overInk : Bow.ink)
               .lineLimit(1)
               .minimumScaleFactor(0.4)
-            Text("\(jobPercent)% has a job")
-              .font(.bowSubhead.weight(.semibold))
-              .foregroundStyle(Bow.bowInk)
           }
           .frame(maxWidth: 180)
         }
         .accessibilityElement(children: .combine)
+        // Rounded down so the ring never claims 100% while money is still waiting for a job.
+        .accessibilityValue("\(Int((summary.assignedShare * 100).rounded(.down))) percent assigned")
 
         if isDeficit || isPastMonth {
           Text(isDeficit ? "Move money back or add cash to cover this deficit." : "View only · Past budget month")
@@ -328,8 +330,8 @@ private struct BudgetOverviewSection: View {
         .padding(.horizontal, Bow.Space.s2)
         .glassEffect(.regular, in: .rect(cornerRadius: Bow.Radius.lg))
 
-        if let secondaryTotals {
-          Text(secondaryTotals)
+        if summary.assignedInFutureMinor != 0 {
+          Text("\(BudgetMoney.formatted(summary.assignedInFutureMinor, currencyCode: currencyCode)) assigned in future months")
             .font(.bowFootnote)
             .monospacedDigit()
             .foregroundStyle(Bow.inkSoft)
@@ -341,23 +343,20 @@ private struct BudgetOverviewSection: View {
       .listRowSeparator(.hidden)
       .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: Bow.Space.s2, trailing: 0))
 
-      if hasCards {
-        Button(action: onShowCards) {
-          NoteCard(
-            symbol: "creditcard",
-            title: summary.creditUncoveredMinor == 0 ? "Credit payments fully funded" : "Credit debt needs funding",
-            message: summary.creditUncoveredMinor == 0
-              ? "Payment money is set aside for current debt."
-              : "\(BudgetMoney.formatted(summary.creditUncoveredMinor, currencyCode: currencyCode)) of card debt is uncovered. Fund it from your card payments below."
-          )
+      if !overspending.isEmpty {
+        Button(action: onCoverOverspending) {
+          NoteCard(symbol: "exclamationmark.triangle.fill", title: overspentTitle, message: overspentMessage)
         }
         .buttonStyle(.plain)
-        .accessibilityHint("Shows credit card payments")
+        .disabled(isPastMonth)
+        .accessibilityHint(isPastMonth ? "" : "Choose envelopes to cover the overspending")
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: Bow.Space.s2, leading: 0, bottom: Bow.Space.s2, trailing: 0))
+        .transition(.opacity.combined(with: .scale(scale: 0.96)))
       }
     }
+    .animation(reduceMotion ? nil : .snappy, value: overspending.items.map(\.envelopeID))
   }
 
   private func metric(_ title: String, amount: Int64) -> some View {
@@ -373,53 +372,6 @@ private struct BudgetOverviewSection: View {
         .minimumScaleFactor(0.6)
     }
     .frame(maxWidth: .infinity)
-    .accessibilityElement(children: .combine)
-  }
-}
-
-private struct EnvelopeBudgetRow: View {
-  var name: String
-  var availableMinor: Int64
-  var cashOverspentMinor: Int64
-  var creditOverspentMinor: Int64
-  var assignedMinor: Int64
-  var activityMinor: Int64
-  var monthlyTargetMinor: Int64?
-  var currencyCode: String
-
-  private var status: EnvelopeStatus {
-    EnvelopeStatus(
-      availableMinor: availableMinor, assignedMinor: assignedMinor, activityMinor: activityMinor,
-      monthlyTargetMinor: monthlyTargetMinor, currencyCode: currencyCode
-    )
-  }
-
-  private var detail: String {
-    if availableMinor < 0 {
-      return cashOverspentMinor > 0 ? "Cash overspent"
-        : creditOverspentMinor > 0 ? "Credit overspent · adds debt" : "Overspent"
-    }
-    let spent = BudgetMoney.formatted(max(0, -activityMinor), currencyCode: currencyCode)
-    return "Spent \(spent) of \(BudgetMoney.formatted(assignedMinor, currencyCode: currencyCode))"
-  }
-
-  var body: some View {
-    let status = status
-    HStack(spacing: Bow.Space.s3) {
-      StatusRing(fraction: status.ringFraction, state: status.state)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(name)
-          .font(.bowBody)
-          .foregroundStyle(Bow.ink)
-        Text(detail)
-          .font(.bowFootnote)
-          .foregroundStyle(Bow.inkSoft)
-      }
-      Spacer(minLength: Bow.Space.s2)
-      StatusPill(text: status.pillText, state: status.state)
-    }
-    .frame(minHeight: 44)
-    .padding(.vertical, Bow.Space.s1)
     .accessibilityElement(children: .combine)
   }
 }

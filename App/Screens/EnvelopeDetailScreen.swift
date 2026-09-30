@@ -5,6 +5,7 @@ struct EnvelopeDetailScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
   @Query private var payees: [BudgetPayee]
+  @Query private var groups: [BudgetGroup]
   var envelope: BudgetEnvelope
   var currencyCode: String
   var snapshot: BudgetSnapshot
@@ -61,61 +62,121 @@ struct EnvelopeDetailScreen: View {
     return remainder > 0 ? remainder : nil
   }
 
+  private var availableMinor: Int64 { snapshot.available(for: envelope.id) }
+
+  private var status: EnvelopeStatus {
+    EnvelopeStatus(
+      availableMinor: availableMinor,
+      assignedMinor: snapshot.assigned[envelope.id, default: 0],
+      activityMinor: snapshot.activity[envelope.id, default: 0],
+      monthlyTargetMinor: totalTarget, currencyCode: currencyCode
+    )
+  }
+
+  /// Progress toward this month's target; without a target, the same fill as the Budget row.
+  private var heroFraction: Double {
+    guard availableMinor >= 0, let totalTarget else { return status.ringFraction }
+    return min(1, Double(max(0, snapshot.assigned[envelope.id, default: 0])) / Double(totalTarget))
+  }
+
+  private var heroCaption: String {
+    if let totalTarget {
+      let assigned = BudgetMoney.formatted(max(0, snapshot.assigned[envelope.id, default: 0]), currencyCode: currencyCode)
+      return "\(assigned) of \(BudgetMoney.formatted(totalTarget, currencyCode: currencyCode))"
+    }
+    return snapshot.month.formatted(.dateTime.month(.wide).year())
+  }
+
+  private var statusHeadline: (title: String, message: String)? {
+    switch status.state {
+    case .over:
+      return ("Over by \(BudgetMoney.formatted(-availableMinor, currencyCode: currencyCode))",
+              "Cover it from another envelope.")
+    case .needs:
+      return (status.pillText, "to reach this month’s target")
+    case .funded where totalTarget != nil:
+      return ("Target met", "This month’s target is fully assigned.")
+    case .funded, .empty:
+      return nil
+    }
+  }
+
+  private var primaryActionTitle: String {
+    if availableMinor < 0 { return "Cover overspending" }
+    return snapshot.readyToAssignMinor > 0 ? "Assign money" : "Move money"
+  }
+
+  private var canMoveMoneyIn: Bool {
+    !isPastMonth && (snapshot.readyToAssignMinor > 0
+      || availableMinor > 0
+      || envelopes.contains { $0.id != envelope.id && snapshot.available(for: $0.id) > 0 }
+      || accounts.contains { $0.kind == .credit && snapshot.paymentAvailable[$0.id, default: 0] > 0 })
+  }
+
+  private var groupName: String {
+    groups.first { $0.id == envelope.groupID }?.name ?? ""
+  }
+
   var body: some View {
     List {
       Section {
-        VStack(alignment: .leading, spacing: 8) {
-          Text("Available")
-            .font(.subheadline)
-            .foregroundStyle(Bow.inkSoft)
-          Text(BudgetMoney.formatted(snapshot.available(for: envelope.id), currencyCode: currencyCode))
-            .font(.system(.largeTitle, design: .rounded, weight: .semibold))
-            .foregroundStyle(snapshot.available(for: envelope.id) < 0 ? Bow.overInk : Bow.ink)
-            .fontDesign(.rounded).monospacedDigit()
-          Text(snapshot.month.formatted(.dateTime.month(.wide).year()))
-            .font(.footnote).foregroundStyle(Bow.inkSoft)
-          HStack(spacing: 16) {
-            LabeledContent("Assigned") {
-              Text(BudgetMoney.formatted(
-                snapshot.assigned[envelope.id, default: 0], currencyCode: currencyCode
-              ))
-                .fontDesign(.rounded).monospacedDigit()
+        VStack(spacing: Bow.Space.s4) {
+          GlowRing(fraction: heroFraction, color: status.state.ring, size: 200) {
+            VStack(spacing: Bow.Space.s1) {
+              Text("Available")
+                .font(.bowSubhead)
+                .foregroundStyle(Bow.inkSoft)
+              Text(BudgetMoney.formatted(availableMinor, currencyCode: currencyCode))
+                .font(.bowHero)
+                .monospacedDigit()
+                .foregroundStyle(Bow.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.4)
+              Text(heroCaption)
+                .font(.bowFootnote)
+                .monospacedDigit()
+                .foregroundStyle(Bow.inkSoft)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             }
-            LabeledContent("Activity") {
-              Text(BudgetMoney.formatted(
-                snapshot.activity[envelope.id, default: 0], currencyCode: currencyCode
-              ))
-                .fontDesign(.rounded).monospacedDigit()
+            .frame(maxWidth: 170)
+          }
+          .accessibilityElement(children: .combine)
+
+          if let statusHeadline {
+            VStack(spacing: 2) {
+              Text(statusHeadline.title)
+                .font(.bowTitle)
+                .monospacedDigit()
+                .foregroundStyle(Bow.ink)
+              Text(statusHeadline.message)
+                .font(.bowSubhead)
+                .foregroundStyle(Bow.inkSoft)
+            }
+            .multilineTextAlignment(.center)
+            .accessibilityElement(children: .combine)
+          }
+
+          HStack(spacing: Bow.Space.s3) {
+            Button(primaryActionTitle, action: moveMoneyIn)
+              .bowPrimaryButton()
+              .disabled(!canMoveMoneyIn)
+            if availableMinor > 0 && !isPastMonth {
+              Button("Move out") { onMoveMoney(.envelope(envelope.id), .readyToAssign) }
+                .bowSecondaryButton()
             }
           }
-          .font(.caption)
-          Button("Move Money", systemImage: "arrow.left.arrow.right") {
-            let target = BudgetBucket.envelope(envelope.id)
-            if snapshot.readyToAssignMinor > 0 {
-              onMoveMoney(.readyToAssign, target)
-            } else if let funded = envelopes.first(where: {
-              $0.id != envelope.id && snapshot.available(for: $0.id) > 0
-            }) {
-              onMoveMoney(.envelope(funded.id), target)
-            } else if let card = accounts.first(where: {
-              $0.kind == .credit && snapshot.paymentAvailable[$0.id, default: 0] > 0
-            }) {
-              onMoveMoney(.cardPayment(card.id), target)
-            } else {
-              onMoveMoney(target, .readyToAssign)
-            }
+
+          HStack(spacing: Bow.Space.s3) {
+            statTile("Assigned", amount: snapshot.assigned[envelope.id, default: 0])
+            statTile("Spent", amount: max(0, -(snapshot.activity[envelope.id, default: 0])))
+            statTile("Carried in", amount: snapshot.carriedIn(for: envelope.id))
           }
-          .bowPrimaryButton()
-          .disabled(isPastMonth || snapshot.readyToAssignMinor <= 0
-            && snapshot.available(for: envelope.id) <= 0
-            && !envelopes.contains { $0.id != envelope.id && snapshot.available(for: $0.id) > 0 }
-            && !accounts.contains { $0.kind == .credit && snapshot.paymentAvailable[$0.id, default: 0] > 0 })
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.top, 8)
         }
-        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: Bow.Space.s2, trailing: 0))
       }
-      .listRowBackground(Bow.card)
 
       Section {
         if let totalTarget {
@@ -261,8 +322,11 @@ struct EnvelopeDetailScreen: View {
       }
       .listRowBackground(Bow.card) }
     }
-    .bowListBackground()
+    .bowListBackground {
+      Bow.mist.overlay(alignment: .top) { SkyBackground(mood: status.state.sky) }
+    }
     .navigationTitle(envelope.name)
+    .navigationSubtitle(groupName)
     .task(id: envelope.id) {
       let nextMonth = Calendar.current.date(byAdding: .month, value: 1, to: snapshot.month) ?? .distantFuture
       await feed.reload(container: modelContext.container, searchText: "", filter: TransactionFilter(),
@@ -306,6 +370,42 @@ struct EnvelopeDetailScreen: View {
       Button("OK") { message = nil }
     } message: {
       Text(message ?? "")
+    }
+  }
+
+  private func statTile(_ title: String, amount: Int64) -> some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(title)
+        .font(.bowFootnote)
+        .foregroundStyle(Bow.inkSoft)
+      Text(BudgetMoney.formatted(amount, currencyCode: currencyCode))
+        .font(.bowAmount)
+        .monospacedDigit()
+        .foregroundStyle(Bow.ink)
+        .lineLimit(1)
+        .minimumScaleFactor(0.6)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(Bow.Space.s3)
+    .bowCard(radius: Bow.Radius.md)
+    .accessibilityElement(children: .combine)
+  }
+
+  /// Opens Move Money into this envelope from the most useful source, as before the redesign.
+  private func moveMoneyIn() {
+    let target = BudgetBucket.envelope(envelope.id)
+    if snapshot.readyToAssignMinor > 0 {
+      onMoveMoney(.readyToAssign, target)
+    } else if let funded = envelopes.first(where: {
+      $0.id != envelope.id && snapshot.available(for: $0.id) > 0
+    }) {
+      onMoveMoney(.envelope(funded.id), target)
+    } else if let card = accounts.first(where: {
+      $0.kind == .credit && snapshot.paymentAvailable[$0.id, default: 0] > 0
+    }) {
+      onMoveMoney(.cardPayment(card.id), target)
+    } else {
+      onMoveMoney(target, .readyToAssign)
     }
   }
 

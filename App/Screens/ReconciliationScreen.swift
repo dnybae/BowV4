@@ -20,9 +20,54 @@ struct ReconciliationScreen: View {
   private var enteredBalance: Int64? { statementBalanceMinor }
   private var difference: Int64? { enteredBalance.map { $0 - clearedBalanceMinor } }
 
+  /// Matches the rule the Finish button already uses: the statement equals the cleared balance.
+  private var isBalanced: Bool { difference == 0 }
+
+  private var heroTitle: String {
+    if isBalanced { return "Balanced" }
+    return "Off by \(BudgetMoney.formatted(abs(difference ?? 0), currencyCode: currencyCode))"
+  }
+
+  private var heroMessage: String {
+    let statement = BudgetMoney.formatted(statementBalanceMinor, currencyCode: currencyCode)
+    let date = statementDate.formatted(.dateTime.month(.abbreviated).day())
+    if isBalanced {
+      return "\(account.name) matches your bank statement of \(statement) on \(date)."
+    }
+    if statementBalanceMinor == 0 {
+      return "Enter the balance on your statement, then check off what cleared."
+    }
+    return "Check off transactions that cleared by \(date) until the difference is zero."
+  }
+
   var body: some View {
     NavigationStack {
       List {
+        Section {
+          VStack(spacing: Bow.Space.s3) {
+            PulseTarget(color: isBalanced ? Bow.funded : Bow.bow, size: 150) {
+              Image(systemName: isBalanced ? "checkmark" : "scalemass")
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(isBalanced ? Bow.funded : Bow.bow)
+            }
+            .accessibilityHidden(true)
+            VStack(spacing: Bow.Space.s1) {
+              Text(heroTitle)
+                .font(.bowLargeTitle)
+                .monospacedDigit()
+                .foregroundStyle(Bow.ink)
+              Text(heroMessage)
+                .font(.bowSubhead)
+                .monospacedDigit()
+                .foregroundStyle(Bow.inkSoft)
+            }
+            .multilineTextAlignment(.center)
+            .accessibilityElement(children: .combine)
+          }
+          .frame(maxWidth: .infinity)
+          .listRowBackground(Color.clear)
+        }
+
         Section {
           DatePicker("Statement date", selection: $statementDate, in: ...Date(), displayedComponents: .date)
           CurrencyAmountField("Statement balance", minor: $statementBalanceMinor,
@@ -33,7 +78,7 @@ struct ReconciliationScreen: View {
           Text("Enter the balance shown by your bank on the statement date.")
         }
         .listRowBackground(Bow.card)
-        Section("Difference") {
+        Section {
           LabeledContent("Cleared balance") {
             Text(BudgetMoney.formatted(clearedBalanceMinor, currencyCode: currencyCode))
               .fontDesign(.rounded).monospacedDigit()
@@ -65,19 +110,21 @@ struct ReconciliationScreen: View {
               } label: {
                 HStack(spacing: 12) {
                   Image(systemName: selectedIDs.contains(entry.id) ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selectedIDs.contains(entry.id) ? Color.accentColor : Bow.inkSoft)
-                    .font(.title3)
-                  VStack(alignment: .leading) {
+                    .foregroundStyle(selectedIDs.contains(entry.id) ? Bow.bowSolid : Bow.inkFaint)
+                    .font(.title2)
+                  VStack(alignment: .leading, spacing: 2) {
                     Text(payeeNames[entry.id].flatMap { $0.isEmpty ? nil : $0 } ?? "Transfer")
+                      .font(.bowBody)
                       .foregroundStyle(Bow.ink)
-                    Text(entry.date, style: .date)
-                      .font(.caption)
+                    Text(entry.date.formatted(.dateTime.month(.abbreviated).day()))
+                      .font(.bowFootnote)
                       .foregroundStyle(Bow.inkSoft)
                   }
                   Spacer()
                   Text(BudgetMoney.formatted(entry.amountMinor, currencyCode: currencyCode))
+                    .font(.bowAmount)
+                    .monospacedDigit()
                     .foregroundStyle(Bow.ink)
-                    .fontDesign(.rounded).monospacedDigit()
                 }
                 .contentShape(Rectangle())
               }
@@ -85,14 +132,14 @@ struct ReconciliationScreen: View {
               .accessibilityLabel("\(payeeNames[entry.id] ?? "Transfer"), \(BudgetMoney.formatted(entry.amountMinor, currencyCode: currencyCode)), \(selectedIDs.contains(entry.id) ? "cleared" : "uncleared")")
             }
             if visibleEntryCount < entries.count {
-              Button("Show More Transactions") { visibleEntryCount += 300 }
+              Button("Show more transactions") { visibleEntryCount += 300 }
             }
           }
         } header: {
           HStack {
             Text("Transactions")
             Spacer()
-            Button("Select All") {
+            Button("Select all") {
               selectedIDs = Set(entries.map(\.id))
               clearedBalanceMinor = calculator.clearedBalance(
                 openingBalanceMinor: account.openingBalanceMinor,
@@ -106,8 +153,10 @@ struct ReconciliationScreen: View {
         }
         .listRowBackground(Bow.card)
       }
-      .bowListBackground()
-      .navigationTitle("Reconcile \(account.name)")
+      .bowListBackground {
+        Bow.mist.overlay(alignment: .top) { SkyBackground(mood: isBalanced ? .mint : .dawn, height: 460) }
+      }
+      .navigationTitle("Reconcile")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -119,7 +168,7 @@ struct ReconciliationScreen: View {
       .task(id: statementDate) {
         await loadEntries()
       }
-      .alert("Couldn’t Reconcile", isPresented: Binding(
+      .alert("Couldn’t reconcile", isPresented: Binding(
         get: { errorMessage != nil },
         set: { if !$0 { errorMessage = nil } }
       )) {

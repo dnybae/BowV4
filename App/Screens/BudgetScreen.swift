@@ -20,9 +20,22 @@ struct BudgetScreen: View {
   var onCoverOverspending: (CoverOverspendingScope) -> Void
   var onSelectTransaction: (UUID) -> Void
   var onEditSchedule: (UUID) -> Void
+  /// Which way the last month change went, so the title slides the same way.
+  @State private var monthDirection: Edge = .trailing
+  /// A small, damped follow of a horizontal swipe before it commits a month change.
+  @State private var swipeOffset: CGFloat = 0
+  @State private var showsMonthLoading = false
+
+  /// Everything on screen describes the loaded snapshot's month. `selectedMonth` can briefly be
+  /// ahead of it while the next month calculates.
+  private var displayedMonth: Date { snapshot.month }
+
+  private var isShowingSelectedMonth: Bool {
+    Calendar.current.isDate(snapshot.month, equalTo: selectedMonth, toGranularity: .month)
+  }
 
   private var isPastMonth: Bool {
-    (Calendar.current.dateInterval(of: .month, for: selectedMonth)?.start ?? selectedMonth)
+    (Calendar.current.dateInterval(of: .month, for: displayedMonth)?.start ?? displayedMonth)
       < (Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date())
   }
 
@@ -38,7 +51,8 @@ struct BudgetScreen: View {
   }
 
   private var canAdvance: Bool {
-    BudgetMonthAccessPolicy().canAdvance(
+    // The policy needs the selected month's assignments; wait until they've loaded.
+    isShowingSelectedMonth && BudgetMonthAccessPolicy().canAdvance(
       from: selectedMonth, today: Date(), assignedMinor: summary.assignedThisMonthMinor
     )
   }
@@ -134,14 +148,26 @@ struct BudgetScreen: View {
           .listRowBackground(Bow.card)
         }
       }
+      .offset(x: swipeOffset)
       .bowListBackground {
-        Bow.mist.overlay(alignment: .top) { SkyBackground(mood: skyMood) }
+        Bow.mist.overlay(alignment: .top) {
+          ZStack {
+            SkyBackground(mood: skyMood)
+              .id(skyMood)
+              .transition(.opacity)
+          }
+          .bowAnimation(value: skyMood)
+        }
       }
-      .animation(Bow.motion(reduceMotion: reduceMotion), value: selectedMonth)
-      .navigationTitle(selectedMonth.formatted(.dateTime.month(.wide)))
-      .navigationSubtitle(selectedMonth.formatted(.dateTime.year()))
+      .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))
       .navigationBarTitleDisplayMode(.inline)
+      .sensoryFeedback(.selection, trigger: displayedMonth)
       .toolbar {
+        ToolbarItem(placement: .principal) {
+          BudgetMonthTitle(
+            month: displayedMonth, direction: monthDirection, isLoading: showsMonthLoading
+          )
+        }
         ToolbarItemGroup(placement: .topBarTrailing) {
           Button("Previous Month", systemImage: "chevron.left") { changeMonth(-1) }
             .labelStyle(.iconOnly)
@@ -151,11 +177,25 @@ struct BudgetScreen: View {
             .accessibilityHint(canAdvance ? "" : "Assign money in this month to plan the next month")
         }
       }
-      .simultaneousGesture(DragGesture(minimumDistance: 50).onEnded { value in
-        guard abs(value.translation.width) > 90,
-              abs(value.translation.width) > abs(value.translation.height) * 1.6 else { return }
-        changeMonth(value.translation.width < 0 ? 1 : -1)
-      })
+      .simultaneousGesture(DragGesture(minimumDistance: 30)
+        .onChanged { value in
+          guard !reduceMotion else { return }
+          let isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.6
+          swipeOffset = isHorizontal ? max(-16, min(16, value.translation.width * 0.15)) : 0
+        }
+        .onEnded { value in
+          withAnimation(Bow.motion(reduceMotion: reduceMotion)) { swipeOffset = 0 }
+          guard abs(value.translation.width) > 90,
+                abs(value.translation.width) > abs(value.translation.height) * 1.6 else { return }
+          changeMonth(value.translation.width < 0 ? 1 : -1)
+        })
+      .task(id: isShowingSelectedMonth) {
+        // Only show a spinner if the next month takes long enough to notice.
+        showsMonthLoading = false
+        guard !isShowingSelectedMonth else { return }
+        try? await Task.sleep(for: .milliseconds(300))
+        if !Task.isCancelled { showsMonthLoading = true }
+      }
       .navigationDestination(for: BudgetRoute.self) { route in
         switch route {
         case .envelope(let id):
@@ -191,6 +231,7 @@ struct BudgetScreen: View {
       }
       .onChange(of: returnToPresentRequest) { _, _ in
         let current = Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
+        monthDirection = current < selectedMonth ? .leading : .trailing
         withAnimation(Bow.motion(reduceMotion: reduceMotion)) { selectedMonth = current }
       }
       .onChange(of: lastAccessibleMonth) { _, _ in
@@ -231,13 +272,47 @@ struct BudgetScreen: View {
   private func changeMonth(_ amount: Int) {
     if amount > 0 && !canAdvance { return }
     guard let next = Calendar.current.date(byAdding: .month, value: amount, to: selectedMonth) else { return }
+    monthDirection = amount > 0 ? .trailing : .leading
     withAnimation(Bow.motion(reduceMotion: reduceMotion)) { selectedMonth = next }
   }
 
   private func enforceMonthAccess() {
     let viewed = Calendar.current.dateInterval(of: .month, for: selectedMonth)?.start ?? selectedMonth
     guard viewed > lastAccessibleMonth else { return }
+    monthDirection = .leading
     withAnimation(Bow.motion(reduceMotion: reduceMotion)) { selectedMonth = lastAccessibleMonth }
+  }
+}
+
+/// Month and year in the navigation bar. The month slides in from the direction the user moved.
+private struct BudgetMonthTitle: View {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  var month: Date
+  var direction: Edge
+  var isLoading: Bool
+
+  var body: some View {
+    HStack(spacing: Bow.Space.s2) {
+      VStack(spacing: 0) {
+        Text(month.formatted(.dateTime.month(.wide)))
+          .font(.headline)
+          .foregroundStyle(Bow.ink)
+        Text(month.formatted(.dateTime.year()))
+          .font(.subheadline)
+          .foregroundStyle(Bow.inkSoft)
+      }
+      .id(month)
+      .transition(reduceMotion ? .opacity : .push(from: direction))
+      if isLoading {
+        ProgressView()
+          .controlSize(.small)
+          .accessibilityLabel("Loading month")
+      }
+    }
+    .clipped()
+    .bowAnimation(value: month)
+    .accessibilityElement(children: .combine)
+    .accessibilityAddTraits(.isHeader)
   }
 }
 

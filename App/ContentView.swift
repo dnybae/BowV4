@@ -65,6 +65,7 @@ private struct BudgetHomeView: View {
   var isDemoMode: Bool
   @Environment(\.modelContext) private var modelContext
   @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Query private var profiles: [BudgetProfile]
   @Query private var accounts: [BudgetAccount]
   @Query private var groups: [BudgetGroup]
@@ -94,6 +95,13 @@ private struct BudgetHomeView: View {
   private static let addTransactionTabTitle = "Add Transaction"
 
   private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
+
+  /// The month the Budget screen is showing. Actions act on what the user sees,
+  /// even in the moment before a newly selected month finishes loading.
+  private var displayedBudgetMonth: Date {
+    let month = loadedSnapshot?.month ?? selectedMonth
+    return Calendar.current.dateInterval(of: .month, for: month)?.start ?? month
+  }
 
   private var accountsTabSymbol: String {
     if #available(iOS 27.0, *) {
@@ -131,8 +139,9 @@ private struct BudgetHomeView: View {
           Tab("Budget", systemImage: "square.grid.2x2.fill", value: .budget) {
             NavigationStack(path: $budgetPath) {
               Group {
-              if let snapshot = loadedSnapshot,
-                 Calendar.current.isDate(snapshot.month, equalTo: selectedMonth, toGranularity: .month) {
+              // Keep showing the last loaded month while the next one calculates, so the
+              // screen stays in place and its numbers roll to the new month.
+              if let snapshot = loadedSnapshot, ledgerError == nil {
                 BudgetScreen(
                 currencyCode: currencyCode,
                 groups: groups,
@@ -149,12 +158,10 @@ private struct BudgetHomeView: View {
                 onEditEnvelope: { activeSheet = .editEnvelope($0) },
                 onImportYNAB: { activeSheet = .importYNAB },
                 onMoveMoney: { source, target in
-                  let month = Calendar.current.dateInterval(of: .month, for: selectedMonth)?.start ?? selectedMonth
-                  activeSheet = .moveMoney(source, target, month)
+                  activeSheet = .moveMoney(source, target, displayedBudgetMonth)
                 },
                 onCoverOverspending: { scope in
-                  let month = Calendar.current.dateInterval(of: .month, for: selectedMonth)?.start ?? selectedMonth
-                  activeSheet = .coverOverspending(month, scope)
+                  activeSheet = .coverOverspending(displayedBudgetMonth, scope)
                 },
                 onSelectTransaction: { activeSheet = .editTransaction($0) },
                 onEditSchedule: { activeSheet = .editSchedule($0) }
@@ -426,8 +433,10 @@ private struct BudgetHomeView: View {
       guard !Task.isCancelled,
             generation == ledgerRefreshGeneration,
             Calendar.current.isDate(month, equalTo: selectedMonth, toGranularity: .month) else { return }
-      loadedSnapshot = result.current
-      loadedPreviousSnapshot = result.previous
+      withAnimation(Bow.motion(reduceMotion: reduceMotion)) {
+        loadedSnapshot = result.current
+        loadedPreviousSnapshot = result.previous
+      }
       loadedAccountReport = result.accountReport
       ledgerError = nil
     } catch is CancellationError {

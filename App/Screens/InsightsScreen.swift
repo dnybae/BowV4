@@ -84,6 +84,95 @@ struct InsightsScreen: View {
     }.sorted { $0.totalMinor > $1.totalMinor }
   }
 
+  /// "The Arrow": recent net worth flowing into the six-month estimate, drawn on a sky card.
+  private var arrowCard: some View {
+    let past = monthItems.suffix(3).compactMap { item in item.netWorthMinor.map { (item.month, $0) } }
+    let today = past.last
+    let projection = (today.map { [$0] } ?? []) + forecast.map { ($0.month, $0.netWorthMinor) }
+    return VStack(alignment: .leading, spacing: Bow.Space.s3) {
+      Label("The Arrow", systemImage: "chart.line.uptrend.xyaxis")
+        .font(.bowSubhead.weight(.semibold))
+        .foregroundStyle(Bow.bowInk)
+      Text("Where your net worth is headed")
+        .font(.bowTitle)
+        .foregroundStyle(Bow.ink)
+      Chart {
+        ForEach(past, id: \.0) { month, value in
+          LineMark(x: .value("Month", month, unit: .month), y: .value("Net Worth", Double(value) / 100),
+                   series: .value("Series", "Past"))
+            .interpolationMethod(.catmullRom)
+            .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round))
+            .foregroundStyle(Bow.bow.opacity(0.45))
+        }
+        ForEach(projection, id: \.0) { month, value in
+          LineMark(x: .value("Month", month, unit: .month), y: .value("Net Worth", Double(value) / 100),
+                   series: .value("Series", "Projected"))
+            .interpolationMethod(.catmullRom)
+            .lineStyle(StrokeStyle(lineWidth: 4, lineCap: .round))
+            .foregroundStyle(LinearGradient(colors: [Bow.bow.opacity(0.6), Bow.bow], startPoint: .leading, endPoint: .trailing))
+        }
+        if let today {
+          PointMark(x: .value("Month", today.0, unit: .month), y: .value("Net Worth", Double(today.1) / 100))
+            .symbolSize(120)
+            .foregroundStyle(Bow.bow)
+            .annotation(position: .bottom, alignment: .center, spacing: 6) {
+              VStack(spacing: 0) {
+                Text("Today").font(.bowFootnote).foregroundStyle(Bow.inkSoft)
+                Text(BudgetMoney.formatted(today.1, currencyCode: currencyCode))
+                  .font(.bowAmountSm).monospacedDigit().foregroundStyle(Bow.ink)
+              }
+            }
+        }
+        if let last = forecast.last {
+          PointMark(x: .value("Month", last.month, unit: .month), y: .value("Net Worth", Double(last.netWorthMinor) / 100))
+            .symbol {
+              Image(systemName: "arrowtriangle.right.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(Bow.bow)
+            }
+            .annotation(position: .bottom, alignment: .trailing, spacing: 10) {
+              VStack(alignment: .trailing, spacing: 0) {
+                Text(last.month.formatted(.dateTime.month(.wide).year()))
+                  .font(.bowFootnote).foregroundStyle(Bow.inkSoft)
+                Text(BudgetMoney.formatted(last.netWorthMinor, currencyCode: currencyCode))
+                  .font(.bowTitle).monospacedDigit().foregroundStyle(Bow.bowInk)
+              }
+            }
+        }
+      }
+      .chartYAxis(.hidden)
+      .chartXAxis(.hidden)
+      .chartYScale(domain: .automatic(includesZero: false))
+      .frame(height: 210)
+      .padding(.vertical, Bow.Space.s4)
+      .shadow(color: Bow.bow.opacity(0.35), radius: 8)
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel("Net worth forecast")
+      .accessibilityValue(forecast.last.map {
+        "Projected \(BudgetMoney.formatted($0.netWorthMinor, currencyCode: currencyCode)) by \($0.month.formatted(.dateTime.month(.wide).year()))"
+      } ?? "Not enough data yet")
+      Text("Estimate from recent income, spending and schedules. Transfers between your own accounts don’t change net worth.")
+        .font(.bowFootnote)
+        .foregroundStyle(Bow.inkSoft)
+    }
+    .padding(Bow.Space.s5)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background {
+      ZStack {
+        Bow.card
+        LinearGradient(colors: [SkyMood.dawn.top, Bow.card.opacity(0)], startPoint: .top, endPoint: .bottom)
+        RadialGradient(colors: [SkyMood.dawn.warm.opacity(0.8), .clear], center: .topTrailing, startRadius: 0, endRadius: 220)
+      }
+    }
+    .clipShape(RoundedRectangle(cornerRadius: Bow.Radius.xl, style: .continuous))
+    .shadow(color: .black.opacity(0.05), radius: 10, y: 6)
+  }
+
+  /// Calm categorical colors for envelope groups. Coral is left out because it means overspent.
+  private static let groupPalette: [Color] = [
+    Bow.bow, Bow.funded, Bow.needs, Bow.bowInk, Bow.fundedInk, Bow.needsInk, Bow.inkSoft
+  ]
+
   private var currencyAxis: some AxisContent {
     AxisMarks { _ in
       AxisGridLine()
@@ -93,48 +182,51 @@ struct InsightsScreen: View {
 
   var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 28) {
-        VStack(alignment: .leading, spacing: 5) {
-          Text("See where your money goes")
-            .font(.title2.weight(.semibold))
-          Text("Six months of income, spending, and net worth")
-            .foregroundStyle(Bow.inkSoft)
-        }
+      VStack(alignment: .leading, spacing: Bow.Space.s4) {
+        arrowCard
 
         VStack(alignment: .leading, spacing: 12) {
-          Text("Income & Spending").font(.headline)
+          Text("Income and spending").font(.bowHeadline).foregroundStyle(Bow.ink)
           Chart {
             ForEach(monthItems) { item in
               BarMark(x: .value("Month", item.month, unit: .month), y: .value("Amount", Double(item.incomeMinor) / 100))
                 .foregroundStyle(by: .value("Flow", "Income"))
                 .position(by: .value("Flow", "Income"))
+                .clipShape(Capsule())
               BarMark(x: .value("Month", item.month, unit: .month), y: .value("Amount", Double(item.expenseMinor) / 100))
                 .foregroundStyle(by: .value("Flow", "Spending"))
                 .position(by: .value("Flow", "Spending"))
+                .clipShape(Capsule())
             }
           }
-          .chartForegroundStyleScale(["Income": Color.green, "Spending": Color.orange])
+          .chartForegroundStyleScale([
+            "Income": LinearGradient(colors: [Bow.funded.opacity(0.6), Bow.funded], startPoint: .top, endPoint: .bottom),
+            "Spending": LinearGradient(colors: [Bow.bow.opacity(0.6), Bow.bow], startPoint: .top, endPoint: .bottom)
+          ])
           .chartXSelection(value: $selectedBarMonth)
           .frame(height: 220)
           .chartYAxis { currencyAxis }
+          .shadow(color: Bow.bow.opacity(0.18), radius: 8, y: 4)
           Text("Tap a month to see its transactions.")
-            .font(.caption)
+            .font(.bowFootnote)
             .foregroundStyle(Bow.inkSoft)
         }
         .insightCard()
 
         VStack(alignment: .leading, spacing: 12) {
-          Text("Spending by Group").font(.headline)
+          Text("Spending by group").font(.bowHeadline).foregroundStyle(Bow.ink)
           Text((months.last ?? Date()).formatted(.dateTime.month(.wide).year()))
-            .font(.subheadline)
+            .font(.bowSubhead)
             .foregroundStyle(Bow.inkSoft)
           if spendingGroups.isEmpty {
             ContentUnavailableView("No spending yet", systemImage: "chart.pie", description: Text("Categorized expenses will appear here."))
           } else {
             Chart(spendingGroups) { group in
               SectorMark(angle: .value("Spending", Double(group.totalMinor)), innerRadius: .ratio(0.65), angularInset: 2)
+                .cornerRadius(4)
                 .foregroundStyle(by: .value("Group", group.name))
             }
+            .chartForegroundStyleScale(domain: spendingGroups.map(\.name), range: Self.groupPalette)
             .chartAngleSelection(value: $selectedSpendingAngle)
             .frame(height: 210)
             .accessibilityLabel("Spending by envelope group")
@@ -144,10 +236,17 @@ struct InsightsScreen: View {
               } label: {
                 HStack {
                   Text(group.name)
+                    .font(.bowBody)
+                    .foregroundStyle(Bow.ink)
                   Spacer()
                   Text(BudgetMoney.formatted(group.totalMinor, currencyCode: currencyCode))
-                    .foregroundStyle(Bow.inkSoft)
-                    .fontDesign(.rounded).monospacedDigit()
+                    .font(.bowAmountSm)
+                    .monospacedDigit()
+                    .foregroundStyle(Bow.ink)
+                  Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Bow.inkFaint)
+                    .accessibilityHidden(true)
                 }
                 .contentShape(Rectangle())
               }
@@ -158,73 +257,36 @@ struct InsightsScreen: View {
         .insightCard()
 
         VStack(alignment: .leading, spacing: 12) {
-          Text("Net Worth").font(.headline)
+          Text("Net worth").font(.bowHeadline).foregroundStyle(Bow.ink)
           if let value = currentNetWorth.netWorthMinor {
             Text(BudgetMoney.formatted(value, currencyCode: currencyCode))
-              .font(.title2.weight(.semibold))
+              .font(.bowTitle)
               .monospacedDigit()
+              .foregroundStyle(Bow.ink)
               .accessibilityLabel("Current net worth, \(BudgetMoney.formatted(value, currencyCode: currencyCode))")
           } else {
             Text("Net worth unavailable")
-              .font(.subheadline.weight(.semibold))
+              .font(.bowSubhead.weight(.semibold))
             Text(netWorthIssueDescription)
-              .font(.caption)
+              .font(.bowFootnote)
               .foregroundStyle(Bow.inkSoft)
           }
           Chart(monthItems) { item in
             if let value = item.netWorthMinor {
               LineMark(x: .value("Month", item.month, unit: .month), y: .value("Net Worth", Double(value) / 100))
                 .interpolationMethod(.catmullRom)
-                .foregroundStyle(.tint)
+                .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round))
+                .foregroundStyle(Bow.bow)
               PointMark(x: .value("Month", item.month, unit: .month), y: .value("Net Worth", Double(value) / 100))
-                .foregroundStyle(.tint)
+                .foregroundStyle(Bow.bow)
             }
           }
           .frame(height: 190)
           .chartYAxis { currencyAxis }
+          .shadow(color: Bow.bow.opacity(0.3), radius: 6)
           Text("Includes tracking accounts and credit balances.")
-            .font(.caption)
+            .font(.bowFootnote)
             .foregroundStyle(Bow.inkSoft)
-        }
-        .insightCard()
-
-        VStack(alignment: .leading, spacing: 12) {
-          Label("The Arrow", systemImage: "arrow.up.right")
-            .font(.headline)
-          Text("Shooting for financial freedom")
-            .font(.title3.weight(.semibold))
-          Text("Six-month net worth estimate from recent spending, income, and scheduled activity.")
-            .font(.subheadline).foregroundStyle(Bow.inkSoft)
-          Chart {
-            ForEach(monthItems.suffix(3)) { item in
-              if let value = item.netWorthMinor {
-                LineMark(x: .value("Month", item.month, unit: .month),
-                         y: .value("Net Worth", Double(value) / 100))
-                  .foregroundStyle(.tint)
-              }
-            }
-            ForEach(forecast) { item in
-              LineMark(x: .value("Month", item.month, unit: .month),
-                       y: .value("Projected Net Worth", Double(item.netWorthMinor) / 100))
-                .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 4]))
-                .foregroundStyle(Bow.needsInk)
-              PointMark(x: .value("Month", item.month, unit: .month),
-                        y: .value("Projected Net Worth", Double(item.netWorthMinor) / 100))
-                .foregroundStyle(Bow.needsInk)
-            }
-          }
-          .frame(height: 210)
-          .chartYAxis { currencyAxis }
-          .accessibilityLabel("Net worth forecast for the next six months")
-          if let last = forecast.last {
-            LabeledContent("Projected in six months") {
-              Text(BudgetMoney.formatted(last.netWorthMinor, currencyCode: currencyCode))
-                .fontDesign(.rounded).monospacedDigit()
-            }
-              .font(.subheadline.weight(.medium))
-          }
-          Text("Estimate only · Transfers between your own accounts do not change net worth.")
-            .font(.caption).foregroundStyle(Bow.inkSoft)
         }
         .insightCard()
       }
@@ -249,8 +311,12 @@ struct InsightsScreen: View {
       Task { await snapshotRepository.invalidate() }
       refreshVersion += 1
     }
-    .background(Bow.mist)
+    .background {
+      Bow.mist.overlay(alignment: .top) { SkyBackground(mood: .dawn, height: 420, showsTrail: false) }
+        .ignoresSafeArea()
+    }
     .navigationTitle("Insights")
+    .navigationBarTitleDisplayMode(.inline)
     .onChange(of: selectedBarMonth) { _, value in
       guard let value else { return }
       let matching = transactions.filter { calendar.isDate($0.date, equalTo: value, toGranularity: .month) }
@@ -351,8 +417,8 @@ private struct InsightsDetail: Identifiable {
 
 private extension View {
   func insightCard() -> some View {
-    self.padding(16)
+    self.padding(Bow.Space.s5)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(Bow.card, in: RoundedRectangle(cornerRadius: 20))
+      .bowCard()
   }
 }

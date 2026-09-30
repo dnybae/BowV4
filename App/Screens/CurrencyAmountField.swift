@@ -7,20 +7,38 @@ struct CurrencyAmountField: View {
   @Binding var minor: Int64
   var currencyCode: String
   var allowsNegative: Bool = false
+  var style: Style = .row
 
-  init(_ title: String, minor: Binding<Int64>, currencyCode: String, allowsNegative: Bool = false) {
+  enum Style {
+    /// A form row with the title on the leading side and the amount trailing.
+    case row
+    /// A large, centered amount that serves as a screen's hero number.
+    case hero
+  }
+
+  init(_ title: String, minor: Binding<Int64>, currencyCode: String, allowsNegative: Bool = false,
+       style: Style = .row) {
     self.title = title
     _minor = minor
     self.currencyCode = currencyCode
     self.allowsNegative = allowsNegative
+    self.style = style
   }
 
   var body: some View {
-    LabeledContent(title) {
-      CurrencyTextFieldRepresentable(
-        title: title, minor: $minor, currencyCode: currencyCode, allowsNegative: allowsNegative
-      )
+    switch style {
+    case .row:
+      LabeledContent(title) { field }
+    case .hero:
+      field
     }
+  }
+
+  private var field: some View {
+    CurrencyTextFieldRepresentable(
+      title: title, minor: $minor, currencyCode: currencyCode, allowsNegative: allowsNegative,
+      isHero: style == .hero
+    )
   }
 }
 
@@ -29,27 +47,37 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
   @Binding var minor: Int64
   var currencyCode: String
   var allowsNegative: Bool
+  var isHero: Bool
   @Environment(\.isEnabled) private var isEnabled
 
   func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
   /// Body-size SF Pro Rounded with tabular digits, scaled for Dynamic Type.
-  private static var moneyFont: UIFont {
-    let body = UIFont.systemFont(ofSize: 17)
-    let descriptor = (body.fontDescriptor.withDesign(.rounded) ?? body.fontDescriptor)
+  private static var moneyFont: UIFont { roundedMoneyFont(size: 17, weight: .regular, textStyle: .body) }
+
+  /// Bow's hero number: 44pt SF Pro Rounded Semibold, scaled for Dynamic Type.
+  private static var heroFont: UIFont { roundedMoneyFont(size: 44, weight: .semibold, textStyle: .largeTitle) }
+
+  private static func roundedMoneyFont(size: CGFloat, weight: UIFont.Weight, textStyle: UIFont.TextStyle) -> UIFont {
+    let base = UIFont.systemFont(ofSize: size, weight: weight)
+    let descriptor = (base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor)
       .addingAttributes([.featureSettings: [[
         UIFontDescriptor.FeatureKey.type: kNumberSpacingType,
         UIFontDescriptor.FeatureKey.selector: kMonospacedNumbersSelector
       ]]])
-    return UIFontMetrics(forTextStyle: .body).scaledFont(for: UIFont(descriptor: descriptor, size: 17))
+    return UIFontMetrics(forTextStyle: textStyle).scaledFont(for: UIFont(descriptor: descriptor, size: size))
   }
 
   func makeUIView(context: Context) -> CurrencyInputTextField {
     let field = CurrencyInputTextField()
     field.delegate = context.coordinator
     field.keyboardType = .numberPad
-    field.textAlignment = .right
-    field.font = Self.moneyFont
+    field.textAlignment = isHero ? .center : .right
+    field.font = isHero ? Self.heroFont : Self.moneyFont
+    if isHero {
+      field.adjustsFontSizeToFitWidth = true
+      field.minimumFontSize = 24
+    }
     field.adjustsFontForContentSizeCategory = true
     field.setContentHuggingPriority(.defaultLow, for: .horizontal)
     field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)

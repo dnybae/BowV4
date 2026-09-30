@@ -43,19 +43,43 @@ struct MoneyMoveScreen: View {
     NavigationStack {
       Form {
         Section {
-          VStack(alignment: .leading, spacing: 7) {
-            Text(month.formatted(.dateTime.month(.wide).year()) + " Budget")
-              .font(.title2.weight(.semibold))
-              .foregroundStyle(Bow.ink)
-            Text("This move is recorded in this month. Remaining balances carry into later months.")
-              .font(.subheadline)
+          VStack(spacing: Bow.Space.s3) {
+            PulseTarget(size: 150) {
+              Image("BowMark")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 46, height: 46)
+                .foregroundStyle(Bow.bow)
+            }
+            .accessibilityHidden(true)
+
+            VStack(spacing: Bow.Space.s1) {
+              Text("Amount")
+                .font(.bowSubhead)
+                .foregroundStyle(Bow.inkSoft)
+              CurrencyAmountField("Amount to move", minor: $amountMinor, currencyCode: currencyCode, style: .hero)
+              if let enteredMinor, enteredMinor > sourceAvailable {
+                Text("Only \(BudgetMoney.formatted(max(0, sourceAvailable), currencyCode: currencyCode)) is available to move.")
+                  .font(.bowFootnote)
+                  .foregroundStyle(Bow.overInk)
+              }
+            }
+
+            Button("Move all") {
+              amountMinor = max(0, sourceAvailable)
+            }
+            .bowSecondaryButton()
+            .disabled(sourceAvailable <= 0)
+
+            Text("Recorded in \(month.formatted(.dateTime.month(.wide).year())). Remaining balances carry into later months.")
+              .font(.bowFootnote)
               .foregroundStyle(Bow.inkSoft)
+              .multilineTextAlignment(.center)
           }
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.vertical, 6)
-          .accessibilityElement(children: .combine)
+          .frame(maxWidth: .infinity)
         }
-        .listRowBackground(Bow.card)
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 0, leading: Bow.Space.s4, bottom: Bow.Space.s2, trailing: Bow.Space.s4))
 
         if let snapshot { Section {
           BudgetBucketSelectionField(
@@ -63,16 +87,12 @@ struct MoneyMoveScreen: View {
             envelopes: currentEnvelopes, cardAccounts: cardAccounts,
             snapshot: snapshot, currencyCode: currencyCode
           )
-          LabeledContent("Available") {
-            Text(BudgetMoney.formatted(sourceAvailable, currencyCode: currencyCode))
-              .fontDesign(.rounded).monospacedDigit()
-          }
           BudgetBucketSelectionField(
             title: "To", selection: $target,
             envelopes: currentEnvelopes, cardAccounts: cardAccounts,
             snapshot: snapshot, currencyCode: currencyCode
           )
-          Button("Swap Direction", systemImage: "arrow.up.arrow.down") {
+          Button("Swap direction", systemImage: "arrow.up.arrow.down") {
             let oldSource = source
             source = target
             target = oldSource
@@ -80,49 +100,25 @@ struct MoneyMoveScreen: View {
           .disabled(source == target)
         } header: {
           Text("Move between")
-        } footer: {
-          Text("Choose the money’s current location and where it should go.")
-        } } else {
+        }
+        .listRowBackground(Bow.card)
+        } else {
           Section { ProgressView("Calculating balances…") }
           .listRowBackground(Bow.card)
         }
 
-        Section("Amount") {
-          HStack {
-            CurrencyAmountField("Amount to move", minor: $amountMinor, currencyCode: currencyCode)
-              .labelsHidden()
-            Button("Move All") {
-              amountMinor = max(0, sourceAvailable)
-            }
-            .disabled(sourceAvailable <= 0)
-          }
-          if let enteredMinor, enteredMinor > sourceAvailable {
-            Text("Only \(BudgetMoney.formatted(max(0, sourceAvailable), currencyCode: currencyCode)) is available to move.")
-              .font(.footnote)
-              .foregroundStyle(Bow.overInk)
-          }
+        Section {
+          balanceRow("From", bucket: source, before: sourceAvailable, after: sourceAvailable - (enteredMinor ?? 0))
+          balanceRow("To", bucket: target, before: balance(of: target), after: balance(of: target) + (enteredMinor ?? 0))
+        } header: {
+          Text("After moving")
         }
         .listRowBackground(Bow.card)
-
-        Section("After moving") {
-          LabeledContent(bucketName(source)) {
-            Text(BudgetMoney.formatted(
-              sourceAvailable - (enteredMinor ?? 0), currencyCode: currencyCode
-            ))
-              .fontDesign(.rounded).monospacedDigit()
-          }
-          LabeledContent(bucketName(target)) {
-            Text(BudgetMoney.formatted(
-              balance(of: target) + (enteredMinor ?? 0), currencyCode: currencyCode
-            ))
-              .fontDesign(.rounded).monospacedDigit()
-          }
-        }
-        .listRowBackground(Bow.card)
-
       }
-      .bowListBackground()
-      .navigationTitle("Move Money")
+      .bowListBackground {
+        Bow.mist.overlay(alignment: .top) { SkyBackground(mood: .dawn, height: 460) }
+      }
+      .navigationTitle("Move money")
       .task(id: refreshVersion) {
         let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
         snapshot = try? await repository.snapshot(month: month)
@@ -138,15 +134,15 @@ struct MoneyMoveScreen: View {
       }
       .safeAreaInset(edge: .bottom) {
         Button { Task { await save() } } label: {
-          Text("Move \(BudgetMoney.formatted(enteredMinor ?? 0, currencyCode: currencyCode)) in \(month.formatted(.dateTime.month(.wide)))")
+          Text("Move \(BudgetMoney.formatted(enteredMinor ?? 0, currencyCode: currencyCode))")
             .fontWeight(.semibold)
+            .monospacedDigit()
             .frame(maxWidth: .infinity, minHeight: 44)
         }
         .bowPrimaryButton()
         .disabled(!isValid)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 8)
-        .background(.regularMaterial)
+        .padding(.horizontal, Bow.Space.s4)
+        .padding(.bottom, Bow.Space.s2)
       }
       .alert("Couldn’t Move Money", isPresented: Binding(
         get: { errorMessage != nil },
@@ -165,6 +161,53 @@ struct MoneyMoveScreen: View {
     case .readyToAssign: return snapshot.readyToAssignMinor
     case .envelope(let id): return snapshot.available(for: id)
     case .cardPayment(let id): return snapshot.paymentAvailable[id, default: 0]
+    }
+  }
+
+  private func balanceRow(_ role: String, bucket: BudgetBucket, before: Int64, after: Int64) -> some View {
+    let changes = before != after
+    let beforeText = BudgetMoney.formatted(before, currencyCode: currencyCode)
+    let afterText = BudgetMoney.formatted(after, currencyCode: currencyCode)
+    return HStack(spacing: Bow.Space.s3) {
+      Image(systemName: bucketSymbol(bucket))
+        .font(.system(size: 15, weight: .semibold))
+        .foregroundStyle(Bow.bowInk)
+        .frame(width: 36, height: 36)
+        .background(Bow.bowTint, in: Circle())
+      VStack(alignment: .leading, spacing: 1) {
+        Text(role)
+          .font(.bowFootnote)
+          .foregroundStyle(Bow.inkSoft)
+        Text(bucketName(bucket))
+          .font(.bowHeadline)
+          .foregroundStyle(Bow.ink)
+      }
+      Spacer(minLength: Bow.Space.s2)
+      VStack(alignment: .trailing, spacing: 1) {
+        if changes {
+          Text(beforeText)
+            .font(.bowFootnote)
+            .monospacedDigit()
+            .strikethrough()
+            .foregroundStyle(Bow.inkSoft)
+        }
+        Text(afterText)
+          .font(.bowAmount)
+          .monospacedDigit()
+          .foregroundStyle(after < 0 ? Bow.overInk : Bow.ink)
+      }
+    }
+    .padding(.vertical, Bow.Space.s1)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("\(role) \(bucketName(bucket))")
+    .accessibilityValue(changes ? "\(beforeText) now, \(afterText) after moving" : afterText)
+  }
+
+  private func bucketSymbol(_ bucket: BudgetBucket) -> String {
+    switch bucket {
+    case .readyToAssign: "square.grid.2x2"
+    case .envelope(let id): currentEnvelopes.first { $0.id == id }?.symbol ?? "tray"
+    case .cardPayment: "creditcard"
     }
   }
 

@@ -245,16 +245,7 @@ struct MoneyMoveScreen: View {
         }
       }
     }
-    let now = Date()
-    let monthInterval = Calendar.current.dateInterval(of: .month, for: month)
-    let allocationDate: Date
-    if Calendar.current.isDate(month, equalTo: now, toGranularity: .month) {
-      allocationDate = now
-    } else if month < now {
-      allocationDate = monthInterval?.end.addingTimeInterval(-1) ?? month
-    } else {
-      allocationDate = monthInterval?.start ?? month
-    }
+    let allocationDate = BudgetCommands.allocationDate(inMonth: month)
     do {
       let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
       await repository.invalidate()

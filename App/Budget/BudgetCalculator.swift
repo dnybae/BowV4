@@ -239,6 +239,7 @@ struct BudgetCalculator {
       cashAvailable: cashAvailable,
       cashShortfall: cashShortfall,
       creditShortfall: creditShortfallByEnvelope,
+      creditShortfallByCard: creditShortfall.filter { $0.value > 0 },
       paymentAvailable: paymentAvailable,
       assigned: assigned,
       activity: activity,
@@ -362,6 +363,8 @@ struct BudgetSnapshot: Sendable {
   var cashAvailable: [UUID: Int64]
   var cashShortfall: [UUID: Int64]
   var creditShortfall: [UUID: Int64]
+  /// The same credit overspending, split by the card that was used. Covering it moves money into that card's payment.
+  var creditShortfallByCard: [CardEnvelopeKey: Int64] = [:]
   var paymentAvailable: [UUID: Int64]
   var assigned: [UUID: Int64]
   var activity: [UUID: Int64]
@@ -383,7 +386,7 @@ struct BudgetSnapshot: Sendable {
   }
 }
 
-struct CardEnvelopeKey: Hashable {
+struct CardEnvelopeKey: Hashable, Sendable {
   var cardID: UUID
   var envelopeID: UUID
 }

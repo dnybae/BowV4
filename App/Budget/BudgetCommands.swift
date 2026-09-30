@@ -438,6 +438,71 @@ struct BudgetCommands {
     try context.save()
   }
 
+  /// When a money move for `month` is recorded: now for the current month, otherwise the month's
+  /// last moment (past) or first moment (future), so it lands inside the month being budgeted.
+  static func allocationDate(inMonth month: Date, now: Date = Date(), calendar: Calendar = .current) -> Date {
+    let monthInterval = calendar.dateInterval(of: .month, for: month)
+    if calendar.isDate(month, equalTo: now, toGranularity: .month) {
+      return now
+    } else if month < now {
+      return monthInterval?.end.addingTimeInterval(-1) ?? month
+    } else {
+      return monthInterval?.start ?? month
+    }
+  }
+
+  /// Covers one overspent envelope from one or more donors in a single save: every donor is checked
+  /// against the same snapshot, and nothing is recorded unless all of them are valid.
+  /// Donors can be Ready to Assign or other budget envelopes; card payment money can't be used,
+  /// because taking it would leave that card's debt uncovered.
+  static func coverOverspending(
+    envelopeID: UUID,
+    from donors: [BudgetBucket: Int64],
+    date: Date,
+    snapshot: BudgetSnapshot,
+    in context: ModelContext
+  ) throws {
+    let calendar = Calendar.current
+    let targetMonth = calendar.dateInterval(of: .month, for: date)?.start ?? date
+    let currentMonth = calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
+    guard targetMonth >= currentMonth else { throw BudgetCommandError.pastMonthLocked }
+    guard calendar.isDate(snapshot.month, equalTo: date, toGranularity: .month)
+    else { throw BudgetCommandError.invalidTransfer }
+    let donors = donors.filter { $0.value != 0 }
+    guard !donors.isEmpty, donors.values.allSatisfy({ $0 > 0 }) else { throw BudgetCommandError.invalidAmount }
+
+    let envelopes = try context.fetch(FetchDescriptor<BudgetEnvelope>())
+    let budgetEnvelopeIDs = Set(envelopes.filter { $0.paymentAccountID == nil }.map(\.id))
+    guard budgetEnvelopeIDs.contains(envelopeID) else { throw BudgetCommandError.invalidEnvelope }
+    let overspent = max(0, -snapshot.available(for: envelopeID))
+    guard overspent > 0 else { throw BudgetCommandError.nothingToCover }
+
+    var total: Int64 = 0
+    for (donor, amount) in donors {
+      let available: Int64
+      switch donor {
+      case .readyToAssign:
+        available = snapshot.readyToAssignMinor
+      case .envelope(let id):
+        guard id != envelopeID, budgetEnvelopeIDs.contains(id) else { throw BudgetCommandError.invalidTransfer }
+        available = snapshot.available(for: id)
+      case .cardPayment:
+        throw BudgetCommandError.invalidTransfer
+      }
+      guard amount <= max(0, available) else { throw BudgetCommandError.insufficientFunds }
+      total += amount
+    }
+    guard total <= overspent else { throw BudgetCommandError.coverExceedsOverspending }
+
+    for (donor, amount) in donors.sorted(by: { $0.value > $1.value }) {
+      let allocation = BudgetAllocation(date: date, amountMinor: amount)
+      if case .envelope(let id) = donor { allocation.sourceEnvelopeID = id }
+      allocation.targetEnvelopeID = envelopeID
+      context.insert(allocation)
+    }
+    try context.save()
+  }
+
   static func setEnvelopeHidden(
     _ envelope: BudgetEnvelope, hidden: Bool,
     availableMinor: Int64, in context: ModelContext
@@ -497,6 +562,8 @@ enum BudgetCommandError: LocalizedError {
   case currencyMismatch
   case liabilityRequiresNegativeBalance
   case balanceOverflow
+  case nothingToCover
+  case coverExceedsOverspending
 
   var errorDescription: String? {
     switch self {
@@ -520,6 +587,8 @@ enum BudgetCommandError: LocalizedError {
     case .currencyMismatch: "This account must use the budget’s currency."
     case .liabilityRequiresNegativeBalance: "Enter money owed on a loan as a negative balance."
     case .balanceOverflow: "That balance change is too large to save safely."
+    case .nothingToCover: "This envelope isn’t overspent anymore."
+    case .coverExceedsOverspending: "That’s more than this envelope is overspent. Lower an amount."
     }
   }
 }

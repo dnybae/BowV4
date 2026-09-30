@@ -41,7 +41,7 @@ struct CardDebtGoalEditorScreen: View {
         .listRowBackground(Bow.card)
         if card.debtGoalStartMinor != nil {
           Section {
-            Button("Start a New Payoff Goal", systemImage: "arrow.counterclockwise") {
+            Button("Start a new payoff goal", systemImage: "arrow.counterclockwise") {
               resetBaseline = true
             }
           } footer: {
@@ -53,13 +53,13 @@ struct CardDebtGoalEditorScreen: View {
         }
       }
       .bowListBackground()
-      .navigationTitle("Payoff Goal")
+      .navigationTitle("Payoff goal")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) { Button("Save") { save() } }
       }
-      .alert("Couldn’t Save Goal", isPresented: Binding(
+      .alert("Couldn’t save goal", isPresented: Binding(
         get: { message != nil }, set: { if !$0 { message = nil } }
       )) {
         Button("OK") { message = nil }

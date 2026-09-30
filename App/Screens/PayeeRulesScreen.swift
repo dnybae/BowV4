@@ -37,7 +37,7 @@ struct PayeeRulesScreen: View {
       }
 
       Section {
-        Button("Add Payee Rule", systemImage: "plus") {
+        Button("Add payee rule", systemImage: "plus") {
           showingAdd = true
         }
         .disabled(envelopes.isEmpty)
@@ -47,7 +47,7 @@ struct PayeeRulesScreen: View {
       .listRowBackground(Bow.card)
     }
     .bowListBackground()
-    .navigationTitle("Payee Rules")
+    .navigationTitle("Payee rules")
     .sheet(isPresented: $showingAdd) {
       PayeeRuleEditorScreen(rule: nil, rules: rules, envelopes: envelopes)
     }

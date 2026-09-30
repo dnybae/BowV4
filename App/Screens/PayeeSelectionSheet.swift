@@ -100,7 +100,7 @@ struct PayeeSelectionSheet: View {
         try? await Task.sleep(for: .milliseconds(250))
         if !Task.isCancelled { searchFocused = true }
       }
-      .alert("Couldn’t Save Payee", isPresented: Binding(
+      .alert("Couldn’t save payee", isPresented: Binding(
         get: { errorMessage != nil },
         set: { if !$0 { errorMessage = nil } }
       )) {

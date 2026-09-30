@@ -30,7 +30,7 @@ struct SimpleFINLinkPickerScreen: View {
         .listRowBackground(Bow.card)
         if choices.isEmpty {
           ContentUnavailableView(
-            "No Bank Accounts Available", systemImage: "link",
+            "No bank accounts available", systemImage: "link",
             description: Text("Connect another account in SimpleFIN, then sync to see it here.")
           )
         } else {
@@ -64,14 +64,14 @@ struct SimpleFINLinkPickerScreen: View {
         }
       }
       .bowListBackground()
-      .navigationTitle("Linked Bank Account")
+      .navigationTitle("Linked bank account")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Done") { dismiss() }
         }
       }
-      .alert("Bank Sync", isPresented: Binding(
+      .alert("Bank sync", isPresented: Binding(
         get: { message != nil }, set: { if !$0 { message = nil } }
       )) {
         Button("OK") { message = nil }

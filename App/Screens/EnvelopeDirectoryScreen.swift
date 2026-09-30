@@ -46,7 +46,7 @@ struct EnvelopeDirectoryScreen: View {
       }
     }
     .bowListBackground()
-    .navigationTitle("Envelope Directory")
+    .navigationTitle("Envelope ideas")
     .navigationBarTitleDisplayMode(.inline)
     .sheet(item: $selected) { suggestion in
       NavigationStack {
@@ -68,7 +68,7 @@ struct EnvelopeDirectoryScreen: View {
           .listRowBackground(Bow.card)
         }
         .bowListBackground()
-        .navigationTitle("Add Envelope")
+        .navigationTitle("Add envelope")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {
@@ -80,7 +80,7 @@ struct EnvelopeDirectoryScreen: View {
         }
       }
     }
-    .alert("Couldn’t Add Envelope", isPresented: Binding(
+    .alert("Couldn’t add envelope", isPresented: Binding(
       get: { message != nil }, set: { if !$0 { message = nil } }
     )) {
       Button("OK") { message = nil }

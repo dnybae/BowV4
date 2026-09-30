@@ -34,7 +34,7 @@ struct PayeeDetailScreen: View {
                              size: 52)
             VStack(alignment: .leading, spacing: 3) {
               Text(entry.name).font(.headline)
-              Text(payees.first { $0.id == entry.ruleID }?.logoSource.title ?? "Default Icon")
+              Text(payees.first { $0.id == entry.ruleID }?.logoSource.title ?? "Default icon")
                 .font(.subheadline).foregroundStyle(Bow.inkSoft)
             }
           }

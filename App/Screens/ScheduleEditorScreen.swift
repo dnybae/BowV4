@@ -56,13 +56,13 @@ struct ScheduleEditorScreen: View {
           CurrencyAmountField("Expected amount", minor: $amountMinor, currencyCode: currencyCode)
           AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts)
           if kind == .transfer {
-            AccountSelectionField(title: "To Account", selection: $destinationID, accounts: accounts, excludingID: accountID)
+            AccountSelectionField(title: "To account", selection: $destinationID, accounts: accounts, excludingID: accountID)
           }
           if kind != .transfer || (accounts.first { $0.id == accountID }?.kind == .cash &&
               [.asset, .liability].contains(accounts.first { $0.id == destinationID }?.kind)) {
             CategorySelectionField(
               title: "Category", selection: $envelopeID,
-              envelopes: envelopes, noneTitle: "No Category"
+              envelopes: envelopes, noneTitle: "No envelope"
             )
             if kind == .expense && envelopeID == nil {
               Text("Choose an envelope for this scheduled expense.")
@@ -92,24 +92,24 @@ struct ScheduleEditorScreen: View {
         .listRowBackground(Bow.card)
         if schedule != nil {
           Section {
-            Button("Delete Schedule", role: .destructive) { showingDelete = true }
+            Button("Delete schedule", role: .destructive) { showingDelete = true }
           }
           .listRowBackground(Bow.card)
         }
       }
       .bowListBackground()
-      .navigationTitle("Edit Schedule")
+      .navigationTitle("Edit schedule")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) { Button("Save") { save() } }
       }
       .confirmationDialog("Delete this schedule?", isPresented: $showingDelete) {
-        Button("Delete Schedule", role: .destructive) { delete() }
+        Button("Delete schedule", role: .destructive) { delete() }
       } message: {
         Text("Previously recorded transactions will remain in your ledger.")
       }
-      .alert("Couldn’t Save Schedule", isPresented: Binding(
+      .alert("Couldn’t save schedule", isPresented: Binding(
         get: { errorMessage != nil },
         set: { if !$0 { errorMessage = nil } }
       )) {

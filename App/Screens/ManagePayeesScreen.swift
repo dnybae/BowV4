@@ -96,7 +96,7 @@ struct ManagePayeesScreen: View {
     }
     .bowListBackground()
     .searchable(text: $searchText, prompt: "Search payees")
-    .navigationTitle("Manage Payees")
+    .navigationTitle("Payees")
     .task(id: refreshVersion) {
       isLoading = true
       let repository = PayeeDirectoryRepository(modelContainer: modelContext.container)
@@ -108,7 +108,7 @@ struct ManagePayeesScreen: View {
     }
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
-        Button("Add Payee", systemImage: "plus") { showingAdd = true }
+        Button("Add payee", systemImage: "plus") { showingAdd = true }
       }
     }
     .sheet(isPresented: $showingAdd) {

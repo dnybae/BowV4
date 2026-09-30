@@ -43,7 +43,7 @@ struct AccountEditorScreen: View {
   var body: some View {
     Form {
       Section {
-        TextField("Account Name", text: $name)
+        TextField("Account name", text: $name)
           .submitLabel(.done)
         if availableTypes.count > 1 {
           Picker("Type", selection: $type) {
@@ -63,7 +63,7 @@ struct AccountEditorScreen: View {
       .listRowBackground(Bow.card)
 
       Section {
-        CurrencyAmountField(account == nil ? "Starting Balance" : "Current Balance",
+        CurrencyAmountField(account == nil ? "Starting balance" : "Current balance",
                             minor: $openingBalanceMinor, currencyCode: currencyCode, allowsNegative: true)
         if type.kind == .liability && (parsedOpeningBalance ?? 0) > 0 {
           Text("Enter money owed as a negative balance.")
@@ -88,16 +88,16 @@ struct AccountEditorScreen: View {
         Section {
           if let link = simpleFINLinks.first(where: { $0.localAccountID == account.id }) {
             LabeledContent("Bank account", value: link.name)
-            Button("Relink Bank Account", systemImage: "link") {
+            Button("Relink bank account", systemImage: "link") {
               showingBankLinkPicker = true
             }
-            Button("Unlink Bank Account", role: .destructive) {
+            Button("Unlink bank account", role: .destructive) {
               showingStopBankSync = true
             }
           } else {
             Text("This account is not connected to a bank.")
               .foregroundStyle(Bow.inkSoft)
-            Button("Link a Bank Account", systemImage: "link") {
+            Button("Link a bank account", systemImage: "link") {
               showingBankLinkPicker = true
             }
           }
@@ -110,7 +110,7 @@ struct AccountEditorScreen: View {
       }
     }
     .bowListBackground()
-    .navigationTitle(account == nil ? "Private Account" : "Edit Account")
+    .navigationTitle(account == nil ? "Private account" : "Edit account")
     .task {
       guard let account, !loadedCurrentBalance else { return }
       let displayedBeforeLoad = openingBalanceMinor
@@ -137,19 +137,18 @@ struct AccountEditorScreen: View {
     .safeAreaInset(edge: .bottom) {
       if account == nil {
         Button { Task { await save() } } label: {
-          Text("Create Account")
+          Text("Create account")
             .fontWeight(.semibold)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 4)
         }
         .bowPrimaryButton()
         .disabled(!canSave)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .background(.bar)
+        .padding(.horizontal, Bow.Space.s4)
+        .padding(.bottom, Bow.Space.s2)
       }
     }
-    .alert("Couldn’t Save Account", isPresented: Binding(
+    .alert("Couldn’t save account", isPresented: Binding(
       get: { errorMessage != nil },
       set: { if !$0 { errorMessage = nil } }
     )) {

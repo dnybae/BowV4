@@ -47,7 +47,7 @@ struct SimpleFINAccountSetupScreen: View {
     Form {
       if isDemoMode && connection == nil {
         ContentUnavailableView(
-          "No Sample Connection", systemImage: "link",
+          "No sample connection", systemImage: "link",
           description: Text("Choose Sample Budget in Settings to explore bank accounts.")
         )
       } else if connection == nil || needsToken {
@@ -84,7 +84,7 @@ struct SimpleFINAccountSetupScreen: View {
                 .font(.footnote)
                 .foregroundStyle(Bow.inkSoft)
             }
-            Button("Refresh Bank Accounts", systemImage: "arrow.clockwise") {
+            Button("Refresh bank accounts", systemImage: "arrow.clockwise") {
               Task { await refreshAccounts() }
             }
             .disabled(isWorking)
@@ -92,7 +92,7 @@ struct SimpleFINAccountSetupScreen: View {
           if isWorking { ProgressView("Loading bank accounts…") }
           if allLinks.isEmpty && !isWorking {
             ContentUnavailableView(
-              "No Bank Accounts Found", systemImage: "link",
+              "No bank accounts found", systemImage: "link",
               description: Text("Check your SimpleFIN connection, then refresh the account list.")
             )
           }
@@ -141,7 +141,7 @@ struct SimpleFINAccountSetupScreen: View {
       }
     }
     .bowListBackground()
-    .navigationTitle((connection == nil || needsToken) && !isDemoMode ? "Connect a Bank" : "Bank Accounts")
+    .navigationTitle((connection == nil || needsToken) && !isDemoMode ? "Connect a bank" : "Bank accounts")
     .navigationBarTitleDisplayMode(.inline)
     .task {
       guard !isDemoMode, let connection else { return }

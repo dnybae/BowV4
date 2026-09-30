@@ -38,7 +38,7 @@ struct PayeeRuleEditorScreen: View {
         .listRowBackground(Bow.card)
         if rule != nil {
           Section {
-            Button("Delete Rule", role: .destructive) {
+            Button("Delete rule", role: .destructive) {
               showingDeleteConfirmation = true
             }
           }
@@ -46,7 +46,7 @@ struct PayeeRuleEditorScreen: View {
         }
       }
       .bowListBackground()
-      .navigationTitle(rule == nil ? "Add Payee Rule" : "Edit Payee Rule")
+      .navigationTitle(rule == nil ? "Add payee rule" : "Edit payee rule")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -59,11 +59,11 @@ struct PayeeRuleEditorScreen: View {
         }
       }
       .confirmationDialog("Delete this rule?", isPresented: $showingDeleteConfirmation) {
-        Button("Delete Rule", role: .destructive) { delete() }
+        Button("Delete rule", role: .destructive) { delete() }
       } message: {
         Text("Existing transactions keep their categories.")
       }
-      .alert("Couldn’t Save Rule", isPresented: Binding(
+      .alert("Couldn’t save rule", isPresented: Binding(
         get: { errorMessage != nil },
         set: { if !$0 { errorMessage = nil } }
       )) {

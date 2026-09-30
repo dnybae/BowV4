@@ -89,14 +89,14 @@ struct PayeeLogoFinderSheet: View {
         .listRowBackground(Bow.card)
       }
       .bowListBackground()
-      .navigationTitle("Find Logo")
+      .navigationTitle("Find logo")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel") { dismiss() }
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Use Logo") {
+          Button("Use logo") {
             onSelect(trimmedDomain.isEmpty ? nil : trimmedDomain)
             dismiss()
           }

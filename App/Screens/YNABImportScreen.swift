@@ -16,11 +16,11 @@ struct YNABImportScreen: View {
     NavigationStack {
       Form {
         Section {
-          Button("Choose YNAB Plan Export", systemImage: "text.document") {
+          Button("Choose YNAB plan export", systemImage: "text.document") {
             showingFilePicker = true
           }
           if isDemoMode {
-            Button("Use Sample Export", systemImage: "doc.text") {
+            Button("Use sample export", systemImage: "doc.text") {
               do {
                 preview = try YNABCategoryParser().parse(DemoData.sampleYNABExport)
               } catch {
@@ -87,7 +87,7 @@ struct YNABImportScreen: View {
           errorMessage = error.localizedDescription
         }
       }
-      .alert("Couldn’t Import Categories", isPresented: Binding(
+      .alert("Couldn’t import categories", isPresented: Binding(
         get: { errorMessage != nil },
         set: { if !$0 { errorMessage = nil } }
       )) {

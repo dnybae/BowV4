@@ -18,7 +18,7 @@ struct PayeeEditorScreen: View {
   @State private var selectedPhoto: PhotosPickerItem?
   @State private var defaultEnvelopeID: UUID?
   @State private var errorMessage: String?
-  @State private var errorTitle = "Couldn’t Save Payee"
+  @State private var errorTitle = "Couldn’t save payee"
   @State private var showingDelete = false
   @State private var isSaving = false
   @State private var isImportingLogo = false
@@ -44,7 +44,7 @@ struct PayeeEditorScreen: View {
     NavigationStack {
       Form {
         Section("Payee") {
-          TextField("Payee Name", text: $name)
+          TextField("Payee name", text: $name)
             .textInputAutocapitalization(.words)
         }
         .listRowBackground(Bow.card)
@@ -61,7 +61,7 @@ struct PayeeEditorScreen: View {
               size: 52
             )
             VStack(alignment: .leading, spacing: 3) {
-              Text("Payee Icon")
+              Text("Payee icon")
               Text(logoSource.title)
                 .font(.subheadline)
                 .foregroundStyle(Bow.inkSoft)
@@ -70,16 +70,16 @@ struct PayeeEditorScreen: View {
           .padding(.vertical, 3)
 
           PhotosPicker(selection: $selectedPhoto, matching: .images) {
-            Label("Choose Photo", systemImage: "photo")
+            Label("Choose photo", systemImage: "photo")
           }
           if isImportingLogo {
             ProgressView("Loading image…")
           }
-          Button("Choose File", systemImage: "folder") { showingFiles = true }
-          Button("Find Logo", systemImage: "magnifyingglass") { showingFindLogo = true }
+          Button("Choose file", systemImage: "folder") { showingFiles = true }
+          Button("Find logo", systemImage: "magnifyingglass") { showingFindLogo = true }
             .disabled(trimmedName.isEmpty)
           if logoSource != .system {
-            Button("Use Default Icon", systemImage: "storefront.fill") {
+            Button("Use default icon", systemImage: "storefront.fill") {
               logoSource = .system
             }
           }
@@ -91,7 +91,7 @@ struct PayeeEditorScreen: View {
         .listRowBackground(Bow.card)
         Section {
           CategorySelectionField(
-            title: "Default Category", selection: $defaultEnvelopeID,
+            title: "Default envelope", selection: $defaultEnvelopeID,
             envelopes: envelopes, noneTitle: "None"
           )
         } footer: {
@@ -108,13 +108,13 @@ struct PayeeEditorScreen: View {
         if let entry, entry.transactionCount == 0 && entry.scheduleCount == 0,
            entry.ruleID != nil {
           Section {
-            Button("Delete Payee", role: .destructive) { showingDelete = true }
+            Button("Delete payee", role: .destructive) { showingDelete = true }
           }
           .listRowBackground(Bow.card)
         }
       }
       .bowListBackground()
-      .navigationTitle(entry == nil ? "New Payee" : "Edit Payee")
+      .navigationTitle(entry == nil ? "New payee" : "Edit payee")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -126,7 +126,7 @@ struct PayeeEditorScreen: View {
         }
       }
       .confirmationDialog("Delete this payee?", isPresented: $showingDelete) {
-        Button("Delete Payee", role: .destructive) { delete() }
+        Button("Delete payee", role: .destructive) { delete() }
       } message: {
         Text("This removes the saved payee and its matching settings.")
       }
@@ -148,7 +148,7 @@ struct PayeeEditorScreen: View {
           customLogoData = try PayeeLogoImage.preparedData(from: Data(contentsOf: url))
           logoSource = .custom
         } catch {
-          errorTitle = "Couldn’t Load Image"
+          errorTitle = "Couldn’t load image"
           errorMessage = error.localizedDescription
         }
       }
@@ -173,7 +173,7 @@ struct PayeeEditorScreen: View {
             customLogoData = try PayeeLogoImage.preparedData(from: data)
             logoSource = .custom
           } catch {
-            errorTitle = "Couldn’t Load Image"
+            errorTitle = "Couldn’t load image"
             errorMessage = error.localizedDescription
           }
         }
@@ -183,7 +183,7 @@ struct PayeeEditorScreen: View {
 
   private func save() async {
     guard !isSaving else { return }
-    errorTitle = "Couldn’t Save Payee"
+    errorTitle = "Couldn’t save payee"
     isSaving = true
     defer { isSaving = false }
     let newKey = PayeeDirectory.key(trimmedName)
@@ -273,7 +273,7 @@ struct PayeeEditorScreen: View {
       dismiss()
       onSaved()
     } catch {
-      errorTitle = "Couldn’t Delete Payee"
+      errorTitle = "Couldn’t delete payee"
       errorMessage = error.localizedDescription
     }
   }

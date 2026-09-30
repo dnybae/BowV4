@@ -39,11 +39,11 @@ struct BankFileImportScreen: View {
     NavigationStack {
       Form {
         Section {
-          Button("Choose Bank File", systemImage: "doc.text") {
+          Button("Choose bank file", systemImage: "doc.text") {
             showingFilePicker = true
           }
           if isDemoMode {
-            Button("Use Sample CSV", systemImage: "doc.text") {
+            Button("Use sample CSV", systemImage: "doc.text") {
               do {
                 let text = DemoData.sampleBankCSV
                 let table = try BankFileParser().csvTable(text)
@@ -81,15 +81,15 @@ struct BankFileImportScreen: View {
             columnPicker("Date", selection: $mapping.dateColumn, headers: csvTable.headers)
             columnPicker("Payee", selection: $mapping.payeeColumn, headers: csvTable.headers)
             columnPicker("Memo", selection: $mapping.memoColumn, headers: csvTable.headers)
-            Toggle("Separate Outflow and Inflow", isOn: $mapping.separateAmounts)
+            Toggle("Separate outflow and inflow", isOn: $mapping.separateAmounts)
             if mapping.separateAmounts {
               columnPicker("Outflow", selection: $mapping.outflowColumn, headers: csvTable.headers)
               columnPicker("Inflow", selection: $mapping.inflowColumn, headers: csvTable.headers)
             } else {
-              columnPicker("Signed Amount", selection: $mapping.amountColumn, headers: csvTable.headers)
+              columnPicker("Signed amount", selection: $mapping.amountColumn, headers: csvTable.headers)
             }
-            Toggle("Reverse Amount Signs", isOn: $mapping.reverseSigns)
-            Picker("Date Order", selection: $mapping.dateOrder) {
+            Toggle("Reverse amount signs", isOn: $mapping.reverseSigns)
+            Picker("Date order", selection: $mapping.dateOrder) {
               ForEach(BankDateOrder.allCases) { order in
                 Text(order.title).tag(order)
               }
@@ -99,7 +99,7 @@ struct BankFileImportScreen: View {
           .listRowBackground(Bow.card)
         } else if format == .qif {
           Section("QIF dates") {
-            Picker("Date Order", selection: $qifDateOrder) {
+            Picker("Date order", selection: $qifDateOrder) {
               ForEach(BankDateOrder.allCases) { order in
                 Text(order.title).tag(order)
               }
@@ -111,7 +111,7 @@ struct BankFileImportScreen: View {
 
         if format != nil {
           Section {
-            Button("Preview Transactions", systemImage: "list.bullet.rectangle") {
+            Button("Preview transactions", systemImage: "list.bullet.rectangle") {
               Task { await preview() }
             }
             .disabled(selectedAccount == nil || isPreviewing)
@@ -152,7 +152,7 @@ struct BankFileImportScreen: View {
               .padding(.vertical, 4)
             }
             if visibleProposalCount < proposals.count {
-              Button("Show More Transactions") {
+              Button("Show more transactions") {
                 visibleProposalCount += 100
               }
             }
@@ -161,7 +161,7 @@ struct BankFileImportScreen: View {
         }
       }
       .bowListBackground()
-      .navigationTitle("Import Bank File")
+      .navigationTitle("Import bank file")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -185,7 +185,7 @@ struct BankFileImportScreen: View {
           UTType(filenameExtension: "qif") ?? .data
         ]
       ) { result in handleFileSelection(result) }
-      .alert("Couldn’t Import File", isPresented: Binding(
+      .alert("Couldn’t import file", isPresented: Binding(
         get: { errorMessage != nil },
         set: { if !$0 { errorMessage = nil } }
       )) {
@@ -193,7 +193,7 @@ struct BankFileImportScreen: View {
       } message: {
         Text(errorMessage ?? "")
       }
-      .alert("Import Complete", isPresented: Binding(
+      .alert("Import complete", isPresented: Binding(
         get: { importSummary != nil }, set: { if !$0 { importSummary = nil } }
       )) {
         Button("Done") { dismiss() }

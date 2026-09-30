@@ -20,7 +20,6 @@ struct BudgetScreen: View {
   var onCoverOverspending: (CoverOverspendingScope) -> Void
   var onSelectTransaction: (UUID) -> Void
   var onEditSchedule: (UUID) -> Void
-  @State private var searchText = ""
 
   private var isPastMonth: Bool {
     (Calendar.current.dateInterval(of: .month, for: selectedMonth)?.start ?? selectedMonth)
@@ -71,10 +70,7 @@ struct BudgetScreen: View {
   }
 
   private var creditCards: [BudgetAccount] {
-    accounts.filter { $0.kind == .credit &&
-      (searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText)
-        || "credit card payments".localizedCaseInsensitiveContains(searchText))
-    }.sorted { $0.name < $1.name }
+    accounts.filter { $0.kind == .credit }.sorted { $0.name < $1.name }
   }
 
   var body: some View {
@@ -116,12 +112,6 @@ struct BudgetScreen: View {
           }
         }
 
-        if !searchText.isEmpty
-          && orderedGroups.allSatisfy({ visibleEnvelopes(in: $0).isEmpty })
-          && creditCards.isEmpty {
-          ContentUnavailableView.search(text: searchText)
-        }
-
         if !creditCards.isEmpty {
           Section("Credit card payments") {
             ForEach(creditCards) { card in
@@ -134,7 +124,7 @@ struct BudgetScreen: View {
           .id("credit-card-payments")
         }
 
-        if searchText.isEmpty && !isPastMonth {
+        if !isPastMonth {
           Section {
             Button("Add Envelope", systemImage: "plus", action: onAddEnvelope)
               .disabled(orderedGroups.isEmpty)
@@ -148,7 +138,6 @@ struct BudgetScreen: View {
         Bow.mist.overlay(alignment: .top) { SkyBackground(mood: skyMood) }
       }
       .animation(reduceMotion ? nil : .snappy, value: selectedMonth)
-      .searchable(text: $searchText, prompt: "Search envelopes or groups")
       .navigationTitle(selectedMonth.formatted(.dateTime.month(.wide)))
       .navigationSubtitle(selectedMonth.formatted(.dateTime.year()))
       .navigationBarTitleDisplayMode(.inline)
@@ -214,8 +203,6 @@ struct BudgetScreen: View {
   private func visibleEnvelopes(in group: BudgetGroup) -> [BudgetEnvelope] {
     envelopes.filter {
       !$0.isHidden && $0.paymentAccountID == nil && $0.groupID == group.id
-        && (searchText.isEmpty || group.name.localizedCaseInsensitiveContains(searchText)
-          || $0.name.localizedCaseInsensitiveContains(searchText))
     }.sorted { $0.sortOrder == $1.sortOrder ? $0.name < $1.name : $0.sortOrder < $1.sortOrder }
   }
 
@@ -306,16 +293,18 @@ private struct BudgetOverviewSection: View {
         // Rounded down so the ring never claims 100% while money is still waiting for a job.
         .accessibilityValue("\(Int((summary.assignedShare * 100).rounded(.down))) percent assigned")
 
+        Button(summary.readyToAssignMinor > 0 ? "Assign money" : "Move money", action: onAssign)
+          .bowPrimaryButton()
+          .disabled(!canMove)
+          // The ring's frame includes its outer glow; pull the button up to sit just under the ring.
+          .padding(.top, -(Bow.Space.s8 + Bow.Space.s2))
+
         if isDeficit || isPastMonth {
           Text(isDeficit ? "Move money back or add cash to cover this deficit." : "View only · Past budget month")
             .font(.bowFootnote)
             .foregroundStyle(Bow.inkSoft)
             .multilineTextAlignment(.center)
         }
-
-        Button(summary.readyToAssignMinor > 0 ? "Assign money" : "Move money", action: onAssign)
-          .bowPrimaryButton()
-          .disabled(!canMove)
 
         HStack(spacing: Bow.Space.s2) {
           metric("Assigned", amount: summary.assignedThisMonthMinor)

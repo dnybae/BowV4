@@ -1,0 +1,18 @@
+import SwiftUI
+
+struct ComingSoonRowLabel: View {
+  var title: String
+  var systemImage: String
+
+  var body: some View {
+    HStack {
+      Label(title, systemImage: systemImage)
+      Spacer(minLength: 8)
+      Text("Soon")
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityHint("Coming soon")
+  }
+}

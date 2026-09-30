@@ -4,6 +4,7 @@ import SwiftData
 struct SettingsScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
+  @Environment(\.openURL) private var openURL
   @AppStorage("bow.appearance") private var appearanceRaw = AppAppearance.system.rawValue
   @AppStorage("bow.demoMode") private var isDemoMode = false
   @AppStorage("bow.demoResetVersion") private var demoResetVersion = 0
@@ -93,6 +94,16 @@ struct SettingsScreen: View {
           .pickerStyle(.menu)
           NavigationLink {
             SettingsPlaceholderScreen(
+              title: "App Icon",
+              description: "Choose from alternate Bow app icons.",
+              systemImage: "app.badge",
+              isComingSoon: true
+            )
+          } label: {
+            ComingSoonRowLabel(title: "App Icon", systemImage: "app.badge")
+          }
+          NavigationLink {
+            SettingsPlaceholderScreen(
               title: "Notifications",
               description: "Notification controls will appear here when reminders are available.",
               systemImage: "bell"
@@ -121,6 +132,22 @@ struct SettingsScreen: View {
             )
           } label: {
             Label("Terms of Use", systemImage: "doc.text")
+          }
+        }
+
+        Section("Support") {
+          Button("Leave a Review", systemImage: "star.bubble") {
+            openURL(AppStoreLink.writeReview)
+          }
+          NavigationLink {
+            SettingsPlaceholderScreen(
+              title: "Feedback",
+              description: "Send ideas and report problems directly from Bow.",
+              systemImage: "bubble.left.and.text.bubble.right",
+              isComingSoon: true
+            )
+          } label: {
+            ComingSoonRowLabel(title: "Feedback", systemImage: "bubble.left.and.text.bubble.right")
           }
         }
 

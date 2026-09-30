@@ -26,7 +26,7 @@ struct TransactionDetailScreen: View {
   private var categoryName: String {
     if transaction.kind == .transfer { return "Transfer" }
     return envelopes.first { $0.id == transaction.envelopeID }?.name
-      ?? (transaction.kind == .inflow ? "Ready to Assign" : "Choose an Envelope")
+      ?? (transaction.kind == .inflow ? "Ready to Assign" : "Choose an envelope")
   }
 
   private var needsLegacyReview: Bool {
@@ -44,29 +44,52 @@ struct TransactionDetailScreen: View {
     NavigationStack {
       Form {
         Section {
-          VStack(alignment: .leading, spacing: 8) {
+          VStack(spacing: Bow.Space.s2) {
+            MerchantLogoView(
+              merchantName: transaction.kind == .transfer ? "" : transaction.payee,
+              domain: transaction.kind == .transfer ? nil : PayeeDirectory.logoDomain(
+                for: transaction.payee, transactionDomain: transaction.merchantDomain, payees: payees
+              ),
+              kind: transaction.kind,
+              categoryName: envelopes.first { $0.id == transaction.envelopeID }?.name,
+              size: 52
+            )
             Text(transaction.payee.isEmpty ? "Transaction" : transaction.payee)
-              .font(.title2.weight(.semibold))
+              .font(.bowHeadline)
+              .foregroundStyle(Bow.ink)
             Text(BudgetMoney.formatted(transaction.amountMinor, currencyCode: currencyCode))
-              .font(.largeTitle.weight(.bold))
-              .fontDesign(.rounded).monospacedDigit()
+              .font(.bowHero)
+              .monospacedDigit()
+              .foregroundStyle(Bow.ink)
+              .lineLimit(1)
+              .minimumScaleFactor(0.5)
+            Text(transaction.date.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+              .font(.bowSubhead)
+              .foregroundStyle(Bow.inkSoft)
             Text(statusTitle)
-              .font(.subheadline.weight(.medium))
-              .foregroundStyle(needsLegacyReview
-                ? AnyShapeStyle(Bow.needsInk) : AnyShapeStyle(Bow.inkSoft))
+              .font(.bowFootnote.weight(.medium))
+              .foregroundStyle(needsLegacyReview ? Bow.needsInk : Bow.inkSoft)
           }
-          .padding(.vertical, 12)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, Bow.Space.s4)
+          .accessibilityElement(children: .combine)
         }
         .listRowBackground(Bow.card)
 
-        Section("Details") {
+        Section {
+          LabeledContent("Envelope", value: categoryName)
           LabeledContent("Account", value: accountName)
-          LabeledContent("Category", value: categoryName)
-          LabeledContent("Date", value: transaction.date.formatted(date: .abbreviated, time: .omitted))
           if !transaction.notes.isEmpty {
             LabeledContent("Notes", value: transaction.notes)
           }
-          LabeledContent("Cleared", value: transaction.isCleared ? "Yes" : "No")
+          LabeledContent("Cleared") {
+            if transaction.isCleared {
+              Label("Cleared", systemImage: "checkmark")
+                .foregroundStyle(Bow.fundedInk)
+            } else {
+              Text("Not cleared")
+            }
+          }
         }
         .listRowBackground(Bow.card)
 
@@ -79,19 +102,19 @@ struct TransactionDetailScreen: View {
             ))
               .fontDesign(.rounded).monospacedDigit()
           }
-            LabeledContent("Posted date", value: record.date.formatted(date: .abbreviated, time: .omitted))
+            LabeledContent("Posted", value: record.date.formatted(date: .abbreviated, time: .omitted))
             LabeledContent("Matched", value: record.matchedAutomatically ? "Automatically" : "During review")
-            Button("Unmatch Bank Transaction", role: .destructive) {
+            Button("Unmatch bank transaction", role: .destructive) {
               showingUnmatchConfirmation = true
             }
           } header: {
-            Text("Match details")
+            Text("From your bank")
           } footer: {
             Text("Unmatching keeps your entered transaction and returns the bank item to review.")
           }
           .listRowBackground(Bow.card)
         } else if bankRecord?.status == .imported {
-          Section("Bank import") {
+          Section("From your bank") {
             Text("Added from a posted bank transaction.")
               .foregroundStyle(Bow.inkSoft)
           }
@@ -103,10 +126,10 @@ struct TransactionDetailScreen: View {
             if transaction.kind == .expense {
               CategorySelectionField(
                 title: "Envelope", selection: $reviewEnvelopeID,
-                envelopes: envelopes, noneTitle: "Choose an Envelope"
+                envelopes: envelopes, noneTitle: "Choose an envelope"
               )
             }
-            Button("Complete Review", systemImage: "checkmark") { completeReview() }
+            Button("Complete review", systemImage: "checkmark") { completeReview() }
               .disabled(!canCompleteReview)
           } footer: {
             Text("This older transaction needs a one-time check. Expenses must have an envelope before review can finish.")
@@ -147,7 +170,7 @@ struct TransactionDetailScreen: View {
       } message: {
         Text("The manual transaction stays in Spending. The posted bank item returns to Bank Review.")
       }
-      .alert("Could Not Update Transaction", isPresented: Binding(
+      .alert("Couldn’t update transaction", isPresented: Binding(
         get: { message != nil }, set: { if !$0 { message = nil } }
       )) {
         Button("OK") { message = nil }

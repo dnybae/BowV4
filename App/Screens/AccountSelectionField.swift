@@ -26,7 +26,7 @@ struct AccountSelectionField: View {
           .lineLimit(1)
           .truncationMode(.middle)
         Image(systemName: "chevron.up.chevron.down")
-          .font(.caption)
+          .font(.subheadline)
           .foregroundStyle(Bow.inkFaint)
       }
       .contentShape(Rectangle())

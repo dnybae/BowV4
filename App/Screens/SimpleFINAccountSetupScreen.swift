@@ -192,7 +192,7 @@ struct SimpleFINAccountSetupScreen: View {
             .foregroundStyle(Bow.inkSoft)
           if let reported = link.reportedBalance {
             Text("Bank-reported balance: \(BudgetMoney.formatted(bankAmount: reported, currencyCode: link.currencyCode))")
-              .font(.caption)
+              .font(.subheadline)
               .foregroundStyle(Bow.inkSoft)
           }
         }
@@ -216,10 +216,10 @@ struct SimpleFINAccountSetupScreen: View {
             Text(link.name)
             if let reported = link.reportedBalance {
               Text("Bank-reported balance: \(BudgetMoney.formatted(bankAmount: reported, currencyCode: link.currencyCode))")
-                .font(.caption).foregroundStyle(Bow.inkSoft)
+                .font(.subheadline).foregroundStyle(Bow.inkSoft)
             } else {
               Text("Balance unavailable")
-                .font(.caption).foregroundStyle(Bow.inkSoft)
+                .font(.subheadline).foregroundStyle(Bow.inkSoft)
             }
           }
         }
@@ -238,7 +238,7 @@ struct SimpleFINAccountSetupScreen: View {
           }
           .pickerStyle(.menu)
           Text((accountTypes[key] ?? .other).explanation)
-            .font(.caption).foregroundStyle(Bow.inkSoft)
+            .font(.subheadline).foregroundStyle(Bow.inkSoft)
           LabeledContent("Starting balance") {
             CurrencyAmountField("Starting balance", minor: Binding(
               get: { balanceDrafts[key, default: 0] },

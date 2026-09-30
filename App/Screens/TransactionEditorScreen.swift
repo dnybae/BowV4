@@ -150,7 +150,7 @@ struct TransactionEditorScreen: View {
                   .foregroundStyle(Bow.inkSoft)
                   .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
-                  .font(.caption)
+                  .font(.subheadline)
                   .foregroundStyle(Bow.inkFaint)
               }
               .contentShape(Rectangle())

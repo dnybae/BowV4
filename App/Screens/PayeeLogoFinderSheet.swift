@@ -48,9 +48,8 @@ struct PayeeLogoFinderSheet: View {
                   .frame(width: 54, height: 54)
               } else {
                 Image(systemName: "storefront.fill")
-                  .font(.system(size: 25))
+                  .bowScaledIcon(frame: 54, glyph: 25, weight: .regular)
                   .foregroundStyle(Bow.inkSoft)
-                  .frame(width: 54, height: 54)
               }
             }
             .frame(width: 64, height: 64)

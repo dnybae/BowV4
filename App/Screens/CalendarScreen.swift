@@ -428,13 +428,13 @@ private struct CalendarScheduleRow: View {
         }
         if schedule.kind == .transfer && schedule.envelopeID == nil {
           Text("This transfer does not spend an envelope")
-            .font(.caption).foregroundStyle(Bow.inkSoft)
+            .font(.subheadline).foregroundStyle(Bow.inkSoft)
         } else if schedule.envelopeID == nil {
           Text("Choose an envelope to check funding")
-            .font(.caption).foregroundStyle(Bow.needsInk)
+            .font(.subheadline).foregroundStyle(Bow.needsInk)
         } else if shortfall > 0 {
           Text("Envelope short by \(BudgetMoney.formatted(shortfall, currencyCode: currencyCode))")
-            .font(.caption).foregroundStyle(Bow.needsInk)
+            .font(.subheadline).foregroundStyle(Bow.needsInk)
         }
         if selectedDate <= Date(), schedule.accountID != nil {
           HStack(spacing: Bow.Space.s2) {

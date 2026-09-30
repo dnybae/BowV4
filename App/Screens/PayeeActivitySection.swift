@@ -65,7 +65,7 @@ struct PayeeActivitySection: View {
   private func stat(_ title: String, value: String) -> some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(title)
-        .font(.caption)
+        .font(.subheadline)
         .foregroundStyle(Bow.inkSoft)
       Text(value)
         .font(.headline)

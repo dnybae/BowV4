@@ -44,7 +44,7 @@ struct SimpleFINLinkPickerScreen: View {
                     Text(link.name).foregroundStyle(Bow.ink)
                     if let balance = link.reportedBalance {
                       Text("Bank balance: \(BudgetMoney.formatted(bankAmount: balance, currencyCode: link.currencyCode))")
-                        .font(.caption).foregroundStyle(Bow.inkSoft)
+                        .font(.subheadline).foregroundStyle(Bow.inkSoft)
                     }
                   }
                   Spacer()

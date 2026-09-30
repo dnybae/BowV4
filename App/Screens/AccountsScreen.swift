@@ -167,7 +167,7 @@ struct AccountsScreen: View {
           .font(.bowHeadline)
           .foregroundStyle(Bow.inkSoft)
         Text(netWorthText)
-          .font(.bowHero)
+          .bowHeroFont()
           .monospacedDigit()
           .foregroundStyle(Bow.ink)
           .lineLimit(1)
@@ -212,9 +212,8 @@ struct AccountsScreen: View {
     return NavigationLink(value: AccountRoute(id: account.id)) {
       HStack(spacing: Bow.Space.s3) {
         Image(systemName: account.kind.systemImage)
-          .font(.system(size: 15, weight: .semibold))
+          .bowScaledIcon(frame: 36, glyph: 15, weight: .semibold)
           .foregroundStyle(Bow.bowInk)
-          .frame(width: 36, height: 36)
           .background(Bow.bowTint, in: Circle())
           .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 2) {
@@ -305,7 +304,7 @@ private struct AccountDetailScreen: View {
               .font(.bowSubhead.weight(.semibold))
               .foregroundStyle(Bow.inkSoft)
             Text(BudgetMoney.formatted(balanceMinor, currencyCode: currencyCode))
-              .font(.bowHero)
+              .bowHeroFont()
               .monospacedDigit()
               .foregroundStyle(Bow.ink)
               .lineLimit(1)

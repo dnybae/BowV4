@@ -170,9 +170,8 @@ struct MoneyMoveScreen: View {
     let afterText = BudgetMoney.formatted(after, currencyCode: currencyCode)
     return HStack(spacing: Bow.Space.s3) {
       Image(systemName: bucketSymbol(bucket))
-        .font(.system(size: 15, weight: .semibold))
+        .bowScaledIcon(frame: 36, glyph: 15, weight: .semibold)
         .foregroundStyle(Bow.bowInk)
-        .frame(width: 36, height: 36)
         .background(Bow.bowTint, in: Circle())
       VStack(alignment: .leading, spacing: 1) {
         Text(role)

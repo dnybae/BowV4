@@ -20,9 +20,8 @@ struct BowTileIcon<Icon: View>: View {
 
   var body: some View {
     icon()
-      .font(.system(size: 15, weight: .medium))
+      .bowScaledIcon(frame: 30, glyph: 15, weight: .medium)
       .foregroundStyle(Bow.bowInk)
-      .frame(width: 30, height: 30)
       .background(Bow.bowTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
       .accessibilityHidden(true)
   }

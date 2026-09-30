@@ -47,7 +47,7 @@ struct ReconciliationScreen: View {
           VStack(spacing: Bow.Space.s3) {
             PulseTarget(color: isBalanced ? Bow.funded : Bow.bow, size: 150) {
               Image(systemName: isBalanced ? "checkmark" : "scalemass")
-                .font(.system(size: 34, weight: .semibold))
+                .font(.system(.largeTitle, weight: .semibold))
                 .foregroundStyle(isBalanced ? Bow.funded : Bow.bow)
             }
             .accessibilityHidden(true)

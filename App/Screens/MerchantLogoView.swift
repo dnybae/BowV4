@@ -8,6 +8,10 @@ struct MerchantLogoView: View {
   var categoryName: String? = nil
   var appearanceOverride: PayeeLogoAppearance? = nil
   var size: CGFloat = 38
+  @ScaledMetric private var scale: CGFloat = 1
+
+  /// The logo grows with Dynamic Type, capped so rows stay proportionate.
+  private var side: CGFloat { size * min(scale, Bow.maxGraphicScale) }
 
   private var appearance: PayeeLogoAppearance? {
     appearanceOverride ?? directory.appearance(for: merchantName)
@@ -23,7 +27,7 @@ struct MerchantLogoView: View {
         Image(uiImage: image)
           .resizable()
           .scaledToFit()
-          .frame(width: size - 10, height: size - 10)
+          .frame(width: side - 10, height: side - 10)
       } else if appearance?.source == .logoDev {
         AsyncImage(url: LogoDev.logoURL(
           domain: appearance?.domain ?? domain,
@@ -32,7 +36,7 @@ struct MerchantLogoView: View {
           if let image = phase.image {
             image.resizable()
               .scaledToFit()
-              .frame(width: size - 10, height: size - 10)
+              .frame(width: side - 10, height: side - 10)
           } else {
             systemIcon
           }
@@ -41,10 +45,10 @@ struct MerchantLogoView: View {
         systemIcon
       }
     }
-    .frame(width: size, height: size)
+    .frame(width: side, height: side)
     .background(Bow.well,
-                in: RoundedRectangle(cornerRadius: size * 0.26))
-    .clipShape(RoundedRectangle(cornerRadius: size * 0.26))
+                in: RoundedRectangle(cornerRadius: side * 0.26))
+    .clipShape(RoundedRectangle(cornerRadius: side * 0.26))
     .accessibilityHidden(true)
   }
 
@@ -52,7 +56,7 @@ struct MerchantLogoView: View {
     Image(systemName: TransactionIconSymbol.name(
       for: kind, payee: merchantName, category: categoryName
     ))
-      .font(.system(size: size * 0.44, weight: .medium))
+      .font(.system(size: side * 0.44, weight: .medium))
       .foregroundStyle(Bow.inkSoft)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
   }

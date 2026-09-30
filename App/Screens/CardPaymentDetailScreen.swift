@@ -84,7 +84,7 @@ struct CardPaymentDetailScreen: View {
                 .font(.bowSubhead)
                 .foregroundStyle(Bow.inkSoft)
               Text(BudgetMoney.formatted(reserved, currencyCode: currencyCode))
-                .font(.bowHero)
+                .bowHeroFont()
                 .monospacedDigit()
                 .foregroundStyle(Bow.ink)
                 .lineLimit(1)
@@ -217,7 +217,7 @@ struct CardPaymentDetailScreen: View {
               VStack(alignment: .leading, spacing: 3) {
                 Text(schedule.payee)
                 Text("\(schedule.frequency.title) · \(BudgetMoney.formatted(schedule.amountMinor, currencyCode: currencyCode))")
-                  .font(.caption).foregroundStyle(Bow.inkSoft)
+                  .font(.subheadline).foregroundStyle(Bow.inkSoft)
               }
             }
             .disabled(isPastMonth)

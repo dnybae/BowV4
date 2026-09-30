@@ -143,10 +143,10 @@ struct BankFileImportScreen: View {
                     .fontDesign(.rounded).monospacedDigit()
                 }
                 Text(proposal.row.date.formatted(date: .abbreviated, time: .omitted))
-                  .font(.caption)
+                  .font(.subheadline)
                   .foregroundStyle(Bow.inkSoft)
                 Text(actionLabel(for: proposal))
-                  .font(.caption)
+                  .font(.subheadline)
                   .foregroundStyle(Bow.inkSoft)
               }
               .padding(.vertical, 4)

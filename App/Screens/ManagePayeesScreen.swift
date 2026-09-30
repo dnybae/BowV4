@@ -129,7 +129,7 @@ struct ManagePayeesScreen: View {
           Text(entry.name)
           if let envelopeName {
             Label(envelopeName, systemImage: "envelope")
-              .font(.caption)
+              .font(.subheadline)
               .foregroundStyle(Bow.inkSoft)
           }
         }

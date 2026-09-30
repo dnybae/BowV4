@@ -126,7 +126,7 @@ private struct SpendingTimelineRow: View {
         Text(item.title)
           .foregroundStyle(isPending ? Bow.inkSoft : Bow.ink)
         Text(item.envelopeName.map { "\(item.accountName) · \($0)" } ?? item.accountName)
-          .font(.caption)
+          .font(.subheadline)
           .foregroundStyle(Bow.inkSoft)
         if let status = item.status {
           Label(status.title, systemImage: status.systemImage)
@@ -134,7 +134,7 @@ private struct SpendingTimelineRow: View {
             .foregroundStyle(status.needsAttention ? AnyShapeStyle(Bow.needsInk) : AnyShapeStyle(Bow.inkSoft))
         } else if item.isMatched {
           Label("Matched", systemImage: "link")
-            .font(.caption)
+            .font(.subheadline)
             .foregroundStyle(.tint)
         }
       }

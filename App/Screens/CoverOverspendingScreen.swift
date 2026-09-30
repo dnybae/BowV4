@@ -138,7 +138,7 @@ struct CoverOverspendingScreen: View {
       VStack(spacing: Bow.Space.s1) {
         if overspending.isEmpty {
           Image(systemName: "checkmark.circle.fill")
-            .font(.system(size: 44, weight: .semibold))
+            .font(.system(.largeTitle, weight: .semibold)).imageScale(.large)
             .foregroundStyle(Bow.funded)
             .accessibilityHidden(true)
           Text("Everything’s covered")
@@ -146,7 +146,7 @@ struct CoverOverspendingScreen: View {
             .foregroundStyle(Bow.ink)
         } else {
           Text(BudgetMoney.formatted(overspending.totalMinor, currencyCode: currencyCode))
-            .font(.bowHero)
+            .bowHeroFont()
             .monospacedDigit()
             .foregroundStyle(Bow.overInk)
             .contentTransition(.numericText())

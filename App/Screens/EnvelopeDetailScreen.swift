@@ -133,7 +133,7 @@ struct EnvelopeDetailScreen: View {
                 .font(.bowSubhead)
                 .foregroundStyle(Bow.inkSoft)
               Text(BudgetMoney.formatted(availableMinor, currencyCode: currencyCode))
-                .font(.bowHero)
+                .bowHeroFont()
                 .monospacedDigit()
                 .foregroundStyle(Bow.ink)
                 .lineLimit(1)
@@ -248,7 +248,7 @@ struct EnvelopeDetailScreen: View {
               VStack(alignment: .leading, spacing: 3) {
                 Text(schedule.payee)
                 Text("\(schedule.frequency.title) · \(BudgetMoney.formatted(schedule.amountMinor, currencyCode: currencyCode))")
-                  .font(.caption)
+                  .font(.subheadline)
                   .foregroundStyle(Bow.inkSoft)
               }
             }
@@ -302,7 +302,7 @@ struct EnvelopeDetailScreen: View {
                   .fontDesign(.rounded).monospacedDigit()
               }
               Text(allocation.date.formatted(date: .abbreviated, time: .omitted))
-                .font(.caption).foregroundStyle(Bow.inkSoft)
+                .font(.subheadline).foregroundStyle(Bow.inkSoft)
             }
           }
         }

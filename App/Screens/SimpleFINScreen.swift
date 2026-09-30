@@ -37,9 +37,8 @@ struct SimpleFINScreen: View {
           VStack(alignment: .leading, spacing: Bow.Space.s4) {
             HStack(spacing: Bow.Space.s3) {
               Image(systemName: needsAttention ? "exclamationmark.triangle" : "link")
-                .font(.system(size: 18, weight: .medium))
+                .bowScaledIcon(frame: 44, glyph: 18, weight: .medium)
                 .foregroundStyle(needsAttention ? Bow.needsInk : Bow.fundedInk)
-                .frame(width: 44, height: 44)
                 .background(needsAttention ? Bow.needsTint : Bow.fundedTint, in: Circle())
                 .accessibilityHidden(true)
               VStack(alignment: .leading, spacing: 2) {
@@ -106,9 +105,8 @@ struct SimpleFINScreen: View {
             let account = accounts.first { $0.id == link.localAccountID }
             HStack(spacing: Bow.Space.s3) {
               Image(systemName: account?.kind.systemImage ?? "building.columns")
-                .font(.system(size: 15, weight: .semibold))
+                .bowScaledIcon(frame: 36, glyph: 15, weight: .semibold)
                 .foregroundStyle(Bow.bowInk)
-                .frame(width: 36, height: 36)
                 .background(Bow.bowTint, in: Circle())
                 .accessibilityHidden(true)
               VStack(alignment: .leading, spacing: 2) {

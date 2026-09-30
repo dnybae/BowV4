@@ -196,17 +196,17 @@ struct TransactionSummaryRow: View {
         Text(showsDate
           ? "\(transaction.accountName) · \(transaction.date.formatted(date: .abbreviated, time: .omitted))"
           : transaction.accountName)
-          .font(.caption).foregroundStyle(Bow.inkSoft)
+          .font(.subheadline).foregroundStyle(Bow.inkSoft)
         if transaction.needsApproval {
-          Text("Needs review").font(.caption).foregroundStyle(Bow.needsInk)
+          Text("Needs review").font(.subheadline).foregroundStyle(Bow.needsInk)
         } else if transaction.sourceRaw == "manualLinked" {
           Label("Matched", systemImage: "link")
-            .font(.caption).foregroundStyle(.tint)
+            .font(.subheadline).foregroundStyle(.tint)
         }
         if transaction.envelopeID == nil && transaction.kind == .expense {
-          Text("Choose an envelope in Bank Review").font(.caption).foregroundStyle(Bow.needsInk)
+          Text("Choose an envelope in Bank Review").font(.subheadline).foregroundStyle(Bow.needsInk)
         } else if let envelopeName = transaction.envelopeName {
-          Text(envelopeName).font(.caption).foregroundStyle(Bow.inkSoft)
+          Text(envelopeName).font(.subheadline).foregroundStyle(Bow.inkSoft)
         }
       }
       Spacer(minLength: 8)
@@ -248,23 +248,23 @@ struct TransactionRow: View {
         Text(title)
           .foregroundStyle(Bow.ink)
         Text("\(accountName) · \(transaction.date.formatted(date: .abbreviated, time: .omitted))")
-          .font(.caption)
+          .font(.subheadline)
           .foregroundStyle(Bow.inkSoft)
         if transaction.needsApproval {
           Text("Needs review")
-            .font(.caption)
+            .font(.subheadline)
             .foregroundStyle(Bow.needsInk)
         } else if transaction.sourceRaw == "manualLinked" {
           Label("Matched", systemImage: "link")
-            .font(.caption).foregroundStyle(.tint)
+            .font(.subheadline).foregroundStyle(.tint)
         }
         if transaction.envelopeID == nil && transaction.kind == .expense {
           Text("Choose an envelope in Bank Review")
-            .font(.caption)
+            .font(.subheadline)
             .foregroundStyle(Bow.needsInk)
         } else if let envelopeName {
           Text(envelopeName)
-            .font(.caption)
+            .font(.subheadline)
             .foregroundStyle(Bow.inkSoft)
         }
       }

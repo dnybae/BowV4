@@ -281,7 +281,7 @@ private struct BudgetOverviewSection: View {
               .font(.bowSubhead)
               .foregroundStyle(Bow.inkSoft)
             Text(BudgetMoney.formatted(summary.readyToAssignMinor, currencyCode: currencyCode))
-              .font(.bowHero)
+              .bowHeroFont()
               .monospacedDigit()
               .foregroundStyle(isDeficit ? Bow.overInk : Bow.ink)
               .lineLimit(1)

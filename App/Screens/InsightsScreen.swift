@@ -127,7 +127,7 @@ struct InsightsScreen: View {
           PointMark(x: .value("Month", last.month, unit: .month), y: .value("Net Worth", Double(last.netWorthMinor) / 100))
             .symbol {
               Image(systemName: "arrowtriangle.right.fill")
-                .font(.system(size: 12))
+                .font(.caption)
                 .foregroundStyle(Bow.bow)
             }
             .annotation(position: .bottom, alignment: .trailing, spacing: 10) {
@@ -354,7 +354,7 @@ struct InsightsScreen: View {
                 Text(transaction.payee.isEmpty ? transaction.kind.title : transaction.payee)
                   .foregroundStyle(Bow.ink)
                 Text(transaction.date, style: .date)
-                  .font(.caption)
+                  .font(.subheadline)
                   .foregroundStyle(Bow.inkSoft)
               }
               Spacer()

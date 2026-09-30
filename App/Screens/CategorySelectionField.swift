@@ -25,7 +25,7 @@ struct CategorySelectionField: View {
           .lineLimit(1)
           .truncationMode(.middle)
         Image(systemName: "chevron.up.chevron.down")
-          .font(.caption)
+          .font(.subheadline)
           .foregroundStyle(Bow.inkFaint)
       }
       .contentShape(Rectangle())
@@ -67,7 +67,7 @@ struct CategoryScopeSelectionField: View {
           .foregroundStyle(Bow.inkSoft)
           .lineLimit(1)
         Image(systemName: "chevron.up.chevron.down")
-          .font(.caption)
+          .font(.subheadline)
           .foregroundStyle(Bow.inkFaint)
       }
       .contentShape(Rectangle())

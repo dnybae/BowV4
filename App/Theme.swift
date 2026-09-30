@@ -60,20 +60,60 @@ enum Bow {
 }
 
 // MARK: - Type (SF Pro Rounded for numbers and titles, SF Pro for text)
+// Every style is built on a system text style so it follows Dynamic Type.
+// Never use light, thin or ultralight weights. Secondary lines use .bowSubhead, not caption;
+// .bowCaption is only for small badges.
 
 extension Font {
-    static let bowHero       = Font.system(size: 44, weight: .semibold, design: .rounded)
-    static let bowLargeTitle = Font.system(size: 34, weight: .bold, design: .rounded)
-    static let bowTitle      = Font.system(size: 22, weight: .semibold, design: .rounded)
-    static let bowAmount     = Font.system(size: 17, weight: .semibold, design: .rounded)
-    static let bowAmountSm   = Font.system(size: 15, weight: .semibold, design: .rounded)
-    static let bowHeadline   = Font.system(size: 17, weight: .semibold)
-    static let bowBody       = Font.system(size: 17)
-    static let bowSubhead    = Font.system(size: 15)
-    static let bowFootnote   = Font.system(size: 13)
-    static let bowCaption    = Font.system(size: 12, weight: .medium)
+    static let bowLargeTitle = Font.system(.largeTitle, design: .rounded, weight: .bold)
+    static let bowTitle      = Font.system(.title2, design: .rounded, weight: .semibold)
+    static let bowAmount     = Font.system(.body, design: .rounded, weight: .semibold)
+    static let bowAmountSm   = Font.system(.subheadline, design: .rounded, weight: .semibold)
+    static let bowHeadline   = Font.headline
+    static let bowBody       = Font.body
+    static let bowSubhead    = Font.subheadline
+    static let bowFootnote   = Font.footnote
+    static let bowCaption    = Font.caption.weight(.medium)
 }
 // Always add .monospacedDigit() to money. Sentence case everywhere.
+
+// MARK: - Dynamic Type helpers
+
+extension Bow {
+    /// Icons, logos and rings grow with Dynamic Type but stop here so rows stay proportionate.
+    static let maxGraphicScale: CGFloat = 1.6
+}
+
+/// The hero amount: 44pt rounded semibold at the default size, scaled like Large Title.
+private struct BowHeroFont: ViewModifier {
+    @ScaledMetric(relativeTo: .largeTitle) private var size: CGFloat = 44
+    func body(content: Content) -> some View {
+        content.font(.system(size: size, weight: .semibold, design: .rounded))
+    }
+}
+
+/// A symbol in a fixed tile (disc, rounded square) whose glyph and frame scale together.
+private struct BowScaledIcon: ViewModifier {
+    @ScaledMetric private var scale: CGFloat = 1
+    var frame: CGFloat
+    var glyph: CGFloat
+    var weight: Font.Weight
+    func body(content: Content) -> some View {
+        let s = min(scale, Bow.maxGraphicScale)
+        content
+            .font(.system(size: glyph * s, weight: weight))
+            .frame(width: frame * s, height: frame * s)
+    }
+}
+
+extension View {
+    func bowHeroFont() -> some View { modifier(BowHeroFont()) }
+
+    /// Use for symbols that sit in a tile of a known size, instead of `.font(.system(size:))` plus `.frame`.
+    func bowScaledIcon(frame: CGFloat, glyph: CGFloat, weight: Font.Weight = .semibold) -> some View {
+        modifier(BowScaledIcon(frame: frame, glyph: glyph, weight: weight))
+    }
+}
 
 // MARK: - Envelope status
 
@@ -91,14 +131,16 @@ struct StatusRing: View {
     var fraction: Double
     var state: EnvelopeState
     var size: CGFloat = 28
+    @ScaledMetric private var scale: CGFloat = 1
     var body: some View {
+        let side = size * min(scale, Bow.maxGraphicScale)
         ZStack {
             Circle().stroke(Bow.well, lineWidth: 3)
             Circle().trim(from: 0, to: state == .over ? 1 : fraction)
                 .stroke(state.ring, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                 .rotationEffect(.degrees(-90))
         }
-        .frame(width: size, height: size)
+        .frame(width: side, height: side)
         .accessibilityHidden(true)
     }
 }
@@ -310,14 +352,13 @@ struct NoteCard: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: symbol)
-                .font(.system(size: 16, weight: .semibold))
+                .bowScaledIcon(frame: 34, glyph: 16)
                 .foregroundStyle(Bow.bowInk)
-                .frame(width: 34, height: 34)
                 .background(LinearGradient(colors: [.white.opacity(0.9), Bow.bowTint], startPoint: .topLeading, endPoint: .bottomTrailing),
                             in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                 .shadow(color: Bow.bow.opacity(0.3), radius: 6, y: 4)
             VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Bow.ink)
+                Text(title).font(.callout.weight(.semibold)).foregroundStyle(Bow.ink)
                 Text(message).font(.bowSubhead).foregroundStyle(Bow.inkSoft)
             }
             Spacer(minLength: 0)

@@ -65,9 +65,8 @@ struct AddAccountFlowScreen: View {
   private func optionRow(title: String, detail: String, note: String, symbol: String) -> some View {
     HStack(alignment: .top, spacing: Bow.Space.s4) {
       Image(systemName: symbol)
-        .font(.system(size: 18, weight: .medium))
+        .bowScaledIcon(frame: 44, glyph: 18, weight: .medium)
         .foregroundStyle(Bow.bowInk)
-        .frame(width: 44, height: 44)
         .background(Bow.bowTint, in: Circle())
         .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: Bow.Space.s1) {

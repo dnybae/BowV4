@@ -57,7 +57,7 @@ struct TransactionDetailScreen: View {
             Text(transaction.payee.isEmpty ? "Transaction" : transaction.payee)
               .font(.bowHeadline)
               .foregroundStyle(Bow.ink)
-            Text(BudgetMoney.formatted(transaction.amountMinor, currencyCode: currencyCode))
+            MoneyText(minor: transaction.amountMinor, currencyCode: currencyCode)
               .bowHeroFont()
               .monospacedDigit()
               .foregroundStyle(Bow.ink)

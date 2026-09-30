@@ -27,7 +27,7 @@ struct CardDebtGoalEditorScreen: View {
       Form {
         Section {
           LabeledContent("Debt today") {
-            Text(BudgetMoney.formatted(currentDebtMinor, currencyCode: currencyCode))
+            MoneyText(minor: currentDebtMinor, currencyCode: currencyCode)
               .fontDesign(.rounded).monospacedDigit()
           }
           CurrencyAmountField("Monthly funding target", minor: $monthlyMinor, currencyCode: currencyCode)

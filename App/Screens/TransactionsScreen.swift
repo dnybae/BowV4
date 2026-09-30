@@ -210,7 +210,7 @@ struct TransactionSummaryRow: View {
         }
       }
       Spacer(minLength: 8)
-      Text(BudgetMoney.formatted(displayAmountMinor ?? transaction.amountMinor, currencyCode: currencyCode))
+      MoneyText(minor: displayAmountMinor ?? transaction.amountMinor, currencyCode: currencyCode)
         .fontWeight(.medium)
         .foregroundStyle((displayAmountMinor ?? transaction.amountMinor) < 0 ? Bow.ink : Color.accentColor)
         .fontDesign(.rounded).monospacedDigit()

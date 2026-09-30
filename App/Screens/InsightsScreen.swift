@@ -118,7 +118,7 @@ struct InsightsScreen: View {
             .annotation(position: .bottom, alignment: .center, spacing: 6) {
               VStack(spacing: 0) {
                 Text("Today").font(.bowFootnote).foregroundStyle(Bow.inkSoft)
-                Text(BudgetMoney.formatted(today.1, currencyCode: currencyCode))
+                MoneyText(minor: today.1, currencyCode: currencyCode)
                   .font(.bowAmountSm).monospacedDigit().foregroundStyle(Bow.ink)
               }
             }
@@ -134,7 +134,7 @@ struct InsightsScreen: View {
               VStack(alignment: .trailing, spacing: 0) {
                 Text(last.month.formatted(.dateTime.month(.wide).year()))
                   .font(.bowFootnote).foregroundStyle(Bow.inkSoft)
-                Text(BudgetMoney.formatted(last.netWorthMinor, currencyCode: currencyCode))
+                MoneyText(minor: last.netWorthMinor, currencyCode: currencyCode)
                   .font(.bowTitle).monospacedDigit().foregroundStyle(Bow.bowInk)
               }
             }
@@ -239,7 +239,7 @@ struct InsightsScreen: View {
                     .font(.bowBody)
                     .foregroundStyle(Bow.ink)
                   Spacer()
-                  Text(BudgetMoney.formatted(group.totalMinor, currencyCode: currencyCode))
+                  MoneyText(minor: group.totalMinor, currencyCode: currencyCode)
                     .font(.bowAmountSm)
                     .monospacedDigit()
                     .foregroundStyle(Bow.ink)
@@ -259,7 +259,7 @@ struct InsightsScreen: View {
         VStack(alignment: .leading, spacing: 12) {
           Text("Net worth").font(.bowHeadline).foregroundStyle(Bow.ink)
           if let value = currentNetWorth.netWorthMinor {
-            Text(BudgetMoney.formatted(value, currencyCode: currencyCode))
+            MoneyText(minor: value, currencyCode: currencyCode)
               .font(.bowTitle)
               .monospacedDigit()
               .foregroundStyle(Bow.ink)
@@ -358,7 +358,7 @@ struct InsightsScreen: View {
                   .foregroundStyle(Bow.inkSoft)
               }
               Spacer()
-              Text(BudgetMoney.formatted(transaction.amountMinor, currencyCode: currencyCode))
+              MoneyText(minor: transaction.amountMinor, currencyCode: currencyCode)
                 .foregroundStyle(Bow.ink)
                 .fontDesign(.rounded).monospacedDigit()
             }

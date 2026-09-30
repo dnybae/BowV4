@@ -83,7 +83,7 @@ struct CardPaymentDetailScreen: View {
               Text("Payment ready")
                 .font(.bowSubhead)
                 .foregroundStyle(Bow.inkSoft)
-              Text(BudgetMoney.formatted(reserved, currencyCode: currencyCode))
+              MoneyText(minor: reserved, currencyCode: currencyCode)
                 .bowHeroFont()
                 .monospacedDigit()
                 .foregroundStyle(Bow.ink)
@@ -134,14 +134,14 @@ struct CardPaymentDetailScreen: View {
       if underfunded > 0 {
         Section("Underfunded") {
           LabeledContent("Total underfunded") {
-            Text(BudgetMoney.formatted(underfunded, currencyCode: currencyCode))
+            MoneyText(minor: underfunded, currencyCode: currencyCode)
               .fontWeight(.semibold).fontDesign(.rounded).monospacedDigit()
               .foregroundStyle(Bow.ink)
           }
           if overspentOnCard > 0 {
             VStack(alignment: .leading, spacing: Bow.Space.s2) {
               LabeledContent("Overspent envelopes") {
-                Text(BudgetMoney.formatted(overspentOnCard, currencyCode: currencyCode))
+                MoneyText(minor: overspentOnCard, currencyCode: currencyCode)
                   .fontDesign(.rounded).monospacedDigit()
               }
               Text("Card purchases went over their envelopes. Covering them funds this payment.")
@@ -156,7 +156,7 @@ struct CardPaymentDetailScreen: View {
           if uncoveredDebt > 0 {
             VStack(alignment: .leading, spacing: Bow.Space.s2) {
               LabeledContent("Carried debt") {
-                Text(BudgetMoney.formatted(uncoveredDebt, currencyCode: currencyCode))
+                MoneyText(minor: uncoveredDebt, currencyCode: currencyCode)
                   .fontDesign(.rounded).monospacedDigit()
               }
               Text(hasPayoffGoal
@@ -178,7 +178,7 @@ struct CardPaymentDetailScreen: View {
 
       Section("Debt progress") {
         LabeledContent("Amount owed") {
-          Text(BudgetMoney.formatted(owed, currencyCode: currencyCode))
+          MoneyText(minor: owed, currencyCode: currencyCode)
             .fontDesign(.rounded).monospacedDigit()
         }
         ProgressView(value: debtProgress) {
@@ -198,7 +198,7 @@ struct CardPaymentDetailScreen: View {
         }
         if let monthly = card.debtMonthlyTargetMinor {
           LabeledContent("Fund each month") {
-            Text(BudgetMoney.formatted(monthly, currencyCode: currencyCode))
+            MoneyText(minor: monthly, currencyCode: currencyCode)
               .fontDesign(.rounded).monospacedDigit()
           }
         }
@@ -263,7 +263,7 @@ struct CardPaymentDetailScreen: View {
         Section("Payment money moves") {
           ForEach(cardAllocations) { allocation in
             LabeledContent(allocation.targetCardID == card.id ? "Moved in" : "Moved out") {
-              Text(BudgetMoney.formatted(allocation.amountMinor, currencyCode: currencyCode))
+              MoneyText(minor: allocation.amountMinor, currencyCode: currencyCode)
                 .fontDesign(.rounded).monospacedDigit()
             }
           }

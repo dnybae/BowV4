@@ -139,7 +139,7 @@ private struct SpendingTimelineRow: View {
         }
       }
       Spacer(minLength: 8)
-      Text(BudgetMoney.formatted(item.amountMinor, currencyCode: item.currencyCode))
+      MoneyText(minor: item.amountMinor, currencyCode: item.currencyCode)
         .fontWeight(.medium)
         .foregroundStyle(isPending
           ? AnyShapeStyle(Bow.inkSoft)

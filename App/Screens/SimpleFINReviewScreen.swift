@@ -40,7 +40,7 @@ struct SimpleFINReviewScreen: View {
               .foregroundStyle(Bow.inkSoft)
           }
           Spacer(minLength: Bow.Space.s2)
-          Text(BudgetMoney.formatted(record.amountMinor, currencyCode: currencyCode))
+          MoneyText(minor: record.amountMinor, currencyCode: currencyCode)
             .font(.bowTitle)
             .monospacedDigit()
             .foregroundStyle(Bow.ink)

@@ -80,12 +80,12 @@ struct ReconciliationScreen: View {
         .listRowBackground(Bow.card)
         Section {
           LabeledContent("Cleared balance") {
-            Text(BudgetMoney.formatted(clearedBalanceMinor, currencyCode: currencyCode))
+            MoneyText(minor: clearedBalanceMinor, currencyCode: currencyCode)
               .fontDesign(.rounded).monospacedDigit()
           }
           if let difference {
             LabeledContent("Difference") {
-              Text(BudgetMoney.formatted(difference, currencyCode: currencyCode))
+              MoneyText(minor: difference, currencyCode: currencyCode)
                 .fontDesign(.rounded).monospacedDigit()
             }
               .foregroundStyle(difference == 0 ? Bow.fundedInk : Bow.needsInk)
@@ -121,7 +121,7 @@ struct ReconciliationScreen: View {
                       .foregroundStyle(Bow.inkSoft)
                   }
                   Spacer()
-                  Text(BudgetMoney.formatted(entry.amountMinor, currencyCode: currencyCode))
+                  MoneyText(minor: entry.amountMinor, currencyCode: currencyCode)
                     .font(.bowAmount)
                     .monospacedDigit()
                     .foregroundStyle(Bow.ink)

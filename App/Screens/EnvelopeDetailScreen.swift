@@ -132,7 +132,7 @@ struct EnvelopeDetailScreen: View {
               Text("Available")
                 .font(.bowSubhead)
                 .foregroundStyle(Bow.inkSoft)
-              Text(BudgetMoney.formatted(availableMinor, currencyCode: currencyCode))
+              MoneyText(minor: availableMinor, currencyCode: currencyCode)
                 .bowHeroFont()
                 .monospacedDigit()
                 .foregroundStyle(Bow.ink)
@@ -187,13 +187,13 @@ struct EnvelopeDetailScreen: View {
       Section {
         if let totalTarget {
           LabeledContent("Fund this month") {
-            Text(BudgetMoney.formatted(totalTarget, currencyCode: currencyCode))
+            MoneyText(minor: totalTarget, currencyCode: currencyCode)
               .fontDesign(.rounded).monospacedDigit()
           }
             .fontWeight(.semibold)
           if !scheduledContributions.isEmpty {
             LabeledContent("Your target") {
-              Text(BudgetMoney.formatted(envelope.targetMinor ?? 0, currencyCode: currencyCode))
+              MoneyText(minor: envelope.targetMinor ?? 0, currencyCode: currencyCode)
                 .fontDesign(.rounded).monospacedDigit()
             }
             ForEach(scheduledContributions) { contribution in
@@ -215,7 +215,7 @@ struct EnvelopeDetailScreen: View {
         }
         if let suggestedTarget {
           LabeledContent("Suggested from spending") {
-              Text(BudgetMoney.formatted(suggestedTarget, currencyCode: currencyCode))
+              MoneyText(minor: suggestedTarget, currencyCode: currencyCode)
                 .fontDesign(.rounded).monospacedDigit()
             }
           if envelope.targetMinor != suggestedTarget && !isPastMonth {
@@ -298,7 +298,7 @@ struct EnvelopeDetailScreen: View {
           ForEach(envelopeAllocations) { allocation in
             VStack(alignment: .leading, spacing: 3) {
               LabeledContent(allocation.targetEnvelopeID == envelope.id ? "Moved in" : "Moved out") {
-                Text(BudgetMoney.formatted(allocation.amountMinor, currencyCode: currencyCode))
+                MoneyText(minor: allocation.amountMinor, currencyCode: currencyCode)
                   .fontDesign(.rounded).monospacedDigit()
               }
               Text(allocation.date.formatted(date: .abbreviated, time: .omitted))
@@ -384,7 +384,7 @@ struct EnvelopeDetailScreen: View {
       Text(title)
         .font(.bowFootnote)
         .foregroundStyle(Bow.inkSoft)
-      Text(BudgetMoney.formatted(amount, currencyCode: currencyCode))
+      MoneyText(minor: amount, currencyCode: currencyCode)
         .font(.bowAmount)
         .monospacedDigit()
         .foregroundStyle(Bow.ink)

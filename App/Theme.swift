@@ -106,6 +106,35 @@ private struct BowScaledIcon: ViewModifier {
     }
 }
 
+// MARK: - Motion
+// Every Bow animation goes through these so Reduce Motion is always respected.
+
+extension Bow {
+    /// The house spring for state changes: month changes, money moves, banners.
+    static let motion = Animation.snappy
+    /// Rings sweep a little softer than numbers roll.
+    static let ringMotion = Animation.smooth
+
+    /// The house spring, or no animation when Reduce Motion is on.
+    static func motion(reduceMotion: Bool) -> Animation? { reduceMotion ? nil : motion }
+}
+
+private struct BowAnimation<Value: Equatable>: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var animation: Animation
+    var value: Value
+    func body(content: Content) -> some View {
+        content.animation(reduceMotion ? nil : animation, value: value)
+    }
+}
+
+extension View {
+    /// `.animation(_:value:)` that turns itself off when Reduce Motion is on.
+    func bowAnimation<Value: Equatable>(_ animation: Animation = Bow.motion, value: Value) -> some View {
+        modifier(BowAnimation(animation: animation, value: value))
+    }
+}
+
 extension View {
     func bowHeroFont() -> some View { modifier(BowHeroFont()) }
 
@@ -141,6 +170,8 @@ struct StatusRing: View {
                 .rotationEffect(.degrees(-90))
         }
         .frame(width: side, height: side)
+        .bowAnimation(Bow.ringMotion, value: fraction)
+        .bowAnimation(Bow.ringMotion, value: state)
         .accessibilityHidden(true)
     }
 }
@@ -156,6 +187,9 @@ struct StatusPill: View {
             .foregroundStyle(state.ink)
             .padding(.vertical, 5).padding(.horizontal, 10)
             .background(state.tint, in: Capsule())
+            .contentTransition(.numericText())
+            .bowAnimation(value: text)
+            .bowAnimation(value: state)
     }
 }
 
@@ -294,6 +328,8 @@ struct GlowRing<Center: View>: View {
             center().multilineTextAlignment(.center)
         }
         .frame(width: size * 1.45, height: size * 1.45)
+        .bowAnimation(Bow.ringMotion, value: fraction)
+        .bowAnimation(Bow.ringMotion, value: color)
     }
 }
 

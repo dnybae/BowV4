@@ -13,7 +13,7 @@ struct ScheduledTargetRow: View {
 
   var body: some View {
     LabeledContent {
-      Text(BudgetMoney.formatted(contribution.totalMinor, currencyCode: currencyCode))
+      MoneyText(minor: contribution.totalMinor, currencyCode: currencyCode)
         .fontDesign(.rounded).monospacedDigit()
     } label: {
       Label {

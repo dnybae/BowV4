@@ -303,7 +303,7 @@ private struct AccountDetailScreen: View {
             Text("Balance")
               .font(.bowSubhead.weight(.semibold))
               .foregroundStyle(Bow.inkSoft)
-            Text(BudgetMoney.formatted(balanceMinor, currencyCode: currencyCode))
+            MoneyText(minor: balanceMinor, currencyCode: currencyCode)
               .bowHeroFont()
               .monospacedDigit()
               .foregroundStyle(Bow.ink)

@@ -29,7 +29,7 @@ struct PendingBankDetailScreen: View {
               .foregroundStyle(Bow.inkSoft)
           }
           Spacer(minLength: Bow.Space.s2)
-          Text(BudgetMoney.formatted(record.amountMinor, currencyCode: account?.currencyCode ?? "USD"))
+          MoneyText(minor: record.amountMinor, currencyCode: account?.currencyCode ?? "USD")
             .font(.bowTitle)
             .monospacedDigit()
             .foregroundStyle(Bow.inkSoft)

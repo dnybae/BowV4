@@ -139,7 +139,7 @@ struct BankFileImportScreen: View {
                   Text(proposal.row.payee.isEmpty ? "Transaction" : proposal.row.payee)
                     .fontWeight(.medium)
                   Spacer()
-                  Text(BudgetMoney.formatted(proposal.row.amountMinor, currencyCode: currencyCode))
+                  MoneyText(minor: proposal.row.amountMinor, currencyCode: currencyCode)
                     .fontDesign(.rounded).monospacedDigit()
                 }
                 Text(proposal.row.date.formatted(date: .abbreviated, time: .omitted))

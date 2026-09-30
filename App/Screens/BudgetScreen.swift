@@ -137,7 +137,7 @@ struct BudgetScreen: View {
       .bowListBackground {
         Bow.mist.overlay(alignment: .top) { SkyBackground(mood: skyMood) }
       }
-      .animation(reduceMotion ? nil : .snappy, value: selectedMonth)
+      .animation(Bow.motion(reduceMotion: reduceMotion), value: selectedMonth)
       .navigationTitle(selectedMonth.formatted(.dateTime.month(.wide)))
       .navigationSubtitle(selectedMonth.formatted(.dateTime.year()))
       .navigationBarTitleDisplayMode(.inline)
@@ -191,7 +191,7 @@ struct BudgetScreen: View {
       }
       .onChange(of: returnToPresentRequest) { _, _ in
         let current = Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
-        withAnimation(reduceMotion ? nil : .snappy) { selectedMonth = current }
+        withAnimation(Bow.motion(reduceMotion: reduceMotion)) { selectedMonth = current }
       }
       .onChange(of: lastAccessibleMonth) { _, _ in
         enforceMonthAccess()
@@ -231,13 +231,13 @@ struct BudgetScreen: View {
   private func changeMonth(_ amount: Int) {
     if amount > 0 && !canAdvance { return }
     guard let next = Calendar.current.date(byAdding: .month, value: amount, to: selectedMonth) else { return }
-    withAnimation(reduceMotion ? nil : .snappy) { selectedMonth = next }
+    withAnimation(Bow.motion(reduceMotion: reduceMotion)) { selectedMonth = next }
   }
 
   private func enforceMonthAccess() {
     let viewed = Calendar.current.dateInterval(of: .month, for: selectedMonth)?.start ?? selectedMonth
     guard viewed > lastAccessibleMonth else { return }
-    withAnimation(reduceMotion ? nil : .snappy) { selectedMonth = lastAccessibleMonth }
+    withAnimation(Bow.motion(reduceMotion: reduceMotion)) { selectedMonth = lastAccessibleMonth }
   }
 }
 
@@ -280,7 +280,7 @@ private struct BudgetOverviewSection: View {
             Text("Ready to Assign")
               .font(.bowSubhead)
               .foregroundStyle(Bow.inkSoft)
-            Text(BudgetMoney.formatted(summary.readyToAssignMinor, currencyCode: currencyCode))
+            MoneyText(minor: summary.readyToAssignMinor, currencyCode: currencyCode)
               .bowHeroFont()
               .monospacedDigit()
               .foregroundStyle(isDeficit ? Bow.overInk : Bow.ink)
@@ -341,7 +341,7 @@ private struct BudgetOverviewSection: View {
         .transition(.opacity.combined(with: .scale(scale: 0.96)))
       }
     }
-    .animation(reduceMotion ? nil : .snappy, value: overspending.items.map(\.envelopeID))
+    .animation(Bow.motion(reduceMotion: reduceMotion), value: overspending.items.map(\.envelopeID))
   }
 
   private func metric(_ title: String, amount: Int64) -> some View {
@@ -349,7 +349,7 @@ private struct BudgetOverviewSection: View {
       Text(title)
         .font(.bowFootnote)
         .foregroundStyle(Bow.inkSoft)
-      Text(BudgetMoney.formatted(amount, currencyCode: currencyCode))
+      MoneyText(minor: amount, currencyCode: currencyCode)
         .font(.bowAmount)
         .monospacedDigit()
         .foregroundStyle(Bow.ink)

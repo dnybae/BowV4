@@ -75,12 +75,12 @@ struct CoverEnvelopeScreen: View {
           donorRow(donor)
             .swipeActions {
               Button("Remove", systemImage: "trash", role: .destructive) {
-                withAnimation(reduceMotion ? nil : .snappy) { draft.remove(donor.bucket) }
+                withAnimation(Bow.motion(reduceMotion: reduceMotion)) { draft.remove(donor.bucket) }
               }
             }
             .contextMenu {
               Button("Remove", systemImage: "trash", role: .destructive) {
-                withAnimation(reduceMotion ? nil : .snappy) { draft.remove(donor.bucket) }
+                withAnimation(Bow.motion(reduceMotion: reduceMotion)) { draft.remove(donor.bucket) }
               }
             }
         }
@@ -98,8 +98,8 @@ struct CoverEnvelopeScreen: View {
     .bowListBackground {
       Bow.mist.overlay(alignment: .top) { SkyBackground(mood: isCovered ? .mint : .coral, height: 420) }
     }
-    .animation(reduceMotion ? nil : .snappy, value: remaining)
-    .animation(reduceMotion ? nil : .snappy, value: draft.donors.map(\.bucket))
+    .animation(Bow.motion(reduceMotion: reduceMotion), value: remaining)
+    .animation(Bow.motion(reduceMotion: reduceMotion), value: draft.donors.map(\.bucket))
     .navigationTitle("Cover overspending")
     .navigationBarTitleDisplayMode(.inline)
     .safeAreaInset(edge: .bottom) {

@@ -126,7 +126,7 @@ struct CalendarScreen: View {
             Text("Spent")
               .font(.bowFootnote)
               .foregroundStyle(Bow.inkSoft)
-            Text(BudgetMoney.formatted(spentMinor, currencyCode: currencyCode))
+            MoneyText(minor: spentMinor, currencyCode: currencyCode)
               .font(.bowAmount)
               .monospacedDigit()
               .foregroundStyle(Bow.ink)
@@ -206,7 +206,7 @@ struct CalendarScreen: View {
 
   private func moveMonth(by offset: Int) {
     guard let nextDate = monthPage.adjacentSelection(from: selectedDate, by: offset) else { return }
-    withAnimation(reduceMotion ? nil : .snappy) {
+    withAnimation(Bow.motion(reduceMotion: reduceMotion)) {
       selectedDate = nextDate
       displayedMonth = calendar.dateInterval(of: .month, for: nextDate)?.start ?? nextDate
     }
@@ -214,7 +214,7 @@ struct CalendarScreen: View {
 
   private func returnToToday() {
     let today = Date()
-    withAnimation(reduceMotion ? nil : .snappy) {
+    withAnimation(Bow.motion(reduceMotion: reduceMotion)) {
       selectedDate = today
       displayedMonth = calendar.dateInterval(of: .month, for: today)?.start ?? today
     }
@@ -411,7 +411,7 @@ private struct CalendarScheduleRow: View {
               .font(.bowFootnote).foregroundStyle(Bow.inkSoft)
           }
           Spacer()
-          Text(BudgetMoney.formatted(schedule.amountMinor, currencyCode: currencyCode))
+          MoneyText(minor: schedule.amountMinor, currencyCode: currencyCode)
             .font(.bowAmount)
             .monospacedDigit()
             .foregroundStyle(Bow.ink)

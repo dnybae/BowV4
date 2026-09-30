@@ -115,7 +115,7 @@ struct PayeeDetailScreen: View {
                       .foregroundStyle(Bow.inkSoft)
                   }
                   Spacer()
-                  Text(BudgetMoney.formatted(schedule.amountMinor, currencyCode: currencyCode))
+                  MoneyText(minor: schedule.amountMinor, currencyCode: currencyCode)
                     .foregroundStyle(Bow.inkSoft)
                     .fontDesign(.rounded).monospacedDigit()
                 }

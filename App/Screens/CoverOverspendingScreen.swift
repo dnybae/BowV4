@@ -102,7 +102,7 @@ struct CoverOverspendingScreen: View {
           SkyBackground(mood: overspending?.isEmpty == false ? .coral : .mint, height: 460)
         }
       }
-      .animation(reduceMotion ? nil : .snappy, value: overspending?.items.map(\.envelopeID))
+      .animation(Bow.motion(reduceMotion: reduceMotion), value: overspending?.items.map(\.envelopeID))
       .navigationTitle("Cover overspending")
       .navigationSubtitle(cardName.map { "Spent on \($0)" } ?? "")
       .navigationBarTitleDisplayMode(.inline)
@@ -145,7 +145,7 @@ struct CoverOverspendingScreen: View {
             .font(.bowTitle)
             .foregroundStyle(Bow.ink)
         } else {
-          Text(BudgetMoney.formatted(overspending.totalMinor, currencyCode: currencyCode))
+          MoneyText(minor: overspending.totalMinor, currencyCode: currencyCode)
             .bowHeroFont()
             .monospacedDigit()
             .foregroundStyle(Bow.overInk)

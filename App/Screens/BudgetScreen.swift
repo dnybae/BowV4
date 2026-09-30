@@ -50,6 +50,30 @@ struct BudgetScreen: View {
     OverspendingSummary(snapshot: snapshot, envelopes: envelopes, groups: groups)
   }
 
+  private var assignableEnvelope: BudgetEnvelope? {
+    envelopes.first { !$0.isHidden && $0.paymentAccountID == nil }
+  }
+
+  /// Where money comes from to cover a deficit: the first funded envelope, else a card payment.
+  private var deficitSource: BudgetBucket? {
+    if let funded = envelopes.first(where: { snapshot.available(for: $0.id) > 0 }) {
+      return .envelope(funded.id)
+    }
+    return accounts.first {
+      $0.kind == .credit && snapshot.paymentAvailable[$0.id, default: 0] > 0
+    }.map { .cardPayment($0.id) }
+  }
+
+  private var notices: [BudgetNotice] {
+    BudgetNotice.notices(
+      readyToAssignMinor: snapshot.readyToAssignMinor,
+      overspending: overspending,
+      isPastMonth: isPastMonth,
+      canMoveToReadyToAssign: deficitSource != nil,
+      hasEnvelopes: assignableEnvelope != nil
+    )
+  }
+
   private var canAdvance: Bool {
     // The policy needs the selected month's assignments; wait until they've loaded.
     isShowingSelectedMonth && BudgetMonthAccessPolicy().canAdvance(
@@ -92,14 +116,10 @@ struct BudgetScreen: View {
       List {
         BudgetOverviewSection(
           summary: summary,
-          overspending: overspending,
+          notices: notices,
           currencyCode: currencyCode,
-          canMove: !isPastMonth && (snapshot.readyToAssignMinor > 0
-            || envelopes.contains { snapshot.available(for: $0.id) > 0 }
-            || accounts.contains { $0.kind == .credit && snapshot.paymentAvailable[$0.id, default: 0] > 0 }),
           isPastMonth: isPastMonth,
-          onAssign: assignMoney,
-          onCoverOverspending: { onCoverOverspending(.all) }
+          onSelectNotice: handle
         )
 
         let scheduled = scheduledTargets
@@ -247,26 +267,18 @@ struct BudgetScreen: View {
     }.sorted { $0.sortOrder == $1.sortOrder ? $0.name < $1.name : $0.sortOrder < $1.sortOrder }
   }
 
-  private func assignMoney() {
-    guard !isPastMonth else { return }
-    let first = envelopes.first(where: { !$0.isHidden && $0.paymentAccountID == nil })
-    if snapshot.readyToAssignMinor > 0 {
-      guard let first else { onAddEnvelope(); return }
-      onMoveMoney(.readyToAssign, .envelope(first.id))
-      return
+  private func handle(_ notice: BudgetNotice) {
+    guard notice.isActionable else { return }
+    switch notice.kind {
+    case .readyToAssign:
+      guard let envelope = assignableEnvelope else { onAddEnvelope(); return }
+      onMoveMoney(.readyToAssign, .envelope(envelope.id))
+    case .deficit:
+      guard let deficitSource else { return }
+      onMoveMoney(deficitSource, .readyToAssign)
+    case .overspent:
+      onCoverOverspending(.all)
     }
-    let source: BudgetBucket?
-    if let funded = envelopes.first(where: { snapshot.available(for: $0.id) > 0 }) {
-      source = .envelope(funded.id)
-    } else if let card = accounts.first(where: {
-      $0.kind == .credit && snapshot.paymentAvailable[$0.id, default: 0] > 0
-    }) {
-      source = .cardPayment(card.id)
-    } else {
-      source = nil
-    }
-    guard let source else { return }
-    onMoveMoney(source, .readyToAssign)
   }
 
   private func changeMonth(_ amount: Int) {
@@ -321,117 +333,104 @@ enum BudgetRoute: Hashable {
   case cardPayment(UUID)
 }
 
+/// The top of the Budget screen: this month's totals, then banners that only appear when there's
+/// something to act on.
 private struct BudgetOverviewSection: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   var summary: BudgetSummary
-  var overspending: OverspendingSummary
+  var notices: [BudgetNotice]
   var currencyCode: String
-  var canMove: Bool
   var isPastMonth: Bool
-  var onAssign: () -> Void
-  var onCoverOverspending: () -> Void
-
-  private var isDeficit: Bool { summary.readyToAssignMinor < 0 }
-
-  private var overspentTitle: String {
-    overspending.items.count == 1 ? "1 overspent envelope" : "\(overspending.items.count) overspent envelopes"
-  }
-
-  private var overspentMessage: String {
-    let total = BudgetMoney.formatted(overspending.totalMinor, currencyCode: currencyCode)
-    if isPastMonth { return "\(total) was left uncovered when this month ended." }
-    switch (overspending.cashMinor > 0, overspending.creditMinor > 0) {
-    case (true, true): return "\(total) over. Cover it to keep next month’s budget and your card payments on track."
-    case (false, true): return "\(total) over on credit cards. Cover it so your card payments stay funded."
-    default: return "\(total) over. Cover it now or it comes out of next month’s Ready to Assign."
-    }
-  }
+  var onSelectNotice: (BudgetNotice) -> Void
 
   var body: some View {
     Section {
-      VStack(spacing: Bow.Space.s5) {
-        GlowRing(fraction: summary.assignedShare, color: isDeficit ? Bow.over : Bow.bow) {
-          VStack(spacing: Bow.Space.s1) {
-            Text("Ready to Assign")
-              .font(.bowSubhead)
-              .foregroundStyle(Bow.inkSoft)
-            MoneyText(minor: summary.readyToAssignMinor, currencyCode: currencyCode)
-              .bowHeroFont()
-              .monospacedDigit()
-              .foregroundStyle(isDeficit ? Bow.overInk : Bow.ink)
-              .lineLimit(1)
-              .minimumScaleFactor(0.4)
-          }
-          .frame(maxWidth: 180)
-        }
-        .accessibilityElement(children: .combine)
-        // Rounded down so the ring never claims 100% while money is still waiting for a job.
-        .accessibilityValue("\(Int((summary.assignedShare * 100).rounded(.down))) percent assigned")
-
-        Button(summary.readyToAssignMinor > 0 ? "Assign money" : "Move money", action: onAssign)
-          .bowPrimaryButton()
-          .disabled(!canMove)
-          // The ring's frame includes its outer glow; pull the button up to sit just under the ring.
-          .padding(.top, -(Bow.Space.s8 + Bow.Space.s2))
-
-        if isDeficit || isPastMonth {
-          Text(isDeficit ? "Move money back or add cash to cover this deficit." : "View only · Past budget month")
+      VStack(spacing: Bow.Space.s3) {
+        metrics
+        if isPastMonth {
+          Text("View only · Past budget month")
             .font(.bowFootnote)
             .foregroundStyle(Bow.inkSoft)
-            .multilineTextAlignment(.center)
-        }
-
-        HStack(spacing: Bow.Space.s2) {
-          metric("Assigned", amount: summary.assignedThisMonthMinor)
-          metric("Spent", amount: summary.spentThisMonthMinor)
-          metric("Available", amount: summary.availableMinor)
-        }
-        .padding(.vertical, Bow.Space.s3)
-        .padding(.horizontal, Bow.Space.s2)
-        .glassEffect(.regular, in: .rect(cornerRadius: Bow.Radius.lg))
-
-        if summary.assignedInFutureMinor != 0 {
-          Text("\(BudgetMoney.formatted(summary.assignedInFutureMinor, currencyCode: currencyCode)) assigned in future months")
-            .font(.bowFootnote)
-            .monospacedDigit()
-            .foregroundStyle(Bow.inkSoft)
-            .multilineTextAlignment(.center)
+            .transition(.opacity)
         }
       }
       .frame(maxWidth: .infinity)
       .listRowBackground(Color.clear)
       .listRowSeparator(.hidden)
-      .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: Bow.Space.s2, trailing: 0))
+      .listRowInsets(EdgeInsets(top: Bow.Space.s2, leading: 0, bottom: Bow.Space.s1, trailing: 0))
 
-      if !overspending.isEmpty {
-        Button(action: onCoverOverspending) {
-          NoteCard(symbol: "exclamationmark.triangle.fill", title: overspentTitle, message: overspentMessage)
+      ForEach(notices) { notice in
+        Group {
+          if notice.isActionable {
+            Button { onSelectNotice(notice) } label: {
+              BudgetBanner(notice: notice, currencyCode: currencyCode)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(notice.accessibilityHint)
+          } else {
+            // Informational only (past months, nothing to move): full contrast, not a dimmed button.
+            BudgetBanner(notice: notice, currencyCode: currencyCode)
+          }
         }
-        .buttonStyle(.plain)
-        .disabled(isPastMonth)
-        .accessibilityHint(isPastMonth ? "" : "Choose envelopes to cover the overspending")
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: Bow.Space.s2, leading: 0, bottom: Bow.Space.s2, trailing: 0))
-        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        .listRowInsets(EdgeInsets(top: Bow.Space.s1, leading: 0, bottom: Bow.Space.s1, trailing: 0))
+        .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+      }
+
+      if summary.assignedInFutureMinor != 0 {
+        Text("\(BudgetMoney.formatted(summary.assignedInFutureMinor, currencyCode: currencyCode)) assigned in future months")
+          .font(.bowFootnote)
+          .monospacedDigit()
+          .foregroundStyle(Bow.inkSoft)
+          .frame(maxWidth: .infinity)
+          .multilineTextAlignment(.center)
+          .listRowBackground(Color.clear)
+          .listRowSeparator(.hidden)
       }
     }
-    .animation(Bow.motion(reduceMotion: reduceMotion), value: overspending.items.map(\.envelopeID))
+    .bowAnimation(value: notices.map(\.kind))
+    .bowAnimation(value: isPastMonth)
+  }
+
+  private var metrics: some View {
+    // Three columns stop fitting at accessibility text sizes; stack them as label–value rows.
+    let layout = dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: Bow.Space.s2))
+      : AnyLayout(HStackLayout(spacing: Bow.Space.s2))
+    return layout {
+      metric("Assigned", amount: summary.assignedThisMonthMinor)
+      metric("Spent", amount: summary.spentThisMonthMinor)
+      metric("Available", amount: summary.availableMinor)
+    }
+    .padding(.vertical, Bow.Space.s3)
+    .padding(.horizontal, Bow.Space.s2)
+    .background {
+      if reduceTransparency {
+        RoundedRectangle(cornerRadius: Bow.Radius.lg, style: .continuous).fill(Bow.card)
+      }
+    }
+    .glassEffect(reduceTransparency ? .identity : .regular, in: .rect(cornerRadius: Bow.Radius.lg))
   }
 
   private func metric(_ title: String, amount: Int64) -> some View {
-    VStack(spacing: 2) {
+    let layout = dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+      : AnyLayout(VStackLayout(spacing: 2))
+    return layout {
       Text(title)
         .font(.bowFootnote)
         .foregroundStyle(Bow.inkSoft)
       MoneyText(minor: amount, currencyCode: currencyCode)
         .font(.bowAmount)
-        .monospacedDigit()
         .foregroundStyle(Bow.ink)
         .lineLimit(1)
-        .minimumScaleFactor(0.6)
+        .minimumScaleFactor(0.7)
     }
-    .frame(maxWidth: .infinity)
+    .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .center)
+    .padding(.horizontal, dynamicTypeSize.isAccessibilitySize ? Bow.Space.s2 : 0)
     .accessibilityElement(children: .combine)
   }
 }

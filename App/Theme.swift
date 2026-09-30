@@ -379,37 +379,6 @@ extension View {
 // Rows: use .listRowBackground(Bow.card). Hero sections: .listRowBackground(Color.clear).
 // Toolbars, tab bar, sheets, pickers, toggles, menus: leave them native; they render Liquid Glass automatically.
 
-// MARK: - Note card (next-step advice with gradient edge)
-
-struct NoteCard: View {
-    var symbol: String
-    var title: String
-    var message: String
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: symbol)
-                .bowScaledIcon(frame: 34, glyph: 16)
-                .foregroundStyle(Bow.bowInk)
-                .background(LinearGradient(colors: [.white.opacity(0.9), Bow.bowTint], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                .shadow(color: Bow.bow.opacity(0.3), radius: 6, y: 4)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.callout.weight(.semibold)).foregroundStyle(Bow.ink)
-                Text(message).font(.bowSubhead).foregroundStyle(Bow.inkSoft)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(16)
-        .background(Bow.card, in: RoundedRectangle(cornerRadius: Bow.Radius.lg, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Bow.Radius.lg, style: .continuous)
-                .strokeBorder(LinearGradient(colors: [Color(red: 0.97, green: 0.78, blue: 0.71), Color(red: 0.78, green: 0.83, blue: 1), Color(red: 0.75, green: 0.91, blue: 0.83)],
-                                             startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.5)
-        )
-        .shadow(color: Bow.bow.opacity(0.12), radius: 15, y: 10)
-    }
-}
-
 // MARK: - Card container (only for non-list content such as the stats strip)
 
 extension View {

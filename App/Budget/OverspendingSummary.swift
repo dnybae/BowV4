@@ -17,6 +17,10 @@ struct OverspendingSummary {
     var creditMinor: Int64 { creditByCard.values.reduce(0, +) }
   }
 
+  init(items: [Item]) {
+    self.items = items
+  }
+
   /// - Parameter cardID: When set, only envelopes overspent on that card are included.
   init(snapshot: BudgetSnapshot, envelopes: [BudgetEnvelope], groups: [BudgetGroup], cardID: UUID? = nil) {
     let groupOrder = Dictionary(groups.map { ($0.id, $0.sortOrder) }, uniquingKeysWith: { first, _ in first })

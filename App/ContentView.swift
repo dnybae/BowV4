@@ -36,10 +36,8 @@ struct ContentView: View {
     .task(id: isDemoMode) {
       if isDemoMode && demoContainer == nil { prepareDemo() }
     }
-    .task(id: appearanceRaw) {
-      AppIconAppearanceController.synchronize(
-        for: AppAppearance(rawValue: appearanceRaw) ?? .system
-      )
+    .onChange(of: appearanceRaw, initial: true) { _, raw in
+      AppAppearanceController.apply(AppAppearance(rawValue: raw) ?? .system)
     }
     .onChange(of: demoResetVersion) { _, _ in
       demoContainer = nil
@@ -81,7 +79,6 @@ private struct BudgetHomeView: View {
   @State private var loadedAccountReport: AccountBalanceReport?
   @State private var ledgerError: String?
   @State private var ledgerRefreshGeneration = 0
-  @AppStorage("bow.appearance") private var appearanceRaw = AppAppearance.system.rawValue
   @State private var selectedMonth = Date()
   @State private var selectedCalendarDate = Date()
   @State private var selectedTab: HomeTab = .budget
@@ -337,9 +334,6 @@ private struct BudgetHomeView: View {
         }
       }
     }
-    .preferredColorScheme(
-      AppAppearance(rawValue: appearanceRaw)?.colorScheme
-    )
     .environment(\.budgetSnapshotRepository, snapshotRepository)
     .environment(\.payeeLogoDirectory, PayeeLogoDirectory(payees: payees))
     .task {

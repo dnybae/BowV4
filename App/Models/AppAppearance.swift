@@ -1,4 +1,4 @@
-import SwiftUI
+import UIKit
 
 enum AppAppearance: String, CaseIterable, Identifiable {
   case system
@@ -15,19 +15,11 @@ enum AppAppearance: String, CaseIterable, Identifiable {
     }
   }
 
-  var colorScheme: ColorScheme? {
+  var interfaceStyle: UIUserInterfaceStyle {
     switch self {
-    case .system: nil
+    case .system: .unspecified
     case .light: .light
     case .dark: .dark
-    }
-  }
-
-  var alternateIconName: String? {
-    switch self {
-    case .system: nil
-    case .light: "AppIconLight"
-    case .dark: "AppIconDark"
     }
   }
 }

@@ -31,43 +31,95 @@ struct CardPaymentDetailScreen: View {
     guard baseline > 0 else { return 1 }
     return min(1, max(0, Double(baseline - owed) / Double(baseline)))
   }
+  /// Opens Move Money into this card's payment from the most useful source, as before the redesign.
+  private func moveMoney() {
+    if snapshot.readyToAssignMinor > 0 {
+      onMoveMoney(.readyToAssign, .cardPayment(card.id))
+    } else if let funded = envelopes.first(where: { snapshot.available(for: $0.id) > 0 }) {
+      onMoveMoney(.envelope(funded.id), .cardPayment(card.id))
+    } else {
+      onMoveMoney(.cardPayment(card.id), .readyToAssign)
+    }
+  }
+
   private var cardSchedules: [BudgetSchedule] {
     schedules.filter { $0.accountID == card.id }.sorted { $0.payee < $1.payee }
+  }
+
+  private var status: EnvelopeStatus {
+    EnvelopeStatus(cardOwedMinor: owed, reservedMinor: reserved,
+                   isCarryingDebt: carriedDebt > 0, currencyCode: currencyCode)
+  }
+
+  private var statusHeadline: (title: String, message: String)? {
+    switch status.state {
+    case .over:
+      return (status.pillText, "to pay this card in full")
+    case .needs:
+      return (status.pillText, "to cover this month’s card spending")
+    case .funded:
+      return ("Ready to pay in full", "Payment money covers the full card balance.")
+    case .empty:
+      return nil
+    }
   }
 
   var body: some View {
     List {
       Section {
-        VStack(alignment: .leading, spacing: 10) {
-          Text("Payment Available").font(.subheadline).foregroundStyle(Bow.inkSoft)
-          Text(BudgetMoney.formatted(reserved, currencyCode: currencyCode))
-            .font(.system(.largeTitle, design: .rounded, weight: .semibold))
-            .fontDesign(.rounded).monospacedDigit()
-          Text(snapshot.month.formatted(.dateTime.month(.wide).year()))
-            .font(.footnote).foregroundStyle(Bow.inkSoft)
-          Text(owed > reserved
-            ? (carriedDebt > 0 ? "Carrying debt from a previous month. Fund \(BudgetMoney.formatted(owed - reserved, currencyCode: currencyCode)) to pay in full." : "Current credit spending needs \(BudgetMoney.formatted(owed - reserved, currencyCode: currencyCode)) of funding.")
-            : "Payment money covers the full card balance.")
-            .font(.footnote)
-            .foregroundStyle(owed > reserved ? Bow.needsInk : Bow.inkSoft)
-          Button("Move Money", systemImage: "arrow.left.arrow.right") {
-            if snapshot.readyToAssignMinor > 0 {
-              onMoveMoney(.readyToAssign, .cardPayment(card.id))
-            } else if let funded = envelopes.first(where: { snapshot.available(for: $0.id) > 0 }) {
-              onMoveMoney(.envelope(funded.id), .cardPayment(card.id))
-            } else {
-              onMoveMoney(.cardPayment(card.id), .readyToAssign)
+        VStack(spacing: Bow.Space.s4) {
+          GlowRing(fraction: status.ringFraction, color: status.state.ring, size: 200) {
+            VStack(spacing: Bow.Space.s1) {
+              Text("Payment ready")
+                .font(.bowSubhead)
+                .foregroundStyle(Bow.inkSoft)
+              Text(BudgetMoney.formatted(reserved, currencyCode: currencyCode))
+                .font(.bowHero)
+                .monospacedDigit()
+                .foregroundStyle(Bow.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.4)
+              Text(owed > 0
+                ? "of \(BudgetMoney.formatted(owed, currencyCode: currencyCode)) owed"
+                : snapshot.month.formatted(.dateTime.month(.wide).year()))
+                .font(.bowFootnote)
+                .monospacedDigit()
+                .foregroundStyle(Bow.inkSoft)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             }
+            .frame(maxWidth: 170)
           }
-          .bowPrimaryButton()
-          .disabled(isPastMonth || snapshot.readyToAssignMinor <= 0 && reserved <= 0
-            && !envelopes.contains { snapshot.available(for: $0.id) > 0 })
-          .padding(.top, 6)
+          .accessibilityElement(children: .combine)
+
+          if let statusHeadline {
+            VStack(spacing: 2) {
+              Text(statusHeadline.title)
+                .font(.bowTitle)
+                .monospacedDigit()
+                .foregroundStyle(Bow.ink)
+              Text(statusHeadline.message)
+                .font(.bowSubhead)
+                .foregroundStyle(Bow.inkSoft)
+            }
+            .multilineTextAlignment(.center)
+            .accessibilityElement(children: .combine)
+          }
+
+          HStack(spacing: Bow.Space.s3) {
+            Button(owed > reserved ? "Fund payment" : "Move money", action: moveMoney)
+              .bowPrimaryButton()
+              .disabled(isPastMonth || snapshot.readyToAssignMinor <= 0 && reserved <= 0
+                && !envelopes.contains { snapshot.available(for: $0.id) > 0 })
+            Button("Payoff goal") { showingGoalEditor = true }
+              .bowSecondaryButton()
+              .disabled(isPastMonth)
+          }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: Bow.Space.s2, trailing: 0))
       }
-      .listRowBackground(Bow.card)
 
       Section("Debt progress") {
         LabeledContent("Amount owed") {
@@ -98,8 +150,6 @@ struct CardPaymentDetailScreen: View {
         if let date = card.debtGoalDate {
           LabeledContent("Target date", value: date.formatted(date: .abbreviated, time: .omitted))
         }
-        Button("Edit Payoff Goal", systemImage: "pencil") { showingGoalEditor = true }
-          .disabled(isPastMonth)
       }
       .listRowBackground(Bow.card)
 
@@ -166,8 +216,10 @@ struct CardPaymentDetailScreen: View {
         .listRowBackground(Bow.card)
       }
     }
-    .bowListBackground()
-    .navigationTitle(card.name + " Payment")
+    .bowListBackground {
+      Bow.mist.overlay(alignment: .top) { SkyBackground(mood: status.state.sky) }
+    }
+    .navigationTitle(card.name + " payment")
     .task(id: snapshot.month) {
       let nextMonth = Calendar.current.date(byAdding: .month, value: 1, to: snapshot.month) ?? .distantFuture
       await feed.reload(container: modelContext.container, searchText: "", filter: TransactionFilter(),

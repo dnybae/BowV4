@@ -51,6 +51,20 @@ struct BudgetScreen: View {
       : $0.sortOrder < $1.sortOrder }
   }
 
+  /// Same monthly target the envelope detail screen shows: the user's target plus scheduled bills.
+  private var scheduledTargets: [UUID: Int64] {
+    ScheduleTargetCalculator().totalsByEnvelope(schedules: schedules, month: snapshot.month)
+  }
+
+  private func monthlyTarget(for envelope: BudgetEnvelope, scheduled: [UUID: Int64]) -> Int64? {
+    let total = (envelope.targetMinor ?? 0) + scheduled[envelope.id, default: 0]
+    return total > 0 ? total : nil
+  }
+
+  private var skyMood: SkyMood {
+    snapshot.readyToAssignMinor < 0 ? .coral : .dawn
+  }
+
   private var creditCards: [BudgetAccount] {
     accounts.filter { $0.kind == .credit &&
       (searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText)
@@ -79,6 +93,7 @@ struct BudgetScreen: View {
           }
         )
 
+        let scheduled = scheduledTargets
         ForEach(orderedGroups) { group in
           let matching = visibleEnvelopes(in: group)
           if !matching.isEmpty {
@@ -92,6 +107,7 @@ struct BudgetScreen: View {
                     creditOverspentMinor: snapshot.creditShortfall[envelope.id, default: 0],
                     assignedMinor: snapshot.assigned[envelope.id, default: 0],
                     activityMinor: snapshot.activity[envelope.id, default: 0],
+                    monthlyTargetMinor: monthlyTarget(for: envelope, scheduled: scheduled),
                     currencyCode: currencyCode
                   )
                 }
@@ -129,10 +145,13 @@ struct BudgetScreen: View {
           .listRowBackground(Bow.card)
         }
       }
-      .bowListBackground()
+      .bowListBackground {
+        Bow.mist.overlay(alignment: .top) { SkyBackground(mood: skyMood) }
+      }
       .animation(reduceMotion ? nil : .snappy, value: selectedMonth)
       .searchable(text: $searchText, prompt: "Search envelopes or groups")
-      .navigationTitle(selectedMonth.formatted(.dateTime.month(.wide).year()))
+      .navigationTitle(selectedMonth.formatted(.dateTime.month(.wide)))
+      .navigationSubtitle(selectedMonth.formatted(.dateTime.year()))
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItemGroup(placement: .topBarTrailing) {
@@ -252,81 +271,84 @@ private struct BudgetOverviewSection: View {
   var onAssign: () -> Void
   var onShowCards: () -> Void
 
+  private var isDeficit: Bool { summary.readyToAssignMinor < 0 }
+
   var body: some View {
     Section {
-      VStack(alignment: .leading, spacing: 10) {
-        Text("Ready to Assign")
-          .font(.subheadline.weight(.medium))
-          .foregroundStyle(Bow.inkSoft)
-        Text(BudgetMoney.formatted(summary.readyToAssignMinor, currencyCode: currencyCode))
-          .font(.system(.largeTitle, design: .rounded, weight: .semibold))
-          .foregroundStyle(summary.readyToAssignMinor < 0 ? Bow.overInk : Bow.ink)
-          .minimumScaleFactor(0.7)
-          .lineLimit(1)
-          .fontDesign(.rounded).monospacedDigit()
-        Text(summary.readyToAssignMinor < 0
-          ? "Move money back or add cash to cover this deficit."
-          : isPastMonth ? "View only · Past budget month" : "Cash available to give a job.")
-          .font(.footnote)
-          .foregroundStyle(Bow.inkSoft)
-        Button("Move Money", systemImage: "arrow.left.arrow.right", action: onAssign)
+      VStack(spacing: Bow.Space.s5) {
+        GlowRing(fraction: 0, color: isDeficit ? Bow.over : Bow.bow) {
+          VStack(spacing: Bow.Space.s1) {
+            Text("Ready to Assign")
+              .font(.bowSubhead)
+              .foregroundStyle(Bow.inkSoft)
+            Text(BudgetMoney.formatted(summary.readyToAssignMinor, currencyCode: currencyCode))
+              .font(.bowHero)
+              .monospacedDigit()
+              .foregroundStyle(isDeficit ? Bow.overInk : Bow.ink)
+              .lineLimit(1)
+              .minimumScaleFactor(0.4)
+          }
+          .frame(maxWidth: 180)
+        }
+        .accessibilityElement(children: .combine)
+
+        if isDeficit || isPastMonth {
+          Text(isDeficit ? "Move money back or add cash to cover this deficit." : "View only · Past budget month")
+            .font(.bowFootnote)
+            .foregroundStyle(Bow.inkSoft)
+            .multilineTextAlignment(.center)
+        }
+
+        Button(summary.readyToAssignMinor > 0 ? "Assign money" : "Move money", action: onAssign)
           .bowPrimaryButton()
           .disabled(!canMove)
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.vertical, 10)
-      .accessibilityElement(children: .contain)
 
-      HStack(spacing: 16) {
-        metric("Assigned", amount: summary.assignedThisMonthMinor, emphasized: false)
-        Divider()
-        metric("Overspent", amount: summary.overspentMinor, emphasized: summary.overspentMinor > 0)
+        HStack(spacing: Bow.Space.s2) {
+          metric("Assigned", amount: summary.assignedThisMonthMinor, emphasized: false)
+          metric("Overspent", amount: summary.overspentMinor, emphasized: summary.overspentMinor > 0)
+          metric("Future months", amount: summary.assignedInFutureMinor, emphasized: false)
+        }
+        .padding(.vertical, Bow.Space.s3)
+        .padding(.horizontal, Bow.Space.s2)
+        .glassEffect(.regular, in: .rect(cornerRadius: Bow.Radius.lg))
       }
-      .padding(.vertical, 6)
-
-      LabeledContent("Assigned in future months") {
-        Text(BudgetMoney.formatted(summary.assignedInFutureMinor, currencyCode: currencyCode))
-          .fontDesign(.rounded).monospacedDigit()
-      }
-        .font(.subheadline)
+      .frame(maxWidth: .infinity)
+      .listRowBackground(Color.clear)
+      .listRowSeparator(.hidden)
+      .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: Bow.Space.s2, trailing: 0))
 
       if hasCards {
         Button(action: onShowCards) {
-          HStack {
-            VStack(alignment: .leading, spacing: 3) {
-              Text(summary.creditUncoveredMinor == 0 ? "Credit payments fully funded" : "Credit debt needs funding")
-                .font(.subheadline.weight(.semibold))
-              Text(summary.creditUncoveredMinor == 0
-                ? "Payment money is set aside for current debt."
-                : "\(BudgetMoney.formatted(summary.creditUncoveredMinor, currencyCode: currencyCode)) of card debt is uncovered")
-                .font(.caption)
-                .foregroundStyle(Bow.inkSoft)
-            }
-            Spacer()
-            Image(systemName: "chevron.down")
-              .font(.caption.weight(.semibold))
-              .foregroundStyle(Bow.inkSoft)
-          }
-          .frame(maxWidth: .infinity, minHeight: 44)
-          .contentShape(Rectangle())
+          NoteCard(
+            symbol: "creditcard",
+            title: summary.creditUncoveredMinor == 0 ? "Credit payments fully funded" : "Credit debt needs funding",
+            message: summary.creditUncoveredMinor == 0
+              ? "Payment money is set aside for current debt."
+              : "\(BudgetMoney.formatted(summary.creditUncoveredMinor, currencyCode: currencyCode)) of card debt is uncovered. Fund it from your card payments below."
+          )
         }
         .buttonStyle(.plain)
+        .accessibilityHint("Shows credit card payments")
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: Bow.Space.s2, leading: 0, bottom: Bow.Space.s2, trailing: 0))
       }
     }
-    .listRowBackground(Bow.card)
   }
 
   private func metric(_ title: String, amount: Int64, emphasized: Bool) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Text(title).font(.caption).foregroundStyle(Bow.inkSoft)
+    VStack(spacing: 2) {
+      Text(title)
+        .font(.bowFootnote)
+        .foregroundStyle(Bow.inkSoft)
       Text(BudgetMoney.formatted(amount, currencyCode: currencyCode))
-        .font(.headline)
+        .font(.bowAmount)
+        .monospacedDigit()
         .foregroundStyle(emphasized ? Bow.overInk : Bow.ink)
         .lineLimit(1)
-        .minimumScaleFactor(0.75)
-        .fontDesign(.rounded).monospacedDigit()
+        .minimumScaleFactor(0.6)
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
+    .frame(maxWidth: .infinity)
     .accessibilityElement(children: .combine)
   }
 }
@@ -338,26 +360,42 @@ private struct EnvelopeBudgetRow: View {
   var creditOverspentMinor: Int64
   var assignedMinor: Int64
   var activityMinor: Int64
+  var monthlyTargetMinor: Int64?
   var currencyCode: String
 
-  var body: some View {
-    HStack(spacing: 12) {
-      VStack(alignment: .leading, spacing: 3) {
-        Text(name).foregroundStyle(Bow.ink)
-        Text(availableMinor < 0
-          ? (cashOverspentMinor > 0 ? "Cash overspent" : creditOverspentMinor > 0 ? "Credit overspent · adds debt" : "Overspent")
-          : "Assigned \(BudgetMoney.formatted(assignedMinor, currencyCode: currencyCode)) · Activity \(BudgetMoney.formatted(activityMinor, currencyCode: currencyCode))")
-          .font(.caption)
-          .foregroundStyle(availableMinor < 0 ? Bow.overInk : Bow.inkSoft)
-          .lineLimit(1)
-      }
-      Spacer(minLength: 8)
-      Text(BudgetMoney.formatted(availableMinor, currencyCode: currencyCode))
-        .fontWeight(.semibold)
-        .foregroundStyle(availableMinor < 0 ? Bow.overInk : Bow.ink)
-        .fontDesign(.rounded).monospacedDigit()
+  private var status: EnvelopeStatus {
+    EnvelopeStatus(
+      availableMinor: availableMinor, assignedMinor: assignedMinor, activityMinor: activityMinor,
+      monthlyTargetMinor: monthlyTargetMinor, currencyCode: currencyCode
+    )
+  }
+
+  private var detail: String {
+    if availableMinor < 0 {
+      return cashOverspentMinor > 0 ? "Cash overspent"
+        : creditOverspentMinor > 0 ? "Credit overspent · adds debt" : "Overspent"
     }
-    .padding(.vertical, 4)
+    let spent = BudgetMoney.formatted(max(0, -activityMinor), currencyCode: currencyCode)
+    return "Spent \(spent) of \(BudgetMoney.formatted(assignedMinor, currencyCode: currencyCode))"
+  }
+
+  var body: some View {
+    let status = status
+    HStack(spacing: Bow.Space.s3) {
+      StatusRing(fraction: status.ringFraction, state: status.state)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(name)
+          .font(.bowBody)
+          .foregroundStyle(Bow.ink)
+        Text(detail)
+          .font(.bowFootnote)
+          .foregroundStyle(Bow.inkSoft)
+      }
+      Spacer(minLength: Bow.Space.s2)
+      StatusPill(text: status.pillText, state: status.state)
+    }
+    .frame(minHeight: 44)
+    .padding(.vertical, Bow.Space.s1)
     .accessibilityElement(children: .combine)
   }
 }
@@ -373,23 +411,26 @@ private struct CardPaymentRow: View {
     let reserved = max(0, snapshot.paymentAvailable[card.id, default: 0])
     let previousOwed = max(0, -(previousSnapshot?.accountBalances[card.id] ?? 0))
     let previousReserved = max(0, previousSnapshot?.paymentAvailable[card.id] ?? 0)
-    HStack {
-      VStack(alignment: .leading, spacing: 3) {
-        Text(card.name).foregroundStyle(Bow.ink)
+    let status = EnvelopeStatus(cardOwedMinor: owed, reservedMinor: reserved, currencyCode: currencyCode)
+    HStack(spacing: Bow.Space.s3) {
+      StatusRing(fraction: status.ringFraction, state: status.state)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(card.name)
+          .font(.bowBody)
+          .foregroundStyle(Bow.ink)
         Text(owed > reserved
           ? (previousOwed > previousReserved
             ? "Carrying \(BudgetMoney.formatted(owed - reserved, currencyCode: currencyCode)) of debt"
             : "Credit spending needs funding")
           : "Ready to pay in full")
-          .font(.caption)
-          .foregroundStyle(owed > reserved ? Bow.needsInk : Bow.inkSoft)
+          .font(.bowFootnote)
+          .foregroundStyle(Bow.inkSoft)
       }
-      Spacer()
-      Text(BudgetMoney.formatted(reserved, currencyCode: currencyCode))
-        .fontWeight(.semibold)
-        .fontDesign(.rounded).monospacedDigit()
+      Spacer(minLength: Bow.Space.s2)
+      StatusPill(text: status.pillText, state: status.state)
     }
-    .padding(.vertical, 4)
+    .frame(minHeight: 44)
+    .padding(.vertical, Bow.Space.s1)
     .accessibilityElement(children: .combine)
   }
 }

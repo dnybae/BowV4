@@ -71,9 +71,9 @@ struct TransactionEditorScreen: View {
 
   private var categoryNoneTitle: String {
     if kind == .inflow {
-      return selectedAccount?.kind == .cash ? "Ready to Assign" : "No Category"
+      return selectedAccount?.kind == .cash ? "Ready to Assign" : "No envelope"
     }
-    return "Needs Categorization"
+    return "Needs categorization"
   }
 
   private var matchingSchedule: BudgetSchedule? {
@@ -110,22 +110,29 @@ struct TransactionEditorScreen: View {
           )
         }
         Section {
-          Picker("Type", selection: $kind) {
-            ForEach(BudgetTransactionKind.allCases) { option in
-              Text(option.title).tag(option)
+          VStack(spacing: Bow.Space.s4) {
+            Picker("Type", selection: $kind) {
+              ForEach(BudgetTransactionKind.allCases) { option in
+                Text(option.title).tag(option)
+              }
+            }
+            .pickerStyle(.segmented)
+            VStack(spacing: Bow.Space.s1) {
+              Text("Amount")
+                .font(.bowSubhead)
+                .foregroundStyle(Bow.inkSoft)
+              CurrencyAmountField("Amount", minor: $amountMinor, currencyCode: currencyCode, style: .hero)
             }
           }
-          .pickerStyle(.segmented)
-          CurrencyAmountField("Amount", minor: $amountMinor, currencyCode: currencyCode)
-          DatePicker(isScheduled ? "First due" : "Date", selection: $date,
-                     in: Date.distantPast...Date.distantFuture, displayedComponents: .date)
+          .padding(.bottom, Bow.Space.s2)
+          .listRowBackground(Color.clear)
+          .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         }
-        .listRowBackground(Bow.card)
-        Section("Details") {
-          AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts)
+        Section {
           if kind == .transfer {
+            AccountSelectionField(title: "From account", selection: $accountID, accounts: accounts)
             AccountSelectionField(
-              title: "To Account", selection: $destinationID,
+              title: "To account", selection: $destinationID,
               accounts: accounts, excludingID: accountID
             )
           } else {
@@ -148,7 +155,7 @@ struct TransactionEditorScreen: View {
           }
           if kind != .transfer || needsEnvelopeForTransfer {
             CategorySelectionField(
-              title: "Category", selection: $envelopeID,
+              title: "Envelope", selection: $envelopeID,
               envelopes: envelopes, noneTitle: categoryNoneTitle
             )
             if kind == .expense && envelopeID == nil {
@@ -157,12 +164,17 @@ struct TransactionEditorScreen: View {
                 .foregroundStyle(Bow.inkSoft)
             }
           }
+          if kind != .transfer {
+            AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts)
+          }
+          DatePicker(isScheduled ? "First due" : "Date", selection: $date,
+                     in: Date.distantPast...Date.distantFuture, displayedComponents: .date)
           if kind != .transfer && (selectedAccount?.kind == .asset || selectedAccount?.kind == .liability) {
-            Text("Categories on tracking accounts are for reference and don't change your budget.")
+            Text("Envelopes on tracking accounts are for reference and don't change your budget.")
               .font(.footnote)
               .foregroundStyle(Bow.inkSoft)
           }
-          TextField("Notes", text: $notes, axis: .vertical)
+          TextField("Add a note", text: $notes, axis: .vertical)
             .lineLimit(2...4)
         }
         .listRowBackground(Bow.card)
@@ -196,7 +208,7 @@ struct TransactionEditorScreen: View {
 
         if transaction != nil {
           Section {
-            Button("Delete Transaction", role: .destructive) {
+            Button("Delete transaction", role: .destructive) {
               showingDeleteConfirmation = true
             }
           }
@@ -204,7 +216,7 @@ struct TransactionEditorScreen: View {
         }
       }
       .bowListBackground()
-      .navigationTitle(transaction == nil ? (scheduledDraft == nil ? "Add Transaction" : "Record Scheduled Transaction") : "Edit Transaction")
+      .navigationTitle(transaction == nil ? (scheduledDraft == nil ? "New transaction" : "Record scheduled bill") : "Edit transaction")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -221,7 +233,7 @@ struct TransactionEditorScreen: View {
         isPresented: $showingDeleteConfirmation,
         titleVisibility: .visible
       ) {
-        Button("Delete Transaction", role: .destructive) { delete() }
+        Button("Delete transaction", role: .destructive) { delete() }
       } message: {
         Text("Its effect on your accounts and envelopes will be removed.")
       }
@@ -235,12 +247,12 @@ struct TransactionEditorScreen: View {
       ) {
         if possibleImportedMatchIDs.count == 1,
            let id = possibleImportedMatchIDs.first {
-          Button("Update Imported Transaction") {
+          Button("Update imported transaction") {
             possibleImportedMatchIDs = []
             save(matching: id)
           }
         }
-        Button("Add Separate Transaction") {
+        Button("Add separate transaction") {
           possibleImportedMatchIDs = []
           save(allowSeparate: true)
         }
@@ -248,7 +260,7 @@ struct TransactionEditorScreen: View {
       } message: {
         Text("An imported transaction may already represent this payment. Updating it keeps one ledger entry and uses the details you entered.")
       }
-      .alert("Couldn’t Save Transaction", isPresented: Binding(
+      .alert("Couldn’t save transaction", isPresented: Binding(
         get: { errorMessage != nil },
         set: { if !$0 { errorMessage = nil } }
       )) {

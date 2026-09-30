@@ -12,9 +12,8 @@ struct PayeeLogoDirectory {
         domain: payee.merchantDomain,
         imageData: payee.customLogoData
       )
-      for name in [payee.name, payee.exactMatchText] {
-        let key = PayeeDirectory.key(name)
-        if !key.isEmpty && appearances[key] == nil {
+      for key in PayeeDirectory.matchKeys(for: payee) {
+        if appearances[key] == nil {
           appearances[key] = appearance
         }
       }

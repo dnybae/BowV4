@@ -22,19 +22,22 @@ struct ScheduleEditorScreen: View {
   @State private var errorMessage: String?
   @State private var showingDelete = false
 
-  init(schedule: BudgetSchedule?, accounts: [BudgetAccount], envelopes: [BudgetEnvelope], currencyCode: String) {
+  init(
+    schedule: BudgetSchedule?, draft: ScheduleDraft? = nil,
+    accounts: [BudgetAccount], envelopes: [BudgetEnvelope], currencyCode: String
+  ) {
     self.schedule = schedule
     self.accounts = accounts
     self.envelopes = envelopes
     self.currencyCode = currencyCode
-    _payee = State(initialValue: schedule?.payee ?? "")
-    _amountMinor = State(initialValue: schedule.map { abs($0.amountMinor) } ?? 0)
-    _accountID = State(initialValue: schedule?.accountID ?? accounts.first?.id)
+    _payee = State(initialValue: schedule?.payee ?? draft?.payee ?? "")
+    _amountMinor = State(initialValue: schedule.map { abs($0.amountMinor) } ?? draft?.amountMinor ?? 0)
+    _accountID = State(initialValue: schedule?.accountID ?? draft?.accountID ?? accounts.first?.id)
     _destinationID = State(initialValue: schedule?.transferAccountID)
     _kind = State(initialValue: schedule?.kind ?? .expense)
-    _envelopeID = State(initialValue: schedule?.envelopeID)
-    _startDate = State(initialValue: schedule?.startDate ?? Date())
-    _frequency = State(initialValue: schedule?.frequency ?? .monthly)
+    _envelopeID = State(initialValue: schedule?.envelopeID ?? draft?.envelopeID)
+    _startDate = State(initialValue: schedule?.startDate ?? draft?.startDate ?? Date())
+    _frequency = State(initialValue: schedule?.frequency ?? draft?.frequency ?? .monthly)
     _notes = State(initialValue: schedule?.notes ?? "")
     _isActive = State(initialValue: schedule?.isActive ?? true)
   }
@@ -98,7 +101,7 @@ struct ScheduleEditorScreen: View {
         }
       }
       .bowListBackground()
-      .navigationTitle("Edit schedule")
+      .navigationTitle(schedule == nil ? "New schedule" : "Edit schedule")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -201,4 +204,14 @@ struct ScheduleEditorScreen: View {
       dismiss()
     } catch { errorMessage = error.localizedDescription }
   }
+}
+
+struct ScheduleDraft: Identifiable {
+  var id = UUID()
+  var payee: String
+  var amountMinor: Int64
+  var accountID: UUID?
+  var envelopeID: UUID?
+  var startDate: Date
+  var frequency: ScheduleFrequency
 }

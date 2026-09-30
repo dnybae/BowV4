@@ -48,14 +48,10 @@ actor TransactionPageRepository {
     var knownPayeeKeys: Set<String> = []
     for payee in payees {
       let canonical = PayeeDirectory.key(payee.name)
-      aliases[canonical] = canonical
-      knownPayeeKeys.insert(canonical)
-      if let domain = payee.merchantDomain { domains[canonical] = domain }
-      let exact = PayeeDirectory.key(payee.exactMatchText)
-      if !exact.isEmpty {
-        aliases[exact] = canonical
-        knownPayeeKeys.insert(exact)
-        if let domain = payee.merchantDomain { domains[exact] = domain }
+      for matchKey in PayeeDirectory.matchKeys(for: payee) {
+        aliases[matchKey] = canonical
+        knownPayeeKeys.insert(matchKey)
+        if let domain = payee.merchantDomain { domains[matchKey] = domain }
       }
     }
     let search = request.searchText.trimmingCharacters(in: .whitespacesAndNewlines)

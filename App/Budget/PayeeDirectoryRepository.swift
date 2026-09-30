@@ -28,12 +28,47 @@ actor PayeeDirectoryRepository {
     if context.hasChanges { try context.save() }
   }
 
+  /// Folds one payee into another. The source's name and bank names become bank names of the
+  /// target, its transactions and schedules take the target's name, and any settings the
+  /// target doesn't have yet carry over.
+  func merge(sourceKey: String, sourceName: String, into targetKey: String, targetName: String) throws {
+    guard sourceKey != targetKey else { return }
+    let context = ModelContext(modelContainer)
+    let payees = try context.fetch(FetchDescriptor<BudgetPayee>())
+    let source = payees.first { PayeeDirectory.key($0.name) == sourceKey }
+    let target: BudgetPayee
+    if let existing = payees.first(where: { PayeeDirectory.key($0.name) == targetKey }) {
+      target = existing
+    } else {
+      target = BudgetPayee(name: targetName)
+      context.insert(target)
+    }
+    target.bankNames = target.bankNames + [source?.name ?? sourceName] + (source?.bankNames ?? [])
+    if let source {
+      if target.defaultEnvelopeID == nil { target.defaultEnvelopeID = source.defaultEnvelopeID }
+      if target.notes.isEmpty {
+        target.notes = source.notes
+      } else if !source.notes.isEmpty {
+        target.notes += "\n\n" + source.notes
+      }
+      if target.merchantDomain == nil { target.merchantDomain = source.merchantDomain }
+      if target.logoSource == .system && source.logoSource != .system {
+        target.logoSource = source.logoSource
+        target.customLogoData = source.customLogoData
+        if source.logoSource == .logoDev { target.merchantDomain = source.merchantDomain }
+      }
+      context.delete(source)
+    }
+    try context.save()
+    try renameHistory(from: [sourceKey], to: target.name)
+  }
+
   func entries() throws -> [PayeeDirectory.Entry] {
     let context = ModelContext(modelContainer)
     let payees = try context.fetch(FetchDescriptor<BudgetPayee>())
     let schedules = try context.fetch(FetchDescriptor<BudgetSchedule>())
     var result: [String: PayeeDirectory.Entry] = [:]
-    let aliases = Self.aliases(for: payees)
+    let aliases = PayeeDirectory.aliases(for: payees)
     for payee in payees {
       let canonical = PayeeDirectory.key(payee.name)
       guard !canonical.isEmpty else { continue }
@@ -86,7 +121,7 @@ actor PayeeDirectoryRepository {
 
   /// Summarizes every non-transfer transaction recorded under a payee or its bank description.
   func activity(for payeeKey: String) throws -> PayeeActivity? {
-    let aliases = Self.aliases(for: try ModelContext(modelContainer).fetch(FetchDescriptor<BudgetPayee>()))
+    let aliases = PayeeDirectory.aliases(for: try ModelContext(modelContainer).fetch(FetchDescriptor<BudgetPayee>()))
     let transferKind = BudgetTransactionKind.transfer.rawValue
     let adjustmentSource = BudgetTransaction.balanceAdjustmentSource
     var records: [PayeeActivity.Record] = []
@@ -99,14 +134,15 @@ actor PayeeDirectoryRepository {
       )
       descriptor.fetchLimit = 512
       descriptor.fetchOffset = offset
-      descriptor.propertiesToFetch = [\.payee, \.date, \.amountMinor, \.accountID, \.kindRaw]
+      descriptor.propertiesToFetch = [\.payee, \.date, \.amountMinor, \.accountID, \.kindRaw, \.envelopeID]
       let batch = try ModelContext(modelContainer).fetch(descriptor)
       for transaction in batch {
         let normalized = PayeeDirectory.key(transaction.payee)
         guard (aliases[normalized] ?? normalized) == payeeKey else { continue }
         records.append(PayeeActivity.Record(
           date: transaction.date, amountMinor: transaction.amountMinor,
-          accountID: transaction.accountID, kind: transaction.kind
+          accountID: transaction.accountID, kind: transaction.kind,
+          envelopeID: transaction.envelopeID
         ))
       }
       offset += batch.count
@@ -119,7 +155,7 @@ actor PayeeDirectoryRepository {
   func lastUsed(
     payee name: String, kind: BudgetTransactionKind, excluding excludedID: UUID? = nil
   ) throws -> PayeeLastUsed? {
-    let aliases = Self.aliases(for: try ModelContext(modelContainer).fetch(FetchDescriptor<BudgetPayee>()))
+    let aliases = PayeeDirectory.aliases(for: try ModelContext(modelContainer).fetch(FetchDescriptor<BudgetPayee>()))
     let normalizedName = PayeeDirectory.key(name)
     let payeeKey = aliases[normalizedName] ?? normalizedName
     guard !payeeKey.isEmpty else { return nil }
@@ -144,18 +180,6 @@ actor PayeeDirectoryRepository {
       offset += batch.count
       if batch.count < 256 { return nil }
     }
-  }
-
-  private static func aliases(for payees: [BudgetPayee]) -> [String: String] {
-    var aliases: [String: String] = [:]
-    for payee in payees {
-      let canonical = PayeeDirectory.key(payee.name)
-      guard !canonical.isEmpty else { continue }
-      let exact = PayeeDirectory.key(payee.exactMatchText)
-      if aliases[canonical] == nil { aliases[canonical] = canonical }
-      if !exact.isEmpty && aliases[exact] == nil { aliases[exact] = canonical }
-    }
-    return aliases
   }
 }
 

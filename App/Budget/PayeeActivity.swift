@@ -11,6 +11,7 @@ struct PayeeActivity: Sendable {
     var amountMinor: Int64
     var accountID: UUID
     var kind: BudgetTransactionKind
+    var envelopeID: UUID? = nil
   }
 
   struct Month: Identifiable, Sendable {
@@ -29,6 +30,7 @@ struct PayeeActivity: Sendable {
   var recentMonthSpan: Int
   var months: [Month]
   var usualAccountID: UUID?
+  var recurrence: PayeeRecurrence?
 
   var yearToDateTitle: String {
     direction == .spending ? "Spent this year" : "Received this year"
@@ -90,7 +92,9 @@ struct PayeeActivity: Sendable {
       recentCount: recent.count,
       recentMonthSpan: min(12, max(1, span + 1)),
       months: months,
-      usualAccountID: usualAccountID
+      usualAccountID: usualAccountID,
+      recurrence: direction == .spending
+        ? PayeeRecurrence.detect(in: relevant, today: today, calendar: calendar) : nil
     )
   }
 }

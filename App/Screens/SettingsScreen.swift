@@ -50,11 +50,6 @@ struct SettingsScreen: View {
           } label: {
             Label("Payees", systemImage: "person.crop.circle")
           }
-          NavigationLink {
-            PayeeRulesScreen()
-          } label: {
-            Label("Payee rules", systemImage: "line.3.horizontal.decrease")
-          }
         }
         .listRowBackground(Bow.card)
 

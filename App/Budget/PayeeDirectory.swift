@@ -16,38 +16,47 @@ struct PayeeDirectory {
     PayeeRuleMatcher().normalized(name)
   }
 
+  /// Every normalized name that files under a payee: its own name, then its bank names.
+  static func matchKeys(for payee: BudgetPayee) -> [String] {
+    ([payee.name] + payee.bankNames).map(key).filter { !$0.isEmpty }
+  }
+
+  /// Maps each payee name and bank name to the payee's canonical key. The first payee wins a conflict.
+  static func aliases(for payees: [BudgetPayee]) -> [String: String] {
+    var aliases: [String: String] = [:]
+    for payee in payees {
+      let canonical = key(payee.name)
+      guard !canonical.isEmpty else { continue }
+      for matchKey in matchKeys(for: payee) where aliases[matchKey] == nil {
+        aliases[matchKey] = canonical
+      }
+    }
+    return aliases
+  }
+
   static func ruleItems(payees: [BudgetPayee], validEnvelopeIDs: Set<UUID>) -> [PayeeRuleItem] {
     payees.flatMap { payee -> [PayeeRuleItem] in
       guard let id = payee.defaultEnvelopeID, validEnvelopeIDs.contains(id) else { return [] }
-      let name = key(payee.name)
-      let exact = key(payee.exactMatchText)
-      var items = [PayeeRuleItem(matchText: payee.name, envelopeID: id)]
-      if !exact.isEmpty && exact != name {
-        items.append(PayeeRuleItem(matchText: payee.exactMatchText, envelopeID: id))
-      }
-      return items
+      return ([payee.name] + payee.bankNames).map { PayeeRuleItem(matchText: $0, envelopeID: id) }
     }
   }
 
   static func canonicalKey(for name: String, payees: [BudgetPayee]) -> String {
     let normalized = key(name)
     guard !normalized.isEmpty else { return "" }
-    if let payee = payees.first(where: {
-      key($0.name) == normalized
-        || (!key($0.exactMatchText).isEmpty && key($0.exactMatchText) == normalized)
-    }) {
-      return key(payee.name)
-    }
-    return normalized
+    return matchingPayee(for: name, payees: payees).map { key($0.name) } ?? normalized
   }
 
   static func matchingPayee(for name: String, payees: [BudgetPayee]) -> BudgetPayee? {
     let normalized = key(name)
     guard !normalized.isEmpty else { return nil }
-    return payees.first {
-      key($0.name) == normalized
-        || (!key($0.exactMatchText).isEmpty && key($0.exactMatchText) == normalized)
-    }
+    return payees.first { matchKeys(for: $0).contains(normalized) }
+  }
+
+  /// Whether two names refer to the same payee, directly or through a saved bank name.
+  static func isSamePayee(_ first: String, _ second: String, payees: [BudgetPayee]) -> Bool {
+    let firstKey = canonicalKey(for: first, payees: payees)
+    return !firstKey.isEmpty && firstKey == canonicalKey(for: second, payees: payees)
   }
 
   static func logoDomain(for name: String, transactionDomain: String?, payees: [BudgetPayee]) -> String? {

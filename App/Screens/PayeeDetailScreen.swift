@@ -17,6 +17,9 @@ struct PayeeDetailScreen: View {
   @State private var feed = TransactionFeedModel()
   @State private var activity: PayeeActivity?
   @State private var activityVersion = 0
+  @State private var reloadVersion = 0
+  @State private var showingMerge = false
+  @State private var scheduleDraft: ScheduleDraft?
 
   private var payee: BudgetPayee? {
     guard let ruleID = entry?.ruleID else { return nil }
@@ -46,7 +49,26 @@ struct PayeeDetailScreen: View {
     }.sorted { $0.startDate < $1.startDate }
   }
 
+  private var activeExpenseSchedules: [BudgetSchedule] {
+    matchingSchedules.filter { $0.isActive && $0.kind == .expense }
+  }
+
   private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
+
+  private func makeScheduleDraft(for recurrence: PayeeRecurrence, name: String) -> ScheduleDraft {
+    let usableEnvelopeIDs = Set(envelopes.filter { !$0.isHidden && $0.paymentAccountID == nil }.map(\.id))
+    let envelopeID = [recurrence.envelopeID, payee?.defaultEnvelopeID]
+      .compactMap { $0 }
+      .first { usableEnvelopeIDs.contains($0) }
+    return ScheduleDraft(
+      payee: name,
+      amountMinor: recurrence.amountMinor,
+      accountID: accounts.first { $0.id == recurrence.accountID }?.id,
+      envelopeID: envelopeID,
+      startDate: recurrence.nextDate,
+      frequency: recurrence.frequency
+    )
+  }
 
   var body: some View {
     List {
@@ -68,6 +90,39 @@ struct PayeeDetailScreen: View {
           PayeeActivitySection(
             activity: activity, usualAccountName: usualAccountName, currencyCode: currencyCode
           )
+          if let recurrence = activity.recurrence {
+            PayeeRecurrenceSection(
+              recurrence: recurrence,
+              existingSchedule: activeExpenseSchedules.count == 1 ? activeExpenseSchedules.first : nil,
+              hasOtherSchedules: activeExpenseSchedules.count > 1,
+              currencyCode: currencyCode,
+              onCreateSchedule: { scheduleDraft = makeScheduleDraft(for: recurrence, name: entry.name) },
+              onEditSchedule: { selectedSchedule = $0 }
+            )
+          }
+        }
+        if !matchingSchedules.isEmpty {
+          Section("Scheduled") {
+            ForEach(matchingSchedules) { schedule in
+              Button {
+                selectedSchedule = schedule
+              } label: {
+                HStack {
+                  VStack(alignment: .leading, spacing: 3) {
+                    Text(schedule.payee).foregroundStyle(Bow.ink)
+                    Text(schedule.frequency.title)
+                      .font(.caption)
+                      .foregroundStyle(Bow.inkSoft)
+                  }
+                  Spacer()
+                  Text(BudgetMoney.formatted(schedule.amountMinor, currencyCode: currencyCode))
+                    .foregroundStyle(Bow.inkSoft)
+                    .fontDesign(.rounded).monospacedDigit()
+                }
+              }
+            }
+          }
+          .listRowBackground(Bow.card)
         }
         if let payee,
            let envelope = envelopes.first(where: { $0.id == payee.defaultEnvelopeID }) {
@@ -93,26 +148,27 @@ struct PayeeDetailScreen: View {
           }
         }
         .listRowBackground(Bow.card)
-        if !matchingSchedules.isEmpty {
-          Section("Scheduled") {
-            ForEach(matchingSchedules) { schedule in
-              Button {
-                selectedSchedule = schedule
-              } label: {
-                HStack {
-                  VStack(alignment: .leading, spacing: 3) {
-                    Text(schedule.payee).foregroundStyle(Bow.ink)
-                    Text(schedule.frequency.title)
-                      .font(.caption)
-                      .foregroundStyle(Bow.inkSoft)
-                  }
-                  Spacer()
-                  Text(BudgetMoney.formatted(schedule.amountMinor, currencyCode: currencyCode))
-                    .foregroundStyle(Bow.inkSoft)
-                    .fontDesign(.rounded).monospacedDigit()
-                }
-              }
+        if let bankNames = payee?.bankNames, !bankNames.isEmpty {
+          Section {
+            ForEach(bankNames, id: \.self) { bankName in
+              Text(bankName)
+                .foregroundStyle(Bow.ink)
+                .textSelection(.enabled)
             }
+          } header: {
+            Text("Bank names")
+          } footer: {
+            Text("Imported transactions with these descriptions are filed under \(entry.name).")
+          }
+          .listRowBackground(Bow.card)
+        }
+        if !entry.isTransferOnly {
+          Section {
+            Button("Merge a duplicate payee…", systemImage: "arrow.triangle.merge") {
+              showingMerge = true
+            }
+          } footer: {
+            Text("Combine payees that are really the same place, like “Target” and “Target.com”.")
           }
           .listRowBackground(Bow.card)
         }
@@ -151,7 +207,7 @@ struct PayeeDetailScreen: View {
     }
     .bowListBackground()
     .navigationTitle(entry?.name ?? "Payee")
-    .task(id: payeeKey) {
+    .task(id: "\(payeeKey)|\(reloadVersion)") {
       let repository = PayeeDirectoryRepository(modelContainer: modelContext.container)
       entry = (try? await repository.entries())?.first { $0.key == payeeKey }
       await feed.reload(container: modelContext.container, searchText: "",
@@ -183,6 +239,20 @@ struct PayeeDetailScreen: View {
         accounts: accounts,
         envelopes: envelopes,
         payees: payees,
+        currencyCode: currencyCode
+      )
+    }
+    .sheet(isPresented: $showingMerge) {
+      if let entry {
+        PayeeMergeSheet(target: entry) { reloadVersion += 1 }
+      }
+    }
+    .sheet(item: $scheduleDraft) { draft in
+      ScheduleEditorScreen(
+        schedule: nil,
+        draft: draft,
+        accounts: accounts,
+        envelopes: envelopes,
         currencyCode: currencyCode
       )
     }

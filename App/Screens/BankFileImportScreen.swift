@@ -339,7 +339,7 @@ struct BankFileImportScreen: View {
       schedule.isActive && schedule.kind == .expense
         && schedule.accountID == account.id
         && proposal.row.amountMinor == -schedule.amountMinor
-        && schedule.payee.localizedCaseInsensitiveCompare(proposal.row.payee) == .orderedSame
+        && PayeeDirectory.isSamePayee(schedule.payee, proposal.row.payee, payees: payees)
         && ScheduleRecurrence().occurs(
           starting: schedule.startDate, frequency: schedule.frequency,
           on: proposal.row.date

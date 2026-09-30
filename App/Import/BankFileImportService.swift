@@ -73,7 +73,7 @@ struct BankFileImportService {
         schedule.isActive && schedule.kind == .expense
           && schedule.accountID == account.id
           && row.amountMinor == -schedule.amountMinor
-          && schedule.payee.localizedCaseInsensitiveCompare(row.payee) == .orderedSame
+          && PayeeDirectory.isSamePayee(schedule.payee, row.payee, payees: payees)
           && ScheduleRecurrence().occurs(
             starting: schedule.startDate, frequency: schedule.frequency, on: row.date
           )

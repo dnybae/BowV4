@@ -86,7 +86,7 @@ struct TransactionEditorScreen: View {
     let minor = amountMinor
     let matches = schedules.filter { schedule in
       schedule.accountID == accountID && schedule.amountMinor == minor
-        && schedule.payee.localizedCaseInsensitiveCompare(payee) == .orderedSame
+        && PayeeDirectory.isSamePayee(schedule.payee, payee, payees: payees)
         && ScheduleRecurrence().occurs(
           starting: schedule.startDate, frequency: schedule.frequency, on: date
         )

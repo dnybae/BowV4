@@ -550,7 +550,8 @@ final class SimpleFINSyncCoordinator {
         let scheduledExpenses = schedules.filter { schedule in
           schedule.isActive && schedule.kind == .expense
             && schedule.accountID == localID && amount == -schedule.amountMinor
-            && Self.normalized(schedule.payee) == Self.normalized(payee)
+            && (Self.normalized(schedule.payee) == Self.normalized(payee)
+              || PayeeDirectory.isSamePayee(schedule.payee, payee, payees: payees))
             && ScheduleRecurrence().occurs(
               starting: schedule.startDate, frequency: schedule.frequency,
               on: transactionDate

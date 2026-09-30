@@ -11,7 +11,8 @@ struct PayeeEditorScreen: View {
   var entry: PayeeDirectory.Entry?
   var onSaved: () -> Void
   @State private var name: String
-  @State private var exactMatchText: String
+  @State private var bankNames: [String]
+  @State private var newBankName = ""
   @State private var merchantDomain: String
   @State private var logoSource: PayeeLogoSource
   @State private var customLogoData: Data?
@@ -30,7 +31,7 @@ struct PayeeEditorScreen: View {
     self.entry = entry
     self.onSaved = onSaved
     _name = State(initialValue: entry?.name ?? "")
-    _exactMatchText = State(initialValue: payee?.exactMatchText ?? "")
+    _bankNames = State(initialValue: payee?.bankNames ?? [])
     _merchantDomain = State(initialValue: payee?.merchantDomain ?? "")
     _logoSource = State(initialValue: payee?.logoSource ?? .system)
     _customLogoData = State(initialValue: payee?.customLogoData)
@@ -40,6 +41,10 @@ struct PayeeEditorScreen: View {
 
   private var trimmedName: String {
     name.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private var trimmedNewBankName: String {
+    newBankName.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   private var trimmedNotes: String {
@@ -105,10 +110,23 @@ struct PayeeEditorScreen: View {
         }
         .listRowBackground(Bow.card)
         Section {
-          TextField("Exact bank description", text: $exactMatchText)
-            .textInputAutocapitalization(.characters)
+          ForEach(bankNames, id: \.self) { bankName in
+            Text(bankName)
+          }
+          .onDelete { bankNames.remove(atOffsets: $0) }
+          HStack {
+            TextField("Add bank name", text: $newBankName)
+              .textInputAutocapitalization(.characters)
+              .autocorrectionDisabled()
+              .onSubmit(addBankName)
+            Button("Add bank name", systemImage: "plus.circle.fill", action: addBankName)
+              .labelStyle(.iconOnly)
+              .disabled(trimmedNewBankName.isEmpty)
+          }
+        } header: {
+          Text("Bank names")
         } footer: {
-          Text("Optional. Match a bank’s full payee description to this payee and its default envelope when importing transactions.")
+          Text("Imported transactions with one of these descriptions are filed under this payee and use its default envelope. Swipe to remove one.")
         }
         .listRowBackground(Bow.card)
         Section {
@@ -214,70 +232,49 @@ struct PayeeEditorScreen: View {
       errorMessage = "A payee with this name already exists."
       return
     }
-    guard !payees.contains(where: {
-      $0.id != entry?.ruleID && PayeeDirectory.key($0.exactMatchText) == newKey
-    }) else {
-      errorMessage = "This name is already used as another payee’s bank description."
+    let finalBankNames = BudgetPayee.cleanedBankNames(
+      bankNames + [newBankName], excluding: trimmedName
+    )
+    let otherKeys = Set(payees.filter { $0.id != entry?.ruleID }.flatMap(PayeeDirectory.matchKeys))
+    guard !otherKeys.contains(newKey) else {
+      errorMessage = "This name is already used as another payee’s bank name."
       return
     }
-    let exact = exactMatchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let exactKey = PayeeDirectory.key(exact)
-    guard exact.isEmpty || !payees.contains(where: {
-      $0.id != entry?.ruleID
-        && (PayeeDirectory.key($0.exactMatchText) == exactKey
-          || PayeeDirectory.key($0.name) == exactKey)
-    }) else {
-      errorMessage = "Another payee already matches this bank description."
+    if let taken = finalBankNames.first(where: { otherKeys.contains(PayeeDirectory.key($0)) }) {
+      errorMessage = "“\(taken)” already belongs to another payee. Merge the payees instead."
       return
     }
+    let domain = merchantDomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     do {
-      if let entry {
-        let previousExact = payees.first { $0.id == entry.ruleID }?.exactMatchText ?? ""
-        if newKey != entry.key || trimmedName != entry.name
-            || PayeeDirectory.key(previousExact) != exactKey {
-          try await repository.renameHistory(
-            from: Set([entry.key, PayeeDirectory.key(previousExact)]).subtracting([""]),
-            to: trimmedName
-          )
-        }
-        if let payee = payees.first(where: { $0.id == entry.ruleID }) {
-          payee.name = trimmedName
-          payee.exactMatchText = exact
-          payee.defaultEnvelopeID = defaultEnvelopeID
-          payee.notes = trimmedNotes
-          payee.merchantDomain = merchantDomain.isEmpty ? nil : merchantDomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-          payee.logoSource = logoSource
-          payee.customLogoData = logoSource == .custom ? customLogoData : nil
-        } else {
-          let payee = BudgetPayee(
-            name: trimmedName,
-            defaultEnvelopeID: defaultEnvelopeID,
-            exactMatchText: exact,
-            merchantDomain: merchantDomain.isEmpty ? nil : merchantDomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-          )
-          payee.notes = trimmedNotes
-          payee.logoSource = logoSource
-          payee.customLogoData = logoSource == .custom ? customLogoData : nil
-          modelContext.insert(payee)
-        }
+      if let entry, newKey != entry.key || trimmedName != entry.name {
+        try await repository.renameHistory(from: [entry.key], to: trimmedName)
+      }
+      let payee: BudgetPayee
+      if let existing = payees.first(where: { $0.id == entry?.ruleID }) {
+        payee = existing
+        payee.name = trimmedName
       } else {
-        let payee = BudgetPayee(
-          name: trimmedName,
-          defaultEnvelopeID: defaultEnvelopeID,
-          exactMatchText: exact,
-          merchantDomain: merchantDomain.isEmpty ? nil : merchantDomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        )
-        payee.notes = trimmedNotes
-        payee.logoSource = logoSource
-        payee.customLogoData = logoSource == .custom ? customLogoData : nil
+        payee = BudgetPayee(name: trimmedName)
         modelContext.insert(payee)
       }
+      payee.bankNames = finalBankNames
+      payee.defaultEnvelopeID = defaultEnvelopeID
+      payee.notes = trimmedNotes
+      payee.merchantDomain = domain.isEmpty ? nil : domain
+      payee.logoSource = logoSource
+      payee.customLogoData = logoSource == .custom ? customLogoData : nil
       try modelContext.save()
       dismiss()
       onSaved()
     } catch {
       errorMessage = error.localizedDescription
     }
+  }
+
+  private func addBankName() {
+    guard !trimmedNewBankName.isEmpty else { return }
+    bankNames = BudgetPayee.cleanedBankNames(bankNames + [newBankName], excluding: trimmedName)
+    newBankName = ""
   }
 
   private func delete() {

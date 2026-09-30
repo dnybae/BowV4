@@ -55,6 +55,23 @@ struct PayeeDirectoryChecks {
     precondition(matcher.envelopeID(for: "city market", rules: rules) == envelopeID)
     precondition(matcher.envelopeID(for: "CITY MARKET STORE", rules: rules) == envelopeID)
 
+    // The original single bank description folds into the bank names list.
+    precondition(payee.bankNames == ["CITY MARKET STORE"])
+    payee.bankNames = ["CITY MARKET STORE", "city market store ", "CITYMKT #42", "City Market", ""]
+    precondition(payee.bankNames == ["CITY MARKET STORE", "CITYMKT #42"])
+    precondition(payee.exactMatchText.isEmpty)
+    precondition(PayeeDirectory.matchingPayee(for: "citymkt #42", payees: [payee]) === payee)
+    precondition(PayeeDirectory.canonicalKey(for: "CITYMKT #42", payees: [payee]) == PayeeDirectory.key("City Market"))
+    let extraRules = PayeeDirectory.ruleItems(payees: [payee], validEnvelopeIDs: [envelopeID])
+    precondition(matcher.envelopeID(for: "CITYMKT #42", rules: extraRules) == envelopeID)
+    precondition(PayeeDirectory.aliases(for: [payee])[PayeeDirectory.key("CITYMKT #42")] == PayeeDirectory.key("City Market"))
+
+    // Scheduled bills match bank text through saved bank names.
+    precondition(PayeeDirectory.isSamePayee("City Market", "CITYMKT #42", payees: [payee]))
+    precondition(PayeeDirectory.isSamePayee("city market", "City Market", payees: []))
+    precondition(!PayeeDirectory.isSamePayee("City Market", "Corner Store", payees: [payee]))
+    precondition(!PayeeDirectory.isSamePayee("", "", payees: [payee]))
+
     PayeeDirectory.rename(
       from: entries[0].key,
       to: "Neighborhood Market",

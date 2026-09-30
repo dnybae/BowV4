@@ -50,12 +50,12 @@ struct TransactionFilterChecks {
     precondition(filter.includes(uncategorized, calendar: calendar))
     uncategorized.isUncategorizedExpense = false
     precondition(!filter.includes(uncategorized, calendar: calendar), "transfers are not uncategorized expenses")
-    filter = TransactionFilter(needsApprovalOnly: true)
+    filter = TransactionFilter(status: .needsAttention)
     precondition(!filter.includes(purchase, calendar: calendar))
     var imported = purchase
-    imported.needsApproval = true
+    imported.needsAttention = true
     precondition(filter.includes(imported, calendar: calendar))
-    filter = TransactionFilter(matchedOnly: true)
+    filter = TransactionFilter(status: .matched)
     precondition(!filter.includes(purchase, calendar: calendar))
     var matched = purchase
     matched.isMatched = true

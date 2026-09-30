@@ -19,7 +19,7 @@ actor TransactionPageRepository {
     var payeeKey: String?
     var startDate: Date?
     var endDate: Date?
-    var needsApprovalOnly = false
+    var needsAttentionOnly = false
     var matchedOnly = false
     var uncategorizedOnly = false
     var includesBalanceAdjustments = false
@@ -114,7 +114,9 @@ actor TransactionPageRepository {
           let normalized = PayeeDirectory.key(item.payee)
           if (aliases[normalized] ?? normalized) != payeeKey { continue }
         }
-        if request.needsApprovalOnly && !item.needsApproval { continue }
+        if request.needsAttentionOnly
+          && !item.needsApproval
+          && !(item.kind == .expense && item.envelopeID == nil) { continue }
         if request.matchedOnly && item.sourceRaw != "manualLinked" { continue }
         if request.uncategorizedOnly && !(item.kind == .expense && item.envelopeID == nil) { continue }
         if let minimum = request.minimumAmountMinor,

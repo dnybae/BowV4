@@ -69,7 +69,12 @@ struct TransactionFilterScreen: View {
         }
 
         Section("Status") {
-          Toggle("Matched Only", isOn: $draft.matchedOnly)
+          Picker("Show", selection: $draft.status) {
+            ForEach(TransactionStatusScope.allCases, id: \.self) { status in
+              Text(status.title).tag(status)
+            }
+          }
+          .pickerStyle(.menu)
         }
 
         Section("Date Range") {

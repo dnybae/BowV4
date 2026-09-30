@@ -3,8 +3,7 @@ import Foundation
 struct TransactionFilter: Hashable, Sendable {
   var accountID: UUID?
   var envelopeScope: TransactionEnvelopeScope = .all
-  var needsApprovalOnly = false
-  var matchedOnly = false
+  var status: TransactionStatusScope = .all
   var startDate: Date?
   var endDate: Date?
   var minimumAmountMinor: Int64?
@@ -14,8 +13,7 @@ struct TransactionFilter: Hashable, Sendable {
     [
       accountID != nil,
       envelopeScope != .all,
-      needsApprovalOnly,
-      matchedOnly,
+      status != .all,
       startDate != nil,
       endDate != nil,
       minimumAmountMinor != nil,
@@ -40,8 +38,8 @@ struct TransactionFilter: Hashable, Sendable {
       guard item.envelopeID == id else { return false }
     }
 
-    if needsApprovalOnly && !item.needsApproval { return false }
-    if matchedOnly && !item.isMatched { return false }
+    if status == .needsAttention && !item.needsAttention { return false }
+    if status == .matched && !item.isMatched { return false }
 
     if let startDate,
        calendar.compare(item.date, to: startDate, toGranularity: .day) == .orderedAscending {
@@ -59,6 +57,20 @@ struct TransactionFilter: Hashable, Sendable {
   }
 }
 
+enum TransactionStatusScope: String, Hashable, Sendable, CaseIterable {
+  case all
+  case needsAttention
+  case matched
+
+  var title: String {
+    switch self {
+    case .all: "All"
+    case .needsAttention: "Needs Attention"
+    case .matched: "Matched"
+    }
+  }
+}
+
 enum TransactionEnvelopeScope: Hashable, Sendable {
   case all
   case uncategorized
@@ -72,6 +84,6 @@ struct TransactionFilterItem {
   var date: Date
   var amountMinor: Int64
   var isUncategorizedExpense: Bool
-  var needsApproval: Bool = false
+  var needsAttention: Bool = false
   var isMatched: Bool = false
 }

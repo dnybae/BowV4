@@ -114,7 +114,11 @@ struct SettingsScreen: View {
         }
 
         Section("Privacy & Legal") {
-          LabeledContent("Storage", value: isDemoMode ? "Temporary demo" : "On this iPhone")
+          LabeledContent {
+            Text(isDemoMode ? "Temporary demo" : "On this iPhone")
+          } label: {
+            Label("Storage", systemImage: "internaldrive")
+          }
           NavigationLink {
             SettingsPlaceholderScreen(
               title: "Privacy Policy",

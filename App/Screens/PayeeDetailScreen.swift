@@ -187,8 +187,8 @@ struct PayeeDetailScreen: View {
                   let predicate = #Predicate<BudgetTransaction> { $0.id == id }
                   selectedTransaction = try? modelContext.fetch(FetchDescriptor(predicate: predicate)).first
                 } label: {
-                  TransactionSummaryRow(
-                    transaction: transaction, currencyCode: currencyCode, showsDate: false
+                  TransactionRowView(
+                    model: TransactionRowModel(transaction), currencyCode: currencyCode
                   )
                 }
                 .buttonStyle(.plain)

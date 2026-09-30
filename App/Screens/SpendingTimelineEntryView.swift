@@ -81,7 +81,7 @@ struct SpendingTimelineEntryView: View {
   }
 
   private var row: some View {
-    SpendingTimelineRow(item: item)
+    TransactionRowView(model: TransactionRowModel(item), currencyCode: item.currencyCode)
   }
 
   private func record(_ occurrence: BudgetScheduleOccurrence, _ schedule: BudgetSchedule) {
@@ -100,54 +100,5 @@ struct SpendingTimelineEntryView: View {
     occurrence.isSkipped = true
     do { try modelContext.save() }
     catch { message = error.localizedDescription }
-  }
-}
-
-private struct SpendingTimelineRow: View {
-  @Query private var payees: [BudgetPayee]
-  var item: SpendingTimelineItem
-
-  private var isPending: Bool {
-    item.status == .pending || item.status == .pendingEntered
-  }
-
-  var body: some View {
-    HStack(spacing: 12) {
-      MerchantLogoView(
-        merchantName: item.kind == .transfer ? "" : item.title,
-        domain: item.kind == .transfer ? nil : PayeeDirectory.logoDomain(
-          for: item.title, transactionDomain: item.merchantDomain, payees: payees
-        ),
-        kind: item.kind,
-        categoryName: item.envelopeName
-      )
-      .opacity(isPending ? 0.6 : 1)
-      VStack(alignment: .leading, spacing: 3) {
-        Text(item.title)
-          .foregroundStyle(isPending ? Bow.inkSoft : Bow.ink)
-        Text(item.envelopeName.map { "\(item.accountName) · \($0)" } ?? item.accountName)
-          .font(.subheadline)
-          .foregroundStyle(Bow.inkSoft)
-        if let status = item.status {
-          Label(status.title, systemImage: status.systemImage)
-            .font(.caption.weight(status.needsAttention ? .medium : .regular))
-            .foregroundStyle(status.needsAttention ? AnyShapeStyle(Bow.needsInk) : AnyShapeStyle(Bow.inkSoft))
-        } else if item.isMatched {
-          Label("Matched", systemImage: "link")
-            .font(.subheadline)
-            .foregroundStyle(.tint)
-        }
-      }
-      Spacer(minLength: 8)
-      MoneyText(minor: item.amountMinor, currencyCode: item.currencyCode)
-        .fontWeight(.medium)
-        .foregroundStyle(isPending
-          ? AnyShapeStyle(Bow.inkSoft)
-          : item.amountMinor < 0 ? AnyShapeStyle(Bow.ink) : AnyShapeStyle(.tint))
-        .fontDesign(.rounded).monospacedDigit()
-    }
-    .padding(.vertical, 4)
-    .contentShape(Rectangle())
-    .accessibilityElement(children: .combine)
   }
 }

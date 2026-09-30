@@ -183,10 +183,12 @@ struct CalendarScreen: View {
           VStack(spacing: 0) {
             ForEach(dayTransactions) { transaction in
               Button { onSelectTransaction(transaction.id) } label: {
-                TransactionRow(
-                  transaction: transaction,
-                  accountName: accounts.first { $0.id == transaction.accountID }?.name ?? "Account",
-                  envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name,
+                TransactionRowView(
+                  model: TransactionRowModel(
+                    transaction,
+                    accountName: accounts.first { $0.id == transaction.accountID }?.name ?? "Account",
+                    envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name
+                  ),
                   currencyCode: currencyCode
                 )
                 .padding(.horizontal, Bow.Space.s4)

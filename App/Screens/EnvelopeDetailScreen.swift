@@ -271,10 +271,9 @@ struct EnvelopeDetailScreen: View {
               Button {
                 onSelectTransaction(transaction.id)
               } label: {
-                TransactionSummaryRow(
-                  transaction: transaction,
-                  currencyCode: currencyCode,
-                  showsDate: false
+                TransactionRowView(
+                  model: TransactionRowModel(transaction),
+                  currencyCode: currencyCode, options: .hidesEnvelope
                 )
               }
               .buttonStyle(.plain)

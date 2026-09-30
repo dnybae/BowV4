@@ -6,9 +6,11 @@ struct MoneyText: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   var minor: Int64
   var currencyCode: String
+  /// Prefix positive amounts with "+", for money coming in.
+  var showsPlusSign = false
 
   var body: some View {
-    Text(BudgetMoney.formatted(minor, currencyCode: currencyCode))
+    Text(BudgetMoney.formatted(minor, currencyCode: currencyCode, showsPlusSign: showsPlusSign))
       .fontDesign(.rounded)
       .monospacedDigit()
       .contentTransition(reduceMotion ? .identity : .numericText(value: Double(minor)))

@@ -235,12 +235,24 @@ enum SpendingTimelineStatus {
 
   var title: String {
     switch self {
-    case .bankReview: "Review · Match or categorize"
+    case .bankReview: "Review · Match or choose an envelope"
     case .transactionReview: "Review · Needs approval"
     case .chooseEnvelope: "Review · Choose an envelope"
     case .pending: "Pending at bank · Not in budget"
     case .pendingEntered: "Pending at bank · Entered in budget"
     case .scheduled: "Scheduled · Record or skip"
+    }
+  }
+
+  /// Short label for a transaction row, where the section already says it needs attention.
+  var rowLabel: String {
+    switch self {
+    case .bankReview: "Needs review"
+    case .transactionReview: "Needs approval"
+    case .chooseEnvelope: "Choose an envelope"
+    case .pending: "Pending at bank"
+    case .pendingEntered: "Pending · Entered"
+    case .scheduled: "Scheduled bill"
     }
   }
 

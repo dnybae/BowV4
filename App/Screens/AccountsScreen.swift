@@ -351,23 +351,25 @@ private struct AccountDetailScreen: View {
           Section(group.title) {
             ForEach(group.items) { transaction in
             if transaction.isBalanceAdjustment {
-              TransactionSummaryRow(
-                transaction: transaction,
-                currencyCode: currencyCode,
-                displayAmountMinor: transaction.transferAccountID == account.id
-                  ? -transaction.amountMinor : transaction.amountMinor,
-                showsDate: false
+              TransactionRowView(
+                model: TransactionRowModel(
+                  transaction,
+                  amountMinor: transaction.transferAccountID == account.id
+                    ? -transaction.amountMinor : transaction.amountMinor
+                ),
+                currencyCode: currencyCode, options: .hidesAccount
               )
             } else {
               Button {
                 onSelectTransaction(transaction.id)
               } label: {
-                TransactionSummaryRow(
-                  transaction: transaction,
-                  currencyCode: currencyCode,
-                  displayAmountMinor: transaction.transferAccountID == account.id
-                    ? -transaction.amountMinor : transaction.amountMinor,
-                  showsDate: false
+                TransactionRowView(
+                  model: TransactionRowModel(
+                    transaction,
+                    amountMinor: transaction.transferAccountID == account.id
+                      ? -transaction.amountMinor : transaction.amountMinor
+                  ),
+                  currencyCode: currencyCode, options: .hidesAccount
                 )
               }
               .buttonStyle(.plain)

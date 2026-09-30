@@ -23,6 +23,14 @@ struct BudgetMoney {
     (Decimal(minor) / 100).formatted(.currency(code: currencyCode))
   }
 
+  /// Money coming in reads "+$50.00", so direction never depends on color alone.
+  static func formatted(_ minor: Int64, currencyCode: String, showsPlusSign: Bool) -> String {
+    guard showsPlusSign else { return formatted(minor, currencyCode: currencyCode) }
+    return (Decimal(minor) / 100).formatted(
+      .currency(code: currencyCode).sign(strategy: .always(showZero: false))
+    )
+  }
+
   /// Formats a decimal string reported by a bank, such as "-1234.50".
   static func formatted(bankAmount: String, currencyCode: String) -> String {
     parseMinor(bankAmount, locale: Locale(identifier: "en_US_POSIX"))

@@ -91,6 +91,8 @@ private struct BudgetHomeView: View {
   @State private var showingInsights = false
   @State private var lastKnownCurrentMonth = Date()
 
+  private static let addTransactionTabTitle = "Add Transaction"
+
   private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
 
   private var accountsTabSymbol: String {
@@ -168,6 +170,11 @@ private struct BudgetHomeView: View {
                 }
               }
             }
+            .background {
+              AddTabInterceptor(tabTitle: Self.addTransactionTabTitle) {
+                activeSheet = .newTransaction
+              }
+            }
           }
           Tab("Spending", systemImage: "list.bullet.rectangle", value: .transactions) {
             NavigationStack {
@@ -240,7 +247,7 @@ private struct BudgetHomeView: View {
             }
           }
           if #available(iOS 27.0, *) {
-            Tab("Add Transaction", systemImage: "plus", value: .addTransaction, role: .prominent) {
+            Tab(Self.addTransactionTabTitle, systemImage: "plus", value: .addTransaction, role: .prominent) {
               EmptyView()
             }
           }

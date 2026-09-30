@@ -446,29 +446,17 @@ private struct CardPaymentRow: View {
     let reserved = max(0, snapshot.paymentAvailable[card.id, default: 0])
     let previousOwed = max(0, -(previousSnapshot?.accountBalances[card.id] ?? 0))
     let previousReserved = max(0, previousSnapshot?.paymentAvailable[card.id] ?? 0)
+    let isCarryingDebt = previousOwed > previousReserved
     let status = EnvelopeStatus(
       cardOwedMinor: owed, reservedMinor: reserved,
-      isCarryingDebt: previousOwed > previousReserved, currencyCode: currencyCode
+      isCarryingDebt: isCarryingDebt, currencyCode: currencyCode
     )
-    HStack(spacing: Bow.Space.s3) {
-      StatusRing(fraction: status.ringFraction, state: status.state)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(card.name)
-          .font(.bowBody)
-          .foregroundStyle(Bow.ink)
-        Text(owed > reserved
-          ? (previousOwed > previousReserved
-            ? "Carrying \(BudgetMoney.formatted(owed - reserved, currencyCode: currencyCode)) of debt"
-            : "Credit spending needs funding")
-          : "Ready to pay in full")
-          .font(.bowFootnote)
-          .foregroundStyle(Bow.inkSoft)
-      }
-      Spacer(minLength: Bow.Space.s2)
-      StatusPill(text: status.pillText, state: status.state)
-    }
-    .frame(minHeight: 44)
-    .padding(.vertical, Bow.Space.s1)
-    .accessibilityElement(children: .combine)
+    let shortfall = BudgetMoney.formatted(owed - reserved, currencyCode: currencyCode)
+    BudgetStatusRow(
+      name: card.name, status: status,
+      accessibilityStatus: owed > reserved
+        ? (isCarryingDebt ? "Carrying \(shortfall) of debt" : "Credit spending needs \(shortfall)")
+        : "Ready to pay in full, \(status.pillText) set aside"
+    )
   }
 }

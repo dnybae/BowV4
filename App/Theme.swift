@@ -181,15 +181,25 @@ struct StatusRing: View {
 struct StatusPill: View {
     var text: String
     var state: EnvelopeState
+    /// Optional symbol before the amount, e.g. a card for credit overspending.
+    var symbol: String? = nil
     var body: some View {
-        Text(text)
-            .font(.bowAmountSm).monospacedDigit()
-            .foregroundStyle(state.ink)
-            .padding(.vertical, 5).padding(.horizontal, 10)
-            .background(state.tint, in: Capsule())
-            .contentTransition(.numericText())
-            .bowAnimation(value: text)
-            .bowAnimation(value: state)
+        HStack(spacing: 4) {
+            if let symbol {
+                Image(systemName: symbol)
+                    .imageScale(.small)
+                    .accessibilityHidden(true)
+            }
+            Text(text)
+                .monospacedDigit()
+                .contentTransition(.numericText())
+        }
+        .font(.bowAmountSm)
+        .foregroundStyle(state.ink)
+        .padding(.vertical, 5).padding(.horizontal, 10)
+        .background(state.tint, in: Capsule())
+        .bowAnimation(value: text)
+        .bowAnimation(value: state)
     }
 }
 

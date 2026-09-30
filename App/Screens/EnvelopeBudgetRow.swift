@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A budget envelope row: status ring, name, what happened this month and a status pill.
+/// A budget envelope row: status ring, name and status pill.
 struct EnvelopeBudgetRow: View {
   var name: String
   var availableMinor: Int64
@@ -18,32 +18,31 @@ struct EnvelopeBudgetRow: View {
     )
   }
 
-  private var detail: String {
-    if availableMinor < 0 {
-      return cashOverspentMinor > 0 ? "Cash overspent"
-        : creditOverspentMinor > 0 ? "Credit overspent · adds debt" : "Overspent"
-    }
+  /// Credit-only overspending adds card debt, so the pill carries a card.
+  private var isCreditOverspending: Bool {
+    availableMinor < 0 && creditOverspentMinor > 0 && cashOverspentMinor == 0
+  }
+
+  private var accessibilityStatus: String {
+    let status = status
     let spent = BudgetMoney.formatted(max(0, -activityMinor), currencyCode: currencyCode)
-    return "Spent \(spent) of \(BudgetMoney.formatted(assignedMinor, currencyCode: currencyCode))"
+    switch status.state {
+    case .over:
+      let over = BudgetMoney.formatted(-availableMinor, currencyCode: currencyCode)
+      return isCreditOverspending ? "Over by \(over) on credit, adds debt"
+        : cashOverspentMinor > 0 ? "Cash overspent by \(over)" : "Over by \(over)"
+    case .needs:
+      return "\(status.pillText), spent \(spent)"
+    case .funded, .empty:
+      return "\(BudgetMoney.formatted(max(0, availableMinor), currencyCode: currencyCode)) available, spent \(spent)"
+    }
   }
 
   var body: some View {
-    let status = status
-    HStack(spacing: Bow.Space.s3) {
-      StatusRing(fraction: status.ringFraction, state: status.state)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(name)
-          .font(.bowBody)
-          .foregroundStyle(Bow.ink)
-        Text(detail)
-          .font(.bowFootnote)
-          .foregroundStyle(Bow.inkSoft)
-      }
-      Spacer(minLength: Bow.Space.s2)
-      StatusPill(text: status.pillText, state: status.state)
-    }
-    .frame(minHeight: 44)
-    .padding(.vertical, Bow.Space.s1)
-    .accessibilityElement(children: .combine)
+    BudgetStatusRow(
+      name: name, status: status,
+      pillSymbol: isCreditOverspending ? "creditcard.fill" : nil,
+      accessibilityStatus: accessibilityStatus
+    )
   }
 }

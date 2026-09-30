@@ -344,6 +344,7 @@ private struct BudgetHomeView: View {
     .task {
       try? BudgetCommands.ensureCardPaymentEnvelopes(in: modelContext)
       try? ScheduleReviewPlanner().refresh(in: modelContext)
+      try? ScheduleTargetSynchronizer().refresh(in: modelContext)
       if !isDemoMode { await refreshSimpleFINIfConnected() }
     }
     .task(id: Calendar.current.dateInterval(of: .month, for: selectedMonth)?.start ?? selectedMonth) {
@@ -353,6 +354,7 @@ private struct BudgetHomeView: View {
       Task { await refreshLedger(invalidate: true) }
     }
     .onChange(of: scenePhase) { _, phase in
+      if phase == .active { try? ScheduleTargetSynchronizer().refresh(in: modelContext) }
       guard !isDemoMode else { return }
       if phase == .active {
         try? ScheduleReviewPlanner().refresh(in: modelContext)
@@ -363,6 +365,7 @@ private struct BudgetHomeView: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
       try? ScheduleReviewPlanner().refresh(in: modelContext)
+      try? ScheduleTargetSynchronizer().refresh(in: modelContext)
       let calendar = Calendar.current
       if calendar.isDate(selectedMonth, equalTo: lastKnownCurrentMonth, toGranularity: .month) {
         selectedMonth = Date()

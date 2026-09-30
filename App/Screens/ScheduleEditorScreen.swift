@@ -179,6 +179,7 @@ struct ScheduleEditorScreen: View {
     do {
       try modelContext.save()
       try? ScheduleReviewPlanner().refresh(in: modelContext)
+      try? ScheduleTargetSynchronizer().refresh(in: modelContext)
       dismiss()
     } catch { errorMessage = error.localizedDescription }
   }
@@ -191,6 +192,7 @@ struct ScheduleEditorScreen: View {
     modelContext.delete(schedule)
     do {
       try modelContext.save()
+      try? ScheduleTargetSynchronizer().refresh(in: modelContext)
       dismiss()
     } catch { errorMessage = error.localizedDescription }
   }

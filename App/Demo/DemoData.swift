@@ -83,8 +83,8 @@ enum DemoData {
       item.targetMinor = target
       return item
     }
-    let housing = envelope("Rent", "house.fill", essentials, 0, 145_000)
-    let groceries = envelope("Groceries", "cart.fill", essentials, 1, 48_000)
+    let housing = envelope("Rent", "house.fill", essentials, 0, nil)
+    let groceries = envelope("Groceries", "cart.fill", essentials, 1, nil)
     let utilities = envelope("Utilities", "bolt.fill", essentials, 2, 24_000)
     let transport = envelope("Transportation", "car.fill", essentials, 3, 22_000)
     let dining = envelope("Dining Out", "fork.knife", lifestyle, 0, 16_000)
@@ -226,5 +226,6 @@ enum DemoData {
     try BudgetCommands.ensureCardPaymentEnvelopes(in: context)
 
     try context.save()
+    try ScheduleTargetSynchronizer().refresh(in: context)
   }
 }

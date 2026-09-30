@@ -39,10 +39,26 @@ struct EnvelopeDetailScreen: View {
       || payees.contains { $0.defaultEnvelopeID == envelope.id }
   }
 
+  private var scheduledContributions: [ScheduleTargetContribution] {
+    ScheduleTargetCalculator().contributions(for: envelope.id, schedules: schedules, month: snapshot.month)
+  }
+
+  private var scheduledTotal: Int64 {
+    scheduledContributions.reduce(0) { $0 + $1.totalMinor }
+  }
+
+  private var totalTarget: Int64? {
+    let total = (envelope.targetMinor ?? 0) + scheduledTotal
+    return total > 0 ? total : nil
+  }
+
+  /// Spending the scheduled bills don't already cover, so accepting it doesn't double count them.
   private var suggestedTarget: Int64? {
-    EnvelopeFundingAdvisor().suggestedMonthlyMinor(
+    guard let average = EnvelopeFundingAdvisor().suggestedMonthlyMinor(
       envelopeID: envelope.id, transactions: recentTransactions
-    )
+    ) else { return nil }
+    let remainder = average - scheduledTotal
+    return remainder > 0 ? remainder : nil
   }
 
   var body: some View {
@@ -93,24 +109,20 @@ struct EnvelopeDetailScreen: View {
         .padding(.vertical, 8)
       }
 
-      Section("Funding Target") {
-        if let suggestedTarget {
-          LabeledContent("Suggested from spending", value: BudgetMoney.formatted(suggestedTarget, currencyCode: currencyCode))
-          Text("Average monthly spending across up to six completed months.")
-            .font(.footnote).foregroundStyle(.secondary)
-          if envelope.targetMinor != suggestedTarget && !isPastMonth {
-            Button("Use Suggested Target", systemImage: "target") {
-              envelope.targetMinor = suggestedTarget
-              do { try modelContext.save() } catch { message = error.localizedDescription }
+      Section {
+        if let totalTarget {
+          LabeledContent("Fund this month", value: BudgetMoney.formatted(totalTarget, currencyCode: currencyCode))
+            .fontWeight(.semibold)
+          if !scheduledContributions.isEmpty {
+            LabeledContent("Your target", value: BudgetMoney.formatted(envelope.targetMinor ?? 0, currencyCode: currencyCode))
+            ForEach(scheduledContributions) { contribution in
+              ScheduledTargetRow(contribution: contribution, currencyCode: currencyCode)
             }
           }
-        }
-        if let target = envelope.targetMinor {
-          LabeledContent("Fund each month", value: BudgetMoney.formatted(target, currencyCode: currencyCode))
           if let date = envelope.targetDate {
             LabeledContent("Target date", value: date.formatted(date: .abbreviated, time: .omitted))
           }
-          let remaining = max(0, target - max(0, snapshot.assigned[envelope.id, default: 0]))
+          let remaining = max(0, totalTarget - max(0, snapshot.assigned[envelope.id, default: 0]))
           Text(remaining == 0
             ? "Monthly target met"
             : "\(BudgetMoney.formatted(remaining, currencyCode: currencyCode)) left to assign this month")
@@ -120,8 +132,25 @@ struct EnvelopeDetailScreen: View {
           Text("No funding target set")
             .foregroundStyle(.secondary)
         }
+        if let suggestedTarget {
+          LabeledContent("Suggested from spending", value: BudgetMoney.formatted(suggestedTarget, currencyCode: currencyCode))
+          if envelope.targetMinor != suggestedTarget && !isPastMonth {
+            Button("Use Suggested Target", systemImage: "target") {
+              envelope.targetMinor = suggestedTarget
+              do { try modelContext.save() } catch { message = error.localizedDescription }
+            }
+          }
+        }
         Button("Edit Target", systemImage: "pencil", action: onEdit)
           .disabled(isPastMonth)
+      } header: {
+        Text("Funding Target")
+      } footer: {
+        if !scheduledContributions.isEmpty {
+          Text("Scheduled transactions add \(BudgetMoney.formatted(scheduledTotal, currencyCode: currencyCode)) to this month’s target, on top of your own.")
+        } else if suggestedTarget != nil {
+          Text("Suggestion is average monthly spending across up to six completed months.")
+        }
       }
 
       Section("Recurring Transactions") {

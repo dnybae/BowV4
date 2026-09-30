@@ -47,7 +47,11 @@ struct EnvelopeEditorScreen: View {
             DatePicker("Target date", selection: $targetDate, displayedComponents: .date)
           }
         } footer: {
-          Text("Optional planning goal. A target does not assign money to this envelope.")
+          if let envelope, envelope.scheduledTargetMinor > 0 {
+            Text("Scheduled transactions add \(BudgetMoney.formatted(envelope.scheduledTargetMinor, currencyCode: currencyCode)) this month on top of this target. A target does not assign money to this envelope.")
+          } else {
+            Text("Optional planning goal. A target does not assign money to this envelope.")
+          }
         }
       }
       .navigationTitle(envelope == nil ? "Add Envelope" : "Edit Envelope")

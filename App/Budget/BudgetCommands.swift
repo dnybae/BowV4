@@ -253,6 +253,7 @@ struct BudgetCommands {
     context.insert(schedule)
     try context.save()
     try? ScheduleReviewPlanner().refresh(in: context)
+    try? ScheduleTargetSynchronizer().refresh(in: context)
   }
 
   static func updateTransaction(

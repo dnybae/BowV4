@@ -176,7 +176,7 @@ struct CategoryManagementScreen: View {
       HStack {
         VStack(alignment: .leading, spacing: 3) {
           Text(envelope.name)
-          if let target = envelope.targetMinor {
+          if let target = envelope.totalMonthlyTargetMinor {
             Text("Target \(BudgetMoney.formatted(target, currencyCode: currencyCode))")
               .font(.caption).foregroundStyle(.secondary)
           }

@@ -101,7 +101,7 @@ struct PayeeEditorScreen: View {
         }
         .listRowBackground(Bow.card)
         Section {
-          CategorySelectionField(
+          EnvelopeSelectionField(
             title: "Default envelope", selection: $defaultEnvelopeID,
             envelopes: envelopes, noneTitle: "None"
           )

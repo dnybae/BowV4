@@ -74,7 +74,7 @@ struct TransactionFilterScreen: View {
         .listRowBackground(Bow.card)
 
         Section("Envelopes") {
-          CategoryScopeSelectionField(selection: $draft.envelopeScope, envelopes: envelopes)
+          EnvelopeScopeSelectionField(selection: $draft.envelopeScope, envelopes: envelopes)
         }
         .listRowBackground(Bow.card)
 

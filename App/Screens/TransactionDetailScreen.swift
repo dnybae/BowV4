@@ -23,7 +23,7 @@ struct TransactionDetailScreen: View {
     accounts.first { $0.id == transaction.accountID }?.name ?? "Account"
   }
 
-  private var categoryName: String {
+  private var envelopeName: String {
     if transaction.kind == .transfer { return "Transfer" }
     return envelopes.first { $0.id == transaction.envelopeID }?.name
       ?? (transaction.kind == .inflow ? "Ready to Assign" : "Choose an envelope")
@@ -51,7 +51,7 @@ struct TransactionDetailScreen: View {
                 for: transaction.payee, transactionDomain: transaction.merchantDomain, payees: payees
               ),
               kind: transaction.kind,
-              categoryName: envelopes.first { $0.id == transaction.envelopeID }?.name,
+              envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name,
               size: 52
             )
             Text(transaction.payee.isEmpty ? "Transaction" : transaction.payee)
@@ -77,7 +77,7 @@ struct TransactionDetailScreen: View {
         .listRowBackground(Bow.card)
 
         Section {
-          LabeledContent("Envelope", value: categoryName)
+          LabeledContent("Envelope", value: envelopeName)
           LabeledContent("Account", value: accountName)
           if !transaction.notes.isEmpty {
             LabeledContent("Notes", value: transaction.notes)
@@ -124,7 +124,7 @@ struct TransactionDetailScreen: View {
         if needsLegacyReview {
           Section {
             if transaction.kind == .expense {
-              CategorySelectionField(
+              EnvelopeSelectionField(
                 title: "Envelope", selection: $reviewEnvelopeID,
                 envelopes: envelopes, noneTitle: "Choose an envelope"
               )

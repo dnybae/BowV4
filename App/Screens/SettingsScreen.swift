@@ -41,7 +41,7 @@ struct SettingsScreen: View {
           }
           .accessibilityLabel("Rename budget, current name \(profiles.first?.name ?? "My Budget")")
           NavigationLink {
-            CategoryManagementScreen()
+            EnvelopeManagementScreen()
           } label: {
             Label("Groups and envelopes", systemImage: "square.grid.2x2")
           }

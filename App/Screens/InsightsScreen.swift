@@ -219,7 +219,7 @@ struct InsightsScreen: View {
             .font(.bowSubhead)
             .foregroundStyle(Bow.inkSoft)
           if spendingGroups.isEmpty {
-            ContentUnavailableView("No spending yet", systemImage: "chart.pie", description: Text("Categorized expenses will appear here."))
+            ContentUnavailableView("No spending yet", systemImage: "chart.pie", description: Text("Expenses with an envelope will appear here."))
           } else {
             Chart(spendingGroups) { group in
               SectorMark(angle: .value("Spending", Double(group.totalMinor)), innerRadius: .ratio(0.65), angularInset: 2)
@@ -348,7 +348,7 @@ struct InsightsScreen: View {
                   for: transaction.payee, transactionDomain: transaction.merchantDomain, payees: payees
                 ),
                 kind: transaction.kind,
-                categoryName: envelopes.first { $0.id == transaction.envelopeID }?.name
+                envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name
               )
               VStack(alignment: .leading) {
                 Text(transaction.payee.isEmpty ? transaction.kind.title : transaction.payee)

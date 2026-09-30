@@ -66,7 +66,7 @@ struct TransactionRowView: View {
       merchantName: model.logoName,
       domain: model.merchantDomain,
       kind: model.kind,
-      categoryName: model.envelopeName,
+      envelopeName: model.envelopeName,
       size: 40
     )
     .opacity(isPending ? 0.6 : 1)

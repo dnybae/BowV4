@@ -2,7 +2,7 @@ import Foundation
 
 enum TransactionIconSymbol {
   static func name(
-    for kind: BudgetTransactionKind?, payee: String, category: String?
+    for kind: BudgetTransactionKind?, payee: String, envelope: String?
   ) -> String {
     if kind == .transfer { return "arrow.left.arrow.right" }
     if kind == .inflow {
@@ -11,7 +11,7 @@ enum TransactionIconSymbol {
         ? "banknote.fill" : "arrow.down.left"
     }
 
-    let label = "\(category ?? "") \(payee)".localizedLowercase
+    let label = "\(envelope ?? "") \(payee)".localizedLowercase
     if containsAny(label, ["dining", "restaurant", "coffee", "takeout", "cafe", "starbucks", "dunkin"]) {
       return "fork.knife"
     }

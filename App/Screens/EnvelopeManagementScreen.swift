@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-struct CategoryManagementScreen: View {
+struct EnvelopeManagementScreen: View {
   @Environment(\.modelContext) private var modelContext
   @Environment(\.budgetSnapshotRepository) private var sharedRepository
   @Query private var profiles: [BudgetProfile]
@@ -11,7 +11,7 @@ struct CategoryManagementScreen: View {
   @Query private var allocations: [BudgetAllocation]
   @Query private var schedules: [BudgetSchedule]
   @Query private var payees: [BudgetPayee]
-  @State private var editor: CategoryEditor?
+  @State private var editor: EnvelopeGroupEditor?
   @State private var pendingHide: BudgetEnvelope?
   @State private var pendingDelete: BudgetEnvelope?
   @State private var movingEnvelope: BudgetEnvelope?
@@ -248,7 +248,7 @@ struct CategoryManagementScreen: View {
   }
 }
 
-private enum CategoryEditor: Identifiable {
+private enum EnvelopeGroupEditor: Identifiable {
   case newGroup
   case editGroup(BudgetGroup)
   case newEnvelope

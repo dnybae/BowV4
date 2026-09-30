@@ -73,11 +73,11 @@ struct TransactionEditorScreen: View {
     return destination.kind == .asset || destination.kind == .liability
   }
 
-  private var categoryNoneTitle: String {
+  private var envelopeNoneTitle: String {
     if kind == .inflow {
       return selectedAccount?.kind == .cash ? "Ready to Assign" : "No envelope"
     }
-    return "Needs categorization"
+    return "Needs an envelope"
   }
 
   private var matchingSchedule: BudgetSchedule? {
@@ -158,9 +158,9 @@ struct TransactionEditorScreen: View {
             .accessibilityLabel("\(kind == .expense ? "Payee" : "Source"), \(payee.isEmpty ? "Choose a payee" : payee)")
           }
           if kind != .transfer || needsEnvelopeForTransfer {
-            CategorySelectionField(
+            EnvelopeSelectionField(
               title: "Envelope", selection: $envelopeID,
-              envelopes: envelopes, noneTitle: categoryNoneTitle
+              envelopes: envelopes, noneTitle: envelopeNoneTitle
             )
             if kind == .expense && envelopeID == nil {
               Text("Choose an envelope before saving this expense.")

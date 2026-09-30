@@ -29,7 +29,7 @@ struct SimpleFINReviewScreen: View {
             merchantName: record.payee,
             domain: PayeeDirectory.logoDomain(for: record.payee, transactionDomain: nil, payees: payees),
             kind: record.amountMinor < 0 ? .expense : .inflow,
-            categoryName: nil
+            envelopeName: nil
           )
           VStack(alignment: .leading, spacing: 2) {
             Text(record.payee.isEmpty ? "Bank transaction" : record.payee)
@@ -121,7 +121,7 @@ struct SimpleFINReviewScreen: View {
         if case .match(let id) = selected,
            record.amountMinor < 0,
            candidates.first(where: { $0.id == id })?.envelopeID == nil {
-          CategorySelectionField(
+          EnvelopeSelectionField(
             title: "Envelope", selection: $envelopeID,
             envelopes: envelopes, noneTitle: "Choose an envelope"
           )
@@ -163,7 +163,7 @@ struct SimpleFINReviewScreen: View {
               .foregroundStyle(Bow.inkSoft)
           }
           if selected == .addNew, record.amountMinor < 0 {
-            CategorySelectionField(
+            EnvelopeSelectionField(
               title: "Envelope", selection: $envelopeID,
               envelopes: envelopes, noneTitle: "Choose an envelope"
             )

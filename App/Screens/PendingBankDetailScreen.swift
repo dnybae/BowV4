@@ -57,7 +57,7 @@ struct PendingBankDetailScreen: View {
       } else {
         Section {
           if record.amountMinor < 0 {
-            CategorySelectionField(
+            EnvelopeSelectionField(
               title: "Envelope", selection: $envelopeID,
               envelopes: envelopes, noneTitle: "Choose an envelope"
             )

@@ -63,8 +63,8 @@ struct ScheduleEditorScreen: View {
           }
           if kind != .transfer || (accounts.first { $0.id == accountID }?.kind == .cash &&
               [.asset, .liability].contains(accounts.first { $0.id == destinationID }?.kind)) {
-            CategorySelectionField(
-              title: "Category", selection: $envelopeID,
+            EnvelopeSelectionField(
+              title: "Envelope", selection: $envelopeID,
               envelopes: envelopes, noneTitle: "No envelope"
             )
             if kind == .expense && envelopeID == nil {

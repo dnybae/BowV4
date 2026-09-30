@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-struct CategorySelectionField: View {
+struct EnvelopeSelectionField: View {
   var title: String
   @Binding var selection: UUID?
   var envelopes: [BudgetEnvelope]
@@ -10,7 +10,7 @@ struct CategorySelectionField: View {
 
   private var selectedName: String {
     if let envelope = envelopes.first(where: { $0.id == selection }) { return envelope.name }
-    return noneTitle ?? "Choose a category"
+    return noneTitle ?? "Choose an envelope"
   }
 
   var body: some View {
@@ -32,7 +32,7 @@ struct CategorySelectionField: View {
     }
     .accessibilityLabel("\(title), \(selectedName)")
     .sheet(isPresented: $showingSelection) {
-      CategorySelectionSheet(
+      EnvelopeSelectionSheet(
         selectedID: selection,
         noneTitle: noneTitle
       ) { id in
@@ -43,7 +43,7 @@ struct CategorySelectionField: View {
   }
 }
 
-struct CategoryScopeSelectionField: View {
+struct EnvelopeScopeSelectionField: View {
   @Binding var selection: TransactionEnvelopeScope
   var envelopes: [BudgetEnvelope]
   @State private var showingSelection = false
@@ -51,7 +51,7 @@ struct CategoryScopeSelectionField: View {
   private var selectedName: String {
     switch selection {
     case .all: "All envelopes"
-    case .uncategorized: "Uncategorized legacy items"
+    case .uncategorized: "Items without an envelope"
     case .envelope(let id): envelopes.first(where: { $0.id == id })?.name ?? "All envelopes"
     }
   }
@@ -61,7 +61,7 @@ struct CategoryScopeSelectionField: View {
       showingSelection = true
     } label: {
       HStack(spacing: 12) {
-        Text("Category").foregroundStyle(Bow.ink)
+        Text("Envelope").foregroundStyle(Bow.ink)
         Spacer(minLength: 12)
         Text(selectedName)
           .foregroundStyle(Bow.inkSoft)
@@ -72,9 +72,9 @@ struct CategoryScopeSelectionField: View {
       }
       .contentShape(Rectangle())
     }
-    .accessibilityLabel("Category, \(selectedName)")
+    .accessibilityLabel("Envelope, \(selectedName)")
     .sheet(isPresented: $showingSelection) {
-      CategorySelectionSheet(
+      EnvelopeSelectionSheet(
         selectedID: {
           if case .envelope(let id) = selection { return id }
           return nil
@@ -90,7 +90,7 @@ struct CategoryScopeSelectionField: View {
   }
 }
 
-struct CategorySelectionSheet: View {
+struct EnvelopeSelectionSheet: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
   @Environment(\.budgetSnapshotRepository) private var sharedRepository
@@ -129,7 +129,7 @@ struct CategorySelectionSheet: View {
               onSelectUncategorized?()
             } label: {
               SelectionRow(
-                title: "Needs categorization", balance: nil,
+                title: "Needs an envelope", balance: nil,
                 isSelected: isUncategorizedSelected
               )
             }
@@ -141,7 +141,7 @@ struct CategorySelectionSheet: View {
           if !matching.isEmpty {
             Section(group.name) {
               ForEach(matching) { envelope in
-                categoryButton(envelope, snapshot: currentSnapshot)
+                envelopeButton(envelope, snapshot: currentSnapshot)
               }
             }
             .listRowBackground(Bow.card)
@@ -151,15 +151,15 @@ struct CategorySelectionSheet: View {
         if !ungrouped.isEmpty {
           Section("Other") {
             ForEach(ungrouped) { envelope in
-              categoryButton(envelope, snapshot: currentSnapshot)
+              envelopeButton(envelope, snapshot: currentSnapshot)
             }
           }
           .listRowBackground(Bow.card)
         }
       }
       .bowListBackground()
-      .searchable(text: $searchText, prompt: "Search categories")
-      .navigationTitle("Category")
+      .searchable(text: $searchText, prompt: "Search envelopes")
+      .navigationTitle("Envelope")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -184,7 +184,7 @@ struct CategorySelectionSheet: View {
     }.sorted { $0.sortOrder < $1.sortOrder }
   }
 
-  private func categoryButton(_ envelope: BudgetEnvelope, snapshot: BudgetSnapshot?) -> some View {
+  private func envelopeButton(_ envelope: BudgetEnvelope, snapshot: BudgetSnapshot?) -> some View {
     Button {
       onSelect(envelope.id)
     } label: {

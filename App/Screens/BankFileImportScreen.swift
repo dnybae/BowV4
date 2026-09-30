@@ -128,7 +128,7 @@ struct BankFileImportScreen: View {
           } header: {
             Text("Preview")
           } footer: {
-            Text("Clear matches and categorized transactions are completed automatically. Anything uncertain waits in Spending → Bank Review. Historical imports preserve today’s cash balance.")
+            Text("Clear matches and transactions that already have an envelope are completed automatically. Anything uncertain waits in Spending → Bank Review. Historical imports preserve today’s cash balance.")
           }
           .listRowBackground(Bow.card)
 

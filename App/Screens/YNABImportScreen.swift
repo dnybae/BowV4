@@ -31,7 +31,7 @@ struct YNABImportScreen: View {
         } header: {
           Text("File")
         } footer: {
-          Text("Bow imports category groups and envelopes only. Transactions, past assignments, balances, and targets are left behind.")
+          Text("Bow imports your YNAB category groups and categories as groups and envelopes. Transactions, past assignments, balances, and targets are left behind.")
         }
         .listRowBackground(Bow.card)
 
@@ -87,7 +87,7 @@ struct YNABImportScreen: View {
           errorMessage = error.localizedDescription
         }
       }
-      .alert("Couldn’t import categories", isPresented: Binding(
+      .alert("Couldn’t import YNAB categories", isPresented: Binding(
         get: { errorMessage != nil },
         set: { if !$0 { errorMessage = nil } }
       )) {

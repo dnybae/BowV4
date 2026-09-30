@@ -13,7 +13,7 @@ struct BudgetBucketSelectionField: View {
   private var selectedName: String {
     switch selection {
     case .readyToAssign: "Ready to Assign"
-    case .envelope(let id): envelopes.first(where: { $0.id == id })?.name ?? "Category"
+    case .envelope(let id): envelopes.first(where: { $0.id == id })?.name ?? "Envelope"
     case .cardPayment(let id):
       "\(cardAccounts.first(where: { $0.id == id })?.name ?? "Card") Payment"
     }
@@ -86,7 +86,7 @@ struct BudgetBucketSelectionSheet: View {
           }.sorted { $0.sortOrder < $1.sortOrder }
           if !matching.isEmpty {
             Section(group.name) {
-              ForEach(matching) { envelope in categoryButton(envelope) }
+              ForEach(matching) { envelope in envelopeButton(envelope) }
             }
             .listRowBackground(Bow.card)
           }
@@ -97,7 +97,7 @@ struct BudgetBucketSelectionSheet: View {
         }.sorted { $0.sortOrder < $1.sortOrder }
         if !ungrouped.isEmpty {
           Section("Other") {
-            ForEach(ungrouped) { envelope in categoryButton(envelope) }
+            ForEach(ungrouped) { envelope in envelopeButton(envelope) }
           }
           .listRowBackground(Bow.card)
         }
@@ -106,7 +106,7 @@ struct BudgetBucketSelectionSheet: View {
         }.sorted { $0.name < $1.name }
         if !hidden.isEmpty {
           Section("Hidden envelopes") {
-            ForEach(hidden) { envelope in categoryButton(envelope) }
+            ForEach(hidden) { envelope in envelopeButton(envelope) }
           }
           .listRowBackground(Bow.card)
         }
@@ -134,7 +134,7 @@ struct BudgetBucketSelectionSheet: View {
         }
       }
       .bowListBackground()
-      .searchable(text: $searchText, prompt: "Search categories")
+      .searchable(text: $searchText, prompt: "Search envelopes")
       .navigationTitle(title)
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -146,7 +146,7 @@ struct BudgetBucketSelectionSheet: View {
     .presentationDetents([.large])
   }
 
-  private func categoryButton(_ envelope: BudgetEnvelope) -> some View {
+  private func envelopeButton(_ envelope: BudgetEnvelope) -> some View {
     Button {
       onSelect(.envelope(envelope.id))
     } label: {

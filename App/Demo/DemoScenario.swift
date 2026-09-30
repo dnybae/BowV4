@@ -17,7 +17,7 @@ enum DemoScenario: String, CaseIterable, Identifiable {
 
   var explanation: String {
     switch self {
-    case .showcase: "Accounts, categories, schedules, imports, and bank review"
+    case .showcase: "Accounts, envelopes, schedules, imports, and bank review"
     case .empty: "First-use screens with no accounts or transactions"
     case .deficit: "A funded budget with negative Ready to Assign"
     }

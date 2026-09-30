@@ -20,6 +20,7 @@ struct CategoryManagementScreen: View {
   @State private var usedEnvelopeIDs: Set<UUID> = []
   @State private var historyLoaded = false
   @State private var refreshVersion = 0
+  @State private var showingDirectory = false
 
   private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
   private var orderedGroups: [BudgetGroup] {
@@ -58,7 +59,7 @@ struct CategoryManagementScreen: View {
             .disabled(orderedGroups.isEmpty)
           Button("New group") { editor = .newGroup }
             .bowSecondaryButton(size: .regular)
-          NavigationLink("Browse ideas") { EnvelopeDirectoryScreen() }
+          Button("Browse ideas") { showingDirectory = true }
             .bowSecondaryButton(size: .regular)
             .accessibilityHint("Add envelopes from the envelope directory")
         }
@@ -108,6 +109,7 @@ struct CategoryManagementScreen: View {
     }
     .bowListBackground()
     .navigationTitle("Groups and envelopes")
+    .navigationDestination(isPresented: $showingDirectory) { EnvelopeDirectoryScreen() }
     .task(id: refreshVersion) {
       let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
       snapshot = try? await repository.snapshot(month: Date())

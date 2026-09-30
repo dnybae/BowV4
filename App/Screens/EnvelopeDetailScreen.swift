@@ -16,6 +16,7 @@ struct EnvelopeDetailScreen: View {
   var schedules: [BudgetSchedule]
   var onEdit: () -> Void
   var onMoveMoney: (BudgetBucket, BudgetBucket) -> Void
+  var onCoverOverspending: () -> Void
   var onSelectTransaction: (UUID) -> Void
   var onEditSchedule: (UUID) -> Void
   @State private var showingDelete = false
@@ -107,7 +108,12 @@ struct EnvelopeDetailScreen: View {
   }
 
   private var canMoveMoneyIn: Bool {
-    !isPastMonth && (snapshot.readyToAssignMinor > 0
+    if availableMinor < 0 {
+      // Covering can draw from Ready to Assign or another envelope, not card payment money.
+      return !isPastMonth && (snapshot.readyToAssignMinor > 0
+        || envelopes.contains { $0.id != envelope.id && $0.paymentAccountID == nil && snapshot.available(for: $0.id) > 0 })
+    }
+    return !isPastMonth && (snapshot.readyToAssignMinor > 0
       || availableMinor > 0
       || envelopes.contains { $0.id != envelope.id && snapshot.available(for: $0.id) > 0 }
       || accounts.contains { $0.kind == .credit && snapshot.paymentAvailable[$0.id, default: 0] > 0 })
@@ -158,7 +164,7 @@ struct EnvelopeDetailScreen: View {
           }
 
           HStack(spacing: Bow.Space.s3) {
-            Button(primaryActionTitle, action: moveMoneyIn)
+            Button(primaryActionTitle, action: availableMinor < 0 ? onCoverOverspending : moveMoneyIn)
               .bowPrimaryButton()
               .disabled(!canMoveMoneyIn)
             if availableMinor > 0 && !isPastMonth {

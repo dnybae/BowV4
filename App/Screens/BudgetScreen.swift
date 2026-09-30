@@ -17,8 +17,7 @@ struct BudgetScreen: View {
   var onEditEnvelope: (UUID) -> Void
   var onImportYNAB: () -> Void
   var onMoveMoney: (BudgetBucket, BudgetBucket) -> Void
-  /// Opens the cover overspending sheet, optionally limited to one card's overspending.
-  var onCoverOverspending: (UUID?) -> Void
+  var onCoverOverspending: (CoverOverspendingScope) -> Void
   var onSelectTransaction: (UUID) -> Void
   var onEditSchedule: (UUID) -> Void
   @State private var searchText = ""
@@ -90,7 +89,7 @@ struct BudgetScreen: View {
             || accounts.contains { $0.kind == .credit && snapshot.paymentAvailable[$0.id, default: 0] > 0 }),
           isPastMonth: isPastMonth,
           onAssign: assignMoney,
-          onCoverOverspending: { onCoverOverspending(nil) }
+          onCoverOverspending: { onCoverOverspending(.all) }
         )
 
         let scheduled = scheduledTargets
@@ -179,6 +178,7 @@ struct BudgetScreen: View {
               allocations: allocations, schedules: schedules,
               onEdit: { onEditEnvelope(envelope.id) },
               onMoveMoney: onMoveMoney,
+              onCoverOverspending: { onCoverOverspending(.envelope(envelope.id)) },
               onSelectTransaction: onSelectTransaction,
               onEditSchedule: onEditSchedule
             )
@@ -193,7 +193,7 @@ struct BudgetScreen: View {
               envelopes: envelopes,
               allocations: allocations, schedules: schedules,
               onMoveMoney: onMoveMoney,
-              onCoverOverspending: { onCoverOverspending(card.id) },
+              onCoverOverspending: { onCoverOverspending(.card(card.id)) },
               onSelectTransaction: onSelectTransaction,
               onEditSchedule: onEditSchedule
             )
@@ -238,11 +238,7 @@ struct BudgetScreen: View {
       source = nil
     }
     guard let source else { return }
-    if !overspending.isEmpty {
-      onCoverOverspending(nil)
-    } else {
-      onMoveMoney(source, .readyToAssign)
-    }
+    onMoveMoney(source, .readyToAssign)
   }
 
   private func changeMonth(_ amount: Int) {

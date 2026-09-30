@@ -152,9 +152,9 @@ private struct BudgetHomeView: View {
                   let month = Calendar.current.dateInterval(of: .month, for: selectedMonth)?.start ?? selectedMonth
                   activeSheet = .moveMoney(source, target, month)
                 },
-                onCoverOverspending: { cardID in
+                onCoverOverspending: { scope in
                   let month = Calendar.current.dateInterval(of: .month, for: selectedMonth)?.start ?? selectedMonth
-                  activeSheet = .coverOverspending(month, cardID: cardID)
+                  activeSheet = .coverOverspending(month, scope)
                 },
                 onSelectTransaction: { activeSheet = .editTransaction($0) },
                 onEditSchedule: { activeSheet = .editSchedule($0) }
@@ -341,8 +341,8 @@ private struct BudgetHomeView: View {
               source: source,
               target: target
             )
-          case .coverOverspending(let month, let cardID):
-            CoverOverspendingScreen(currencyCode: currencyCode, month: month, cardID: cardID)
+          case .coverOverspending(let month, let scope):
+            CoverOverspendingScreen(currencyCode: currencyCode, month: month, scope: scope)
           }
         }
       }
@@ -452,7 +452,7 @@ private enum BowSheet: Identifiable {
   case editEnvelope(UUID)
   case importYNAB
   case moveMoney(BudgetBucket, BudgetBucket, Date)
-  case coverOverspending(Date, cardID: UUID?)
+  case coverOverspending(Date, CoverOverspendingScope)
 
   var id: String {
     switch self {

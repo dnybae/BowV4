@@ -272,11 +272,24 @@ private struct BudgetOverviewSection: View {
   var onShowCards: () -> Void
 
   private var isDeficit: Bool { summary.readyToAssignMinor < 0 }
+  /// Rounded down so the ring never claims 100% while money is still waiting for a job.
+  private var jobPercent: Int { Int((summary.assignedShare * 100).rounded(.down)) }
+
+  private var secondaryTotals: String? {
+    var parts: [String] = []
+    if summary.overspentMinor > 0 {
+      parts.append("\(BudgetMoney.formatted(summary.overspentMinor, currencyCode: currencyCode)) overspent")
+    }
+    if summary.assignedInFutureMinor != 0 {
+      parts.append("\(BudgetMoney.formatted(summary.assignedInFutureMinor, currencyCode: currencyCode)) assigned in future months")
+    }
+    return parts.isEmpty ? nil : parts.joined(separator: " · ")
+  }
 
   var body: some View {
     Section {
       VStack(spacing: Bow.Space.s5) {
-        GlowRing(fraction: 0, color: isDeficit ? Bow.over : Bow.bow) {
+        GlowRing(fraction: summary.assignedShare, color: isDeficit ? Bow.over : Bow.bow) {
           VStack(spacing: Bow.Space.s1) {
             Text("Ready to Assign")
               .font(.bowSubhead)
@@ -287,6 +300,9 @@ private struct BudgetOverviewSection: View {
               .foregroundStyle(isDeficit ? Bow.overInk : Bow.ink)
               .lineLimit(1)
               .minimumScaleFactor(0.4)
+            Text("\(jobPercent)% has a job")
+              .font(.bowSubhead.weight(.semibold))
+              .foregroundStyle(Bow.bowInk)
           }
           .frame(maxWidth: 180)
         }
@@ -304,13 +320,21 @@ private struct BudgetOverviewSection: View {
           .disabled(!canMove)
 
         HStack(spacing: Bow.Space.s2) {
-          metric("Assigned", amount: summary.assignedThisMonthMinor, emphasized: false)
-          metric("Overspent", amount: summary.overspentMinor, emphasized: summary.overspentMinor > 0)
-          metric("Future months", amount: summary.assignedInFutureMinor, emphasized: false)
+          metric("Assigned", amount: summary.assignedThisMonthMinor)
+          metric("Spent", amount: summary.spentThisMonthMinor)
+          metric("Available", amount: summary.availableMinor)
         }
         .padding(.vertical, Bow.Space.s3)
         .padding(.horizontal, Bow.Space.s2)
         .glassEffect(.regular, in: .rect(cornerRadius: Bow.Radius.lg))
+
+        if let secondaryTotals {
+          Text(secondaryTotals)
+            .font(.bowFootnote)
+            .monospacedDigit()
+            .foregroundStyle(Bow.inkSoft)
+            .multilineTextAlignment(.center)
+        }
       }
       .frame(maxWidth: .infinity)
       .listRowBackground(Color.clear)
@@ -336,7 +360,7 @@ private struct BudgetOverviewSection: View {
     }
   }
 
-  private func metric(_ title: String, amount: Int64, emphasized: Bool) -> some View {
+  private func metric(_ title: String, amount: Int64) -> some View {
     VStack(spacing: 2) {
       Text(title)
         .font(.bowFootnote)
@@ -344,7 +368,7 @@ private struct BudgetOverviewSection: View {
       Text(BudgetMoney.formatted(amount, currencyCode: currencyCode))
         .font(.bowAmount)
         .monospacedDigit()
-        .foregroundStyle(emphasized ? Bow.overInk : Bow.ink)
+        .foregroundStyle(Bow.ink)
         .lineLimit(1)
         .minimumScaleFactor(0.6)
     }
@@ -411,7 +435,10 @@ private struct CardPaymentRow: View {
     let reserved = max(0, snapshot.paymentAvailable[card.id, default: 0])
     let previousOwed = max(0, -(previousSnapshot?.accountBalances[card.id] ?? 0))
     let previousReserved = max(0, previousSnapshot?.paymentAvailable[card.id] ?? 0)
-    let status = EnvelopeStatus(cardOwedMinor: owed, reservedMinor: reserved, currencyCode: currencyCode)
+    let status = EnvelopeStatus(
+      cardOwedMinor: owed, reservedMinor: reserved,
+      isCarryingDebt: previousOwed > previousReserved, currencyCode: currencyCode
+    )
     HStack(spacing: Bow.Space.s3) {
       StatusRing(fraction: status.ringFraction, state: status.state)
       VStack(alignment: .leading, spacing: 2) {

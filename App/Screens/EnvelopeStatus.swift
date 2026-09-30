@@ -32,11 +32,13 @@ struct EnvelopeStatus {
   }
 
   /// Card payments: the ring shows payment money set aside against what's owed.
-  init(cardOwedMinor owed: Int64, reservedMinor reserved: Int64, currencyCode: String) {
+  /// Debt carried in from an earlier month is short (over); new credit spending this month still needs funding.
+  init(cardOwedMinor owed: Int64, reservedMinor reserved: Int64, isCarryingDebt: Bool, currencyCode: String) {
     if owed > reserved {
-      state = .over
+      let shortfall = BudgetMoney.formatted(owed - reserved, currencyCode: currencyCode)
+      state = isCarryingDebt ? .over : .needs
       ringFraction = Self.fraction(reserved, of: owed)
-      pillText = "Short \(BudgetMoney.formatted(owed - reserved, currencyCode: currencyCode))"
+      pillText = isCarryingDebt ? "Short \(shortfall)" : "Needs \(shortfall)"
     } else if reserved > 0 {
       state = .funded
       ringFraction = 1

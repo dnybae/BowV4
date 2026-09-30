@@ -26,6 +26,8 @@ struct TransactionEditorScreen: View {
   @State private var showingDeleteConfirmation = false
   @State private var possibleImportedMatchIDs: [UUID] = []
   @State private var autoAssignedEnvelopeID: UUID?
+  @State private var autoFilledAccountID: UUID?
+  private var defaultAccountID: UUID?
   @State private var linkScheduledBill = true
   @State private var showingPayeeSelection = false
 
@@ -44,10 +46,12 @@ struct TransactionEditorScreen: View {
     self.currencyCode = currencyCode
     self.scheduledDraft = scheduledDraft
     _kind = State(initialValue: transaction?.kind ?? scheduledDraft?.kind ?? .expense)
-    _accountID = State(initialValue: transaction?.accountID ?? scheduledDraft?.accountID
+    let defaultAccountID = transaction?.accountID ?? scheduledDraft?.accountID
       ?? accounts.first(where: { $0.kind == .cash })?.id
       ?? accounts.first(where: { $0.kind == .credit })?.id
-      ?? accounts.first?.id)
+      ?? accounts.first?.id
+    self.defaultAccountID = defaultAccountID
+    _accountID = State(initialValue: defaultAccountID)
     _destinationID = State(initialValue: transaction?.transferAccountID ?? scheduledDraft?.transferAccountID)
     _envelopeID = State(initialValue: transaction?.envelopeID ?? scheduledDraft?.envelopeID)
     _amountMinor = State(initialValue: transaction.map { abs($0.amountMinor) } ?? scheduledDraft.map { abs($0.amountMinor) } ?? 0)
@@ -270,6 +274,9 @@ struct TransactionEditorScreen: View {
       }
       .onChange(of: payee) { _, _ in applyPayeeRule() }
       .onChange(of: kind) { _, _ in applyPayeeRule() }
+      .task(id: PayeeDefaultsTrigger(payee: payee, kind: kind)) {
+        await applyLastUsedDefaults()
+      }
       .onChange(of: accountID) { _, newAccountID in
         if destinationID == newAccountID { destinationID = nil }
       }
@@ -298,6 +305,29 @@ struct TransactionEditorScreen: View {
     if envelopeID == nil || envelopeID == autoAssignedEnvelopeID {
       envelopeID = nextEnvelopeID
       autoAssignedEnvelopeID = nextEnvelopeID
+    }
+  }
+
+  /// Fills the account and envelope from the last transaction with this payee,
+  /// without replacing anything the person chose themselves.
+  private func applyLastUsedDefaults() async {
+    guard kind != .transfer, !payee.isEmpty else { return }
+    let lastUsed = try? await PayeeDirectoryRepository(modelContainer: modelContext.container)
+      .lastUsed(payee: payee, kind: kind, excluding: transaction?.id)
+    guard !Task.isCancelled else { return }
+
+    if transaction == nil && scheduledDraft == nil
+        && (accountID == defaultAccountID || accountID == autoFilledAccountID) {
+      let suggested = lastUsed.flatMap { used in accounts.first { $0.id == used.accountID }?.id }
+      accountID = suggested ?? defaultAccountID
+      autoFilledAccountID = suggested
+    }
+
+    if kind == .expense && envelopeID == nil,
+       let suggested = lastUsed?.envelopeID,
+       envelopes.contains(where: { $0.id == suggested && !$0.isHidden && $0.paymentAccountID == nil }) {
+      envelopeID = suggested
+      autoAssignedEnvelopeID = suggested
     }
   }
 
@@ -396,6 +426,11 @@ struct TransactionEditorScreen: View {
       errorMessage = error.localizedDescription
     }
   }
+}
+
+private struct PayeeDefaultsTrigger: Equatable {
+  var payee: String
+  var kind: BudgetTransactionKind
 }
 
 struct ScheduledTransactionDraft {

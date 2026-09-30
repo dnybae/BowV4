@@ -17,6 +17,7 @@ struct PayeeEditorScreen: View {
   @State private var customLogoData: Data?
   @State private var selectedPhoto: PhotosPickerItem?
   @State private var defaultEnvelopeID: UUID?
+  @State private var notes: String
   @State private var errorMessage: String?
   @State private var errorTitle = "Couldn’t save payee"
   @State private var showingDelete = false
@@ -34,10 +35,15 @@ struct PayeeEditorScreen: View {
     _logoSource = State(initialValue: payee?.logoSource ?? .system)
     _customLogoData = State(initialValue: payee?.customLogoData)
     _defaultEnvelopeID = State(initialValue: payee?.defaultEnvelopeID)
+    _notes = State(initialValue: payee?.notes ?? "")
   }
 
   private var trimmedName: String {
     name.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private var trimmedNotes: String {
+    notes.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   var body: some View {
@@ -103,6 +109,15 @@ struct PayeeEditorScreen: View {
             .textInputAutocapitalization(.characters)
         } footer: {
           Text("Optional. Match a bank’s full payee description to this payee and its default envelope when importing transactions.")
+        }
+        .listRowBackground(Bow.card)
+        Section {
+          TextField("Add a note", text: $notes, axis: .vertical)
+            .lineLimit(2...6)
+        } header: {
+          Text("Notes")
+        } footer: {
+          Text("Keep details like a loyalty number or renewal month.")
         }
         .listRowBackground(Bow.card)
         if let entry, entry.transactionCount == 0 && entry.scheduleCount == 0,
@@ -229,6 +244,7 @@ struct PayeeEditorScreen: View {
           payee.name = trimmedName
           payee.exactMatchText = exact
           payee.defaultEnvelopeID = defaultEnvelopeID
+          payee.notes = trimmedNotes
           payee.merchantDomain = merchantDomain.isEmpty ? nil : merchantDomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
           payee.logoSource = logoSource
           payee.customLogoData = logoSource == .custom ? customLogoData : nil
@@ -239,6 +255,7 @@ struct PayeeEditorScreen: View {
             exactMatchText: exact,
             merchantDomain: merchantDomain.isEmpty ? nil : merchantDomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
           )
+          payee.notes = trimmedNotes
           payee.logoSource = logoSource
           payee.customLogoData = logoSource == .custom ? customLogoData : nil
           modelContext.insert(payee)
@@ -250,6 +267,7 @@ struct PayeeEditorScreen: View {
           exactMatchText: exact,
           merchantDomain: merchantDomain.isEmpty ? nil : merchantDomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         )
+        payee.notes = trimmedNotes
         payee.logoSource = logoSource
         payee.customLogoData = logoSource == .custom ? customLogoData : nil
         modelContext.insert(payee)

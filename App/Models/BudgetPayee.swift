@@ -8,6 +8,7 @@ final class BudgetPayee {
   var defaultEnvelopeID: UUID? = nil
   var exactMatchText: String = ""
   var merchantDomain: String? = nil
+  var notes: String = ""
   var logoSourceRaw: String = PayeeLogoSource.system.rawValue
   @Attribute(.externalStorage) var customLogoData: Data? = nil
 

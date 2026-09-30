@@ -15,6 +15,30 @@ struct PayeeDetailScreen: View {
   @State private var selectedSchedule: BudgetSchedule?
   @State private var entry: PayeeDirectory.Entry?
   @State private var feed = TransactionFeedModel()
+  @State private var activity: PayeeActivity?
+  @State private var activityVersion = 0
+
+  private var payee: BudgetPayee? {
+    guard let ruleID = entry?.ruleID else { return nil }
+    return payees.first { $0.id == ruleID }
+  }
+
+  private var usualAccountName: String? {
+    guard let id = activity?.usualAccountID else { return nil }
+    return accounts.first { $0.id == id }?.name
+  }
+
+  private var websiteURL: URL? {
+    guard let domain = payee?.merchantDomain, !domain.isEmpty else { return nil }
+    return URL(string: "https://\(domain)")
+  }
+
+  private var webSearchURL: URL? {
+    guard let name = entry?.name else { return nil }
+    var components = URLComponents(string: "https://www.google.com/search")
+    components?.queryItems = [URLQueryItem(name: "q", value: name)]
+    return components?.url
+  }
 
   private var matchingSchedules: [BudgetSchedule] {
     schedules.filter {
@@ -30,23 +54,45 @@ struct PayeeDetailScreen: View {
         Section("Icon") {
           HStack(spacing: 12) {
             MerchantLogoView(merchantName: entry.name,
-                             domain: payees.first { $0.id == entry.ruleID }?.merchantDomain,
+                             domain: payee?.merchantDomain,
                              size: 52)
             VStack(alignment: .leading, spacing: 3) {
               Text(entry.name).font(.headline)
-              Text(payees.first { $0.id == entry.ruleID }?.logoSource.title ?? "Default icon")
+              Text(payee?.logoSource.title ?? "Default icon")
                 .font(.subheadline).foregroundStyle(Bow.inkSoft)
             }
           }
         }
         .listRowBackground(Bow.card)
-        if let payee = payees.first(where: { $0.id == entry.ruleID }),
+        if let activity {
+          PayeeActivitySection(
+            activity: activity, usualAccountName: usualAccountName, currencyCode: currencyCode
+          )
+        }
+        if let payee,
            let envelope = envelopes.first(where: { $0.id == payee.defaultEnvelopeID }) {
           Section("Default envelope") {
             LabeledContent("Envelope", value: envelope.name)
           }
           .listRowBackground(Bow.card)
         }
+        Section("About") {
+          if let notes = payee?.notes, !notes.isEmpty {
+            Text(notes)
+              .foregroundStyle(Bow.ink)
+              .textSelection(.enabled)
+          }
+          if let websiteURL {
+            Link(destination: websiteURL) {
+              Label("Visit \(websiteURL.host() ?? "website")", systemImage: "safari")
+            }
+          } else if let webSearchURL {
+            Link(destination: webSearchURL) {
+              Label("Search the web", systemImage: "magnifyingglass")
+            }
+          }
+        }
+        .listRowBackground(Bow.card)
         if !matchingSchedules.isEmpty {
           Section("Scheduled") {
             ForEach(matchingSchedules) { schedule in
@@ -112,6 +158,13 @@ struct PayeeDetailScreen: View {
                         filter: TransactionFilter(), scopedPayeeKey: payeeKey,
                         includeUncategorizedCount: false)
     }
+    .task(id: activityVersion) {
+      let repository = PayeeDirectoryRepository(modelContainer: modelContext.container)
+      activity = try? await repository.activity(for: payeeKey)
+    }
+    .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+      activityVersion += 1
+    }
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
@@ -121,10 +174,7 @@ struct PayeeDetailScreen: View {
     }
     .sheet(isPresented: $showingEdit) {
       if let entry {
-        PayeeEditorScreen(
-          entry: entry,
-          payee: payees.first { $0.id == entry.ruleID }
-        ) { dismiss() }
+        PayeeEditorScreen(entry: entry, payee: payee) { dismiss() }
       }
     }
     .sheet(item: $selectedTransaction) { transaction in

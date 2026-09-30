@@ -11,7 +11,7 @@ struct MoneyMoveScreen: View {
   var month: Date
   @State private var source: BudgetBucket
   @State private var target: BudgetBucket
-  @State private var amount = ""
+  @State private var amountMinor: Int64 = 0
   @State private var errorMessage: String?
   @State private var snapshot: BudgetSnapshot?
   @State private var refreshVersion = 0
@@ -33,7 +33,7 @@ struct MoneyMoveScreen: View {
   }
 
   private var sourceAvailable: Int64 { balance(of: source) }
-  private var enteredMinor: Int64? { BudgetMoney.parseMinor(amount) }
+  private var enteredMinor: Int64? { amountMinor }
   private var isValid: Bool {
     snapshot != nil && source != target && (enteredMinor ?? 0) > 0
       && (enteredMinor ?? 0) <= max(0, sourceAvailable)
@@ -84,11 +84,10 @@ struct MoneyMoveScreen: View {
 
         Section("Amount") {
           HStack {
-            TextField("0.00", text: $amount)
-              .keyboardType(.decimalPad)
-              .accessibilityLabel("Amount to move")
+            CurrencyAmountField("Amount to move", minor: $amountMinor, currencyCode: currencyCode)
+              .labelsHidden()
             Button("Move All") {
-              amount = BudgetMoney.editable(max(0, sourceAvailable))
+              amountMinor = max(0, sourceAvailable)
             }
             .disabled(sourceAvailable <= 0)
           }

@@ -20,25 +20,13 @@ struct BudgetMoney {
   }
 
   static func formatted(_ minor: Int64, currencyCode: String) -> String {
-    let formatter = NumberFormatter()
-    formatter.numberStyle = .currency
-    formatter.currencyCode = currencyCode
-    formatter.locale = .current
-    let value = NSDecimalNumber(value: minor).dividing(by: NSDecimalNumber(value: 100))
-    return formatter.string(from: value) ?? "\(minor / 100).\(abs(minor % 100))"
+    (Decimal(minor) / 100).formatted(.currency(code: currencyCode))
   }
 
-  static func editable(_ minor: Int64) -> String {
-    let value = Decimal(minor)
-    let positive = value < 0 ? -value : value
-    return NSDecimalNumber(decimal: positive)
-      .dividing(by: NSDecimalNumber(value: 100))
-      .stringValue
-      .replacingOccurrences(of: ".", with: Locale.current.decimalSeparator ?? ".")
-  }
-
-  static func editableSigned(_ minor: Int64) -> String {
-    (minor < 0 ? "-" : "") + editable(minor)
+  /// Formats a decimal string reported by a bank, such as "-1234.50".
+  static func formatted(bankAmount: String, currencyCode: String) -> String {
+    parseMinor(bankAmount, locale: Locale(identifier: "en_US_POSIX"))
+      .map { formatted($0, currencyCode: currencyCode) } ?? bankAmount
   }
 }
 

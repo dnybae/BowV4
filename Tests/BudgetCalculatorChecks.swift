@@ -6,8 +6,14 @@ struct BudgetCalculatorChecks {
     let decimalSeparator = Locale.current.decimalSeparator ?? "."
     expect(BudgetMoney.parseMinor("12\(decimalSeparator)34") == 1_234, "money uses exact minor units")
     expect(BudgetMoney.parseMinor("-3\(decimalSeparator)25") == -325, "negative opening balance parses")
-    expect(BudgetMoney.parseMinor(BudgetMoney.editableSigned(-325)) == -325,
-           "editing a debt balance preserves its sign")
+    expect(CurrencyInputEditor.appending("1", to: 0) == 1, "first digit becomes one cent")
+    expect(CurrencyInputEditor.appending("2", to: 1) == 12, "second digit shifts in from the right")
+    expect(CurrencyInputEditor.appending("5", to: 12) == 125, "third digit makes 1.25")
+    expect(CurrencyInputEditor.deletingLastDigit(from: 125) == 12, "backspace shifts digits right")
+    expect(CurrencyInputEditor.appending("7", to: -12) == -127, "typing keeps a negative sign")
+    expect(CurrencyInputEditor.appending("9", to: 999_999_999_999) == 999_999_999_999, "input stops at twelve digits")
+    expect(CurrencyInputEditor.pasted("$1,234.50", into: 0, allowsNegative: false) == 123_450, "pasted amounts parse")
+    expect(CurrencyInputEditor.pasted("-5.00", into: 0, allowsNegative: false) == 500, "unsigned fields drop the sign")
     expect(BudgetMoney.parseMinor("12\(decimalSeparator)345") == nil, "fractional cents are rejected")
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(secondsFromGMT: 0)!

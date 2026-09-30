@@ -14,7 +14,7 @@ struct SimpleFINAccountSetupScreen: View {
   @State private var setupToken = ""
   @State private var selectedKeys = Set<String>()
   @State private var accountTypes: [String: BudgetAccountType] = [:]
-  @State private var balanceDrafts: [String: String] = [:]
+  @State private var balanceDrafts: [String: Int64] = [:]
   @State private var initializedKeys = Set<String>()
   @State private var importHistory = false
   @State private var historyStart = Date().addingTimeInterval(-89 * 86_400)
@@ -35,12 +35,11 @@ struct SimpleFINAccountSetupScreen: View {
   }
   private var canAdd: Bool {
     !selectedLinks.isEmpty && selectedLinks.allSatisfy { link in
-      let balance = BudgetMoney.parseMinor(balanceDrafts[link.remoteKey] ?? "")
+      let balance = balanceDrafts[link.remoteKey, default: 0]
       let type = accountTypes[link.remoteKey] ?? .other
       return link.currencyCode == currencyCode
         && !link.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        && balance != nil
-        && (type.kind != .liability || (balance ?? 0) <= 0)
+        && (type.kind != .liability || balance <= 0)
     }
   }
 
@@ -163,7 +162,7 @@ struct SimpleFINAccountSetupScreen: View {
         accountTypes[link.remoteKey] = suggester.type(for: link.name)
         balanceDrafts[link.remoteKey] = link.reportedBalance.flatMap {
           BudgetMoney.parseMinor($0, locale: Locale(identifier: "en_US_POSIX"))
-        }.map(BudgetMoney.editableSigned) ?? ""
+        } ?? 0
       }
     }
     .alert("SimpleFIN", isPresented: Binding(
@@ -187,7 +186,7 @@ struct SimpleFINAccountSetupScreen: View {
             .font(.subheadline)
             .foregroundStyle(.secondary)
           if let reported = link.reportedBalance {
-            Text("Bank-reported balance: \(reported) \(link.currencyCode)")
+            Text("Bank-reported balance: \(BudgetMoney.formatted(bankAmount: reported, currencyCode: link.currencyCode))")
               .font(.caption)
               .foregroundStyle(.secondary)
           }
@@ -211,7 +210,7 @@ struct SimpleFINAccountSetupScreen: View {
           VStack(alignment: .leading, spacing: 3) {
             Text(link.name)
             if let reported = link.reportedBalance {
-              Text("Bank-reported balance: \(reported) \(link.currencyCode)")
+              Text("Bank-reported balance: \(BudgetMoney.formatted(bankAmount: reported, currencyCode: link.currencyCode))")
                 .font(.caption).foregroundStyle(.secondary)
             } else {
               Text("Balance unavailable")
@@ -236,15 +235,14 @@ struct SimpleFINAccountSetupScreen: View {
           Text((accountTypes[key] ?? .other).explanation)
             .font(.caption).foregroundStyle(.secondary)
           LabeledContent("Starting balance") {
-            TextField("Amount", text: Binding(
-              get: { balanceDrafts[key] ?? "" },
+            CurrencyAmountField("Starting balance", minor: Binding(
+              get: { balanceDrafts[key, default: 0] },
               set: { balanceDrafts[key] = $0 }
-            ))
-            .keyboardType(.numbersAndPunctuation)
-            .multilineTextAlignment(.trailing)
+            ), currencyCode: currencyCode, allowsNegative: true)
+            .labelsHidden()
           }
           if (accountTypes[key] ?? .other).kind == .liability,
-             (BudgetMoney.parseMinor(balanceDrafts[key] ?? "") ?? 0) > 0 {
+             balanceDrafts[key, default: 0] > 0 {
             Text("Enter money owed as a negative balance.")
               .font(.footnote).foregroundStyle(.secondary)
           }
@@ -276,8 +274,7 @@ struct SimpleFINAccountSetupScreen: View {
     var createdCount = 0
     do {
       let selectedDrafts = try selectedLinks.map { link -> (SimpleFINAccountLink, Int64, BudgetAccountType) in
-        guard let balance = BudgetMoney.parseMinor(balanceDrafts[link.remoteKey] ?? "")
-        else { throw SimpleFINError.invalidAmount }
+        let balance = balanceDrafts[link.remoteKey, default: 0]
         let type = accountTypes[link.remoteKey] ?? .other
         guard type.kind != .liability || balance <= 0 else {
           throw BudgetCommandError.liabilityRequiresNegativeBalance

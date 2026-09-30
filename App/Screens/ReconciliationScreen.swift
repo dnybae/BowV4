@@ -10,14 +10,14 @@ struct ReconciliationScreen: View {
   @State private var payeeNames: [UUID: String] = [:]
   @State private var clearedBalanceMinor: Int64 = 0
   @State private var statementDate = Date()
-  @State private var statementBalance = ""
+  @State private var statementBalanceMinor: Int64 = 0
   @State private var selectedIDs: Set<UUID> = []
   @State private var visibleEntryCount = 300
   @State private var isFinishing = false
   @State private var errorMessage: String?
 
   private var calculator: ReconciliationCalculator { ReconciliationCalculator() }
-  private var enteredBalance: Int64? { BudgetMoney.parseMinor(statementBalance) }
+  private var enteredBalance: Int64? { statementBalanceMinor }
   private var difference: Int64? { enteredBalance.map { $0 - clearedBalanceMinor } }
 
   var body: some View {
@@ -25,8 +25,8 @@ struct ReconciliationScreen: View {
       List {
         Section {
           DatePicker("Statement date", selection: $statementDate, in: ...Date(), displayedComponents: .date)
-          TextField("Statement balance", text: $statementBalance)
-            .keyboardType(.numbersAndPunctuation)
+          CurrencyAmountField("Statement balance", minor: $statementBalanceMinor,
+                              currencyCode: currencyCode, allowsNegative: true)
         } header: {
           Text("Statement")
         } footer: {

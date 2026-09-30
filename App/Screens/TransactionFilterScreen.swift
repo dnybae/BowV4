@@ -11,8 +11,8 @@ struct TransactionFilterScreen: View {
   @State private var usesEndDate: Bool
   @State private var startDate: Date
   @State private var endDate: Date
-  @State private var minimumAmount: String
-  @State private var maximumAmount: String
+  @State private var minimumMinor: Int64
+  @State private var maximumMinor: Int64
 
   init(
     filters: Binding<TransactionFilter>,
@@ -30,18 +30,14 @@ struct TransactionFilterScreen: View {
     _usesEndDate = State(initialValue: current.endDate != nil)
     _startDate = State(initialValue: current.startDate ?? Date())
     _endDate = State(initialValue: current.endDate ?? Date())
-    _minimumAmount = State(initialValue: current.minimumAmountMinor.map(BudgetMoney.editable) ?? "")
-    _maximumAmount = State(initialValue: current.maximumAmountMinor.map(BudgetMoney.editable) ?? "")
+    _minimumMinor = State(initialValue: current.minimumAmountMinor ?? 0)
+    _maximumMinor = State(initialValue: current.maximumAmountMinor ?? 0)
   }
 
-  private var parsedMinimum: Int64? { BudgetMoney.parseMinor(minimumAmount) }
-  private var parsedMaximum: Int64? { BudgetMoney.parseMinor(maximumAmount) }
+  private var parsedMinimum: Int64? { minimumMinor > 0 ? minimumMinor : nil }
+  private var parsedMaximum: Int64? { maximumMinor > 0 ? maximumMinor : nil }
 
   private var canApply: Bool {
-    let minimumIsValid = minimumAmount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      || (parsedMinimum ?? -1) >= 0
-    let maximumIsValid = maximumAmount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      || (parsedMaximum ?? -1) >= 0
     let amountRangeIsValid: Bool
     if let parsedMinimum, let parsedMaximum {
       amountRangeIsValid = parsedMinimum <= parsedMaximum
@@ -51,7 +47,7 @@ struct TransactionFilterScreen: View {
     let dateRangeIsValid = !usesStartDate || !usesEndDate
       || Calendar.current.compare(startDate, to: endDate, toGranularity: .day)
         != .orderedDescending
-    return minimumIsValid && maximumIsValid && amountRangeIsValid && dateRangeIsValid
+    return amountRangeIsValid && dateRangeIsValid
   }
 
   var body: some View {
@@ -91,14 +87,12 @@ struct TransactionFilterScreen: View {
         }
 
         Section {
-          TextField("Minimum", text: $minimumAmount)
-            .keyboardType(.decimalPad)
-          TextField("Maximum", text: $maximumAmount)
-            .keyboardType(.decimalPad)
+          CurrencyAmountField("Minimum", minor: $minimumMinor, currencyCode: currencyCode)
+          CurrencyAmountField("Maximum", minor: $maximumMinor, currencyCode: currencyCode)
         } header: {
           Text("Amount (\(currencyCode))")
         } footer: {
-          Text("Enter positive amounts. Outflows are filtered by their absolute value.")
+          Text("Leave at zero for no limit. Outflows are filtered by their absolute value.")
         }
 
         Section {

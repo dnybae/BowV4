@@ -15,7 +15,7 @@ struct TransactionEditorScreen: View {
   @State private var accountID: UUID?
   @State private var destinationID: UUID?
   @State private var envelopeID: UUID?
-  @State private var amount: String
+  @State private var amountMinor: Int64
   @State private var payee: String
   @State private var merchantDomain: String?
   @State private var notes: String
@@ -50,7 +50,7 @@ struct TransactionEditorScreen: View {
       ?? accounts.first?.id)
     _destinationID = State(initialValue: transaction?.transferAccountID ?? scheduledDraft?.transferAccountID)
     _envelopeID = State(initialValue: transaction?.envelopeID ?? scheduledDraft?.envelopeID)
-    _amount = State(initialValue: transaction.map { BudgetMoney.editable($0.amountMinor) } ?? scheduledDraft.map { BudgetMoney.editable($0.amountMinor) } ?? "")
+    _amountMinor = State(initialValue: transaction.map { abs($0.amountMinor) } ?? scheduledDraft.map { abs($0.amountMinor) } ?? 0)
     _payee = State(initialValue: transaction?.payee ?? scheduledDraft?.payee ?? "")
     _merchantDomain = State(initialValue: transaction?.merchantDomain)
     _notes = State(initialValue: transaction?.notes ?? scheduledDraft?.notes ?? "")
@@ -78,7 +78,8 @@ struct TransactionEditorScreen: View {
 
   private var matchingSchedule: BudgetSchedule? {
     guard let transaction, transaction.needsApproval, transaction.scheduleID == nil,
-          kind == .expense, let accountID, let minor = BudgetMoney.parseMinor(amount) else { return nil }
+          kind == .expense, let accountID else { return nil }
+    let minor = amountMinor
     let matches = schedules.filter { schedule in
       schedule.accountID == accountID && schedule.amountMinor == minor
         && schedule.payee.localizedCaseInsensitiveCompare(payee) == .orderedSame
@@ -114,8 +115,7 @@ struct TransactionEditorScreen: View {
             }
           }
           .pickerStyle(.segmented)
-          TextField("Amount", text: $amount)
-            .keyboardType(.decimalPad)
+          CurrencyAmountField("Amount", minor: $amountMinor, currencyCode: currencyCode)
           DatePicker(isScheduled ? "First due" : "Date", selection: $date,
                      in: Date.distantPast...Date.distantFuture, displayedComponents: .date)
         }
@@ -205,7 +205,7 @@ struct TransactionEditorScreen: View {
         }
         ToolbarItem(placement: .confirmationAction) {
           Button("Save") { save() }
-            .disabled(accountID == nil || amount.isEmpty
+            .disabled(accountID == nil || amountMinor == 0
               || (kind == .expense && envelopeID == nil))
         }
       }
@@ -283,11 +283,11 @@ struct TransactionEditorScreen: View {
   }
 
   private func save(allowSeparate: Bool = false, matching importedID: UUID? = nil) {
-    guard let account = selectedAccount,
-          let minor = BudgetMoney.parseMinor(amount) else {
-      errorMessage = "Choose an account and enter a valid amount."
+    guard let account = selectedAccount, amountMinor > 0 else {
+      errorMessage = "Choose an account and enter an amount greater than zero."
       return
     }
+    let minor = amountMinor
     let destination = accounts.first { $0.id == destinationID }
     if !isScheduled && Calendar.current.startOfDay(for: date) > Calendar.current.startOfDay(for: Date()) {
       errorMessage = "Turn on Schedule for later to plan a future transaction."

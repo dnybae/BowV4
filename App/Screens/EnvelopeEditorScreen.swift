@@ -7,23 +7,16 @@ struct EnvelopeEditorScreen: View {
   var groups: [BudgetGroup]
   var nextOrder: Int
   var envelope: BudgetEnvelope?
+  @Query private var profiles: [BudgetProfile]
   @State private var name = ""
   @State private var groupID: UUID?
-  @State private var targetText = ""
+  @State private var targetAmountMinor: Int64 = 0
   @State private var hasTargetDate = false
   @State private var targetDate = Date()
   @State private var errorMessage: String?
 
-  private var targetMinor: Int64? {
-    let trimmed = targetText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return nil }
-    return BudgetMoney.parseMinor(trimmed)
-  }
-
-  private var targetIsValid: Bool {
-    targetText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      || (targetMinor ?? 0) > 0
-  }
+  private var targetMinor: Int64? { targetAmountMinor > 0 ? targetAmountMinor : nil }
+  private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
 
   init(groups: [BudgetGroup], nextOrder: Int, envelope: BudgetEnvelope? = nil) {
     self.groups = groups
@@ -31,7 +24,7 @@ struct EnvelopeEditorScreen: View {
     self.envelope = envelope
     _name = State(initialValue: envelope?.name ?? "")
     _groupID = State(initialValue: envelope?.groupID ?? groups.first?.id)
-    _targetText = State(initialValue: envelope?.targetMinor.map(BudgetMoney.editable) ?? "")
+    _targetAmountMinor = State(initialValue: envelope?.targetMinor ?? 0)
     _hasTargetDate = State(initialValue: envelope?.targetDate != nil)
     _targetDate = State(initialValue: envelope?.targetDate ?? Date())
   }
@@ -48,8 +41,7 @@ struct EnvelopeEditorScreen: View {
           }
         }
         Section {
-          TextField("Monthly Target", text: $targetText)
-            .keyboardType(.decimalPad)
+          CurrencyAmountField("Monthly Target", minor: $targetAmountMinor, currencyCode: currencyCode)
           Toggle("Set target date", isOn: $hasTargetDate)
           if hasTargetDate {
             DatePicker("Target date", selection: $targetDate, displayedComponents: .date)
@@ -67,7 +59,7 @@ struct EnvelopeEditorScreen: View {
         ToolbarItem(placement: .confirmationAction) {
           Button(envelope == nil ? "Add" : "Save") { save() }
             .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-              || groupID == nil || !targetIsValid)
+              || groupID == nil)
         }
       }
       .alert("Couldn’t Save Envelope", isPresented: Binding(

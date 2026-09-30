@@ -10,7 +10,7 @@ struct ScheduleEditorScreen: View {
   var envelopes: [BudgetEnvelope]
   var currencyCode: String
   @State private var payee: String
-  @State private var amount: String
+  @State private var amountMinor: Int64
   @State private var accountID: UUID?
   @State private var destinationID: UUID?
   @State private var kind: BudgetTransactionKind
@@ -28,7 +28,7 @@ struct ScheduleEditorScreen: View {
     self.envelopes = envelopes
     self.currencyCode = currencyCode
     _payee = State(initialValue: schedule?.payee ?? "")
-    _amount = State(initialValue: schedule.map { BudgetMoney.editable($0.amountMinor) } ?? "")
+    _amountMinor = State(initialValue: schedule.map { abs($0.amountMinor) } ?? 0)
     _accountID = State(initialValue: schedule?.accountID ?? accounts.first?.id)
     _destinationID = State(initialValue: schedule?.transferAccountID)
     _kind = State(initialValue: schedule?.kind ?? .expense)
@@ -53,8 +53,7 @@ struct ScheduleEditorScreen: View {
             TextField("Payee", text: $payee)
               .textInputAutocapitalization(.words)
           }
-          TextField("Expected amount", text: $amount)
-            .keyboardType(.decimalPad)
+          CurrencyAmountField("Expected amount", minor: $amountMinor, currencyCode: currencyCode)
           AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts)
           if kind == .transfer {
             AccountSelectionField(title: "To Account", selection: $destinationID, accounts: accounts, excludingID: accountID)
@@ -117,11 +116,12 @@ struct ScheduleEditorScreen: View {
   }
 
   private func save() {
-    guard let minor = BudgetMoney.parseMinor(amount), minor > 0,
+    guard amountMinor > 0,
           kind == .transfer || !payee.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       errorMessage = "Enter a payee and an expected amount greater than zero."
       return
     }
+    let minor = amountMinor
     guard let source = accounts.first(where: { $0.id == accountID }) else {
       errorMessage = "Choose an account."
       return

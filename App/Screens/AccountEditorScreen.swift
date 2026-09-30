@@ -13,7 +13,7 @@ struct AccountEditorScreen: View {
   var onSaved: ((BudgetAccount) -> Void)?
   @State private var name: String
   @State private var type: BudgetAccountType
-  @State private var openingBalance: String
+  @State private var openingBalanceMinor: Int64
   @State private var note: String
   @State private var errorMessage: String?
   @State private var loadedCurrentBalance = false
@@ -28,13 +28,12 @@ struct AccountEditorScreen: View {
     self.onSaved = onSaved
     _name = State(initialValue: account?.name ?? suggestedName)
     _type = State(initialValue: account?.accountType ?? .checking)
-    _openingBalance = State(initialValue: account.map { BudgetMoney.editableSigned($0.openingBalanceMinor) }
-      ?? suggestedBalanceMinor.map(BudgetMoney.editableSigned) ?? "")
+    _openingBalanceMinor = State(initialValue: account?.openingBalanceMinor ?? suggestedBalanceMinor ?? 0)
     _note = State(initialValue: account?.note ?? "")
   }
 
   private var parsedOpeningBalance: Int64? {
-    BudgetMoney.parseMinor(openingBalance.isEmpty ? "0" : openingBalance)
+    openingBalanceMinor
   }
 
   private var availableTypes: [BudgetAccountType] {
@@ -63,9 +62,8 @@ struct AccountEditorScreen: View {
       }
 
       Section {
-        TextField(account == nil ? "Starting Balance" : "Current Balance", text: $openingBalance)
-          .keyboardType(.numbersAndPunctuation)
-          .accessibilityHint("Enter zero or a signed amount in \(currencyCode).")
+        CurrencyAmountField(account == nil ? "Starting Balance" : "Current Balance",
+                            minor: $openingBalanceMinor, currencyCode: currencyCode, allowsNegative: true)
         if type.kind == .liability && (parsedOpeningBalance ?? 0) > 0 {
           Text("Enter money owed as a negative balance.")
             .font(.footnote)
@@ -110,13 +108,11 @@ struct AccountEditorScreen: View {
     .navigationTitle(account == nil ? "Private Account" : "Edit Account")
     .task {
       guard let account, !loadedCurrentBalance else { return }
-      let displayedBeforeLoad = openingBalance
+      let displayedBeforeLoad = openingBalanceMinor
       let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
       if let report = try? await repository.accountReport(at: Date(), currencyCode: currencyCode) {
-        if openingBalance == displayedBeforeLoad {
-          openingBalance = BudgetMoney.editableSigned(
-            report.balances[account.id] ?? account.openingBalanceMinor
-          )
+        if openingBalanceMinor == displayedBeforeLoad {
+          openingBalanceMinor = report.balances[account.id] ?? account.openingBalanceMinor
         }
       }
       loadedCurrentBalance = true

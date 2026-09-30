@@ -7,7 +7,7 @@ struct CardDebtGoalEditorScreen: View {
   var card: BudgetAccount
   var currentDebtMinor: Int64
   var currencyCode: String
-  @State private var monthlyAmount: String
+  @State private var monthlyMinor: Int64
   @State private var hasDate: Bool
   @State private var targetDate: Date
   @State private var resetBaseline = false
@@ -17,7 +17,7 @@ struct CardDebtGoalEditorScreen: View {
     self.card = card
     self.currentDebtMinor = currentDebtMinor
     self.currencyCode = currencyCode
-    _monthlyAmount = State(initialValue: card.debtMonthlyTargetMinor.map(BudgetMoney.editable) ?? "")
+    _monthlyMinor = State(initialValue: card.debtMonthlyTargetMinor ?? 0)
     _hasDate = State(initialValue: card.debtGoalDate != nil)
     _targetDate = State(initialValue: card.debtGoalDate ?? Date())
   }
@@ -27,8 +27,7 @@ struct CardDebtGoalEditorScreen: View {
       Form {
         Section {
           LabeledContent("Debt today", value: BudgetMoney.formatted(currentDebtMinor, currencyCode: currencyCode))
-          TextField("Monthly funding target", text: $monthlyAmount)
-            .keyboardType(.decimalPad)
+          CurrencyAmountField("Monthly funding target", minor: $monthlyMinor, currencyCode: currencyCode)
           Toggle("Set payoff date", isOn: $hasDate)
           if hasDate {
             DatePicker("Pay off by", selection: $targetDate, in: Date()..., displayedComponents: .date)
@@ -65,13 +64,7 @@ struct CardDebtGoalEditorScreen: View {
   }
 
   private func save() {
-    let trimmed = monthlyAmount.trimmingCharacters(in: .whitespacesAndNewlines)
-    let parsed = trimmed.isEmpty ? nil : BudgetMoney.parseMinor(trimmed)
-    guard trimmed.isEmpty || (parsed ?? 0) > 0 else {
-      message = "Enter a monthly target greater than zero."
-      return
-    }
-    card.debtMonthlyTargetMinor = parsed
+    card.debtMonthlyTargetMinor = monthlyMinor > 0 ? monthlyMinor : nil
     card.debtGoalDate = hasDate ? targetDate : nil
     if card.debtGoalStartMinor == nil || resetBaseline {
       card.debtGoalStartMinor = currentDebtMinor

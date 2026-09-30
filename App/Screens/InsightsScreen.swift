@@ -84,6 +84,13 @@ struct InsightsScreen: View {
     }.sorted { $0.totalMinor > $1.totalMinor }
   }
 
+  private var currencyAxis: some AxisContent {
+    AxisMarks { _ in
+      AxisGridLine()
+      AxisValueLabel(format: .currency(code: currencyCode).precision(.fractionLength(0)))
+    }
+  }
+
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 28) {
@@ -109,6 +116,7 @@ struct InsightsScreen: View {
           .chartForegroundStyleScale(["Income": Color.green, "Spending": Color.orange])
           .chartXSelection(value: $selectedBarMonth)
           .frame(height: 220)
+          .chartYAxis { currencyAxis }
           Text("Tap a month to see its transactions.")
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -172,6 +180,7 @@ struct InsightsScreen: View {
             }
           }
           .frame(height: 190)
+          .chartYAxis { currencyAxis }
           Text("Includes tracking accounts and credit balances.")
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -204,6 +213,7 @@ struct InsightsScreen: View {
             }
           }
           .frame(height: 210)
+          .chartYAxis { currencyAxis }
           .accessibilityLabel("Net worth forecast for the next six months")
           if let last = forecast.last {
             LabeledContent("Projected in six months",

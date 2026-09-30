@@ -52,20 +52,22 @@ struct CategoryManagementScreen: View {
   var body: some View {
     List {
       Section {
-        NavigationLink {
-          EnvelopeDirectoryScreen()
-        } label: {
-          Label("Add from Envelope Directory", systemImage: "square.grid.2x2")
+        HStack(spacing: Bow.Space.s2) {
+          Button("New envelope") { editor = .newEnvelope }
+            .bowPrimaryButton(size: .regular)
+            .disabled(orderedGroups.isEmpty)
+          Button("New group") { editor = .newGroup }
+            .bowSecondaryButton(size: .regular)
+          NavigationLink("Browse ideas") { EnvelopeDirectoryScreen() }
+            .bowSecondaryButton(size: .regular)
+            .accessibilityHint("Add envelopes from the envelope directory")
         }
-        Button("Create Custom Envelope", systemImage: "plus") {
-          editor = .newEnvelope
-        }
-        .disabled(orderedGroups.isEmpty)
-        Button("Create Group", systemImage: "folder.badge.plus") {
-          editor = .newGroup
-        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .frame(maxWidth: .infinity)
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
       }
-      .listRowBackground(Bow.card)
 
       if groups.isEmpty {
         ContentUnavailableView(
@@ -76,20 +78,21 @@ struct CategoryManagementScreen: View {
 
       ForEach(orderedGroups) { group in
         Section {
-          Button {
-            editor = .editGroup(group)
-          } label: {
-            HStack {
-              Text(group.name).fontWeight(.semibold)
-              Spacer()
-              Text("Edit Group").font(.caption).foregroundStyle(Bow.inkSoft)
-            }
-          }
           ForEach(activeEnvelopes(in: group)) { envelope in
             envelopeRow(envelope)
           }
+          if activeEnvelopes(in: group).isEmpty {
+            Text("No envelopes in this group")
+              .foregroundStyle(Bow.inkSoft)
+          }
         } header: {
-          Text(group.name)
+          HStack {
+            Text(group.name)
+            Spacer()
+            Button("Edit group") { editor = .editGroup(group) }
+              .font(.bowSubhead.weight(.semibold))
+              .accessibilityLabel("Edit \(group.name)")
+          }
         }
         .listRowBackground(Bow.card)
       }
@@ -104,7 +107,7 @@ struct CategoryManagementScreen: View {
       }
     }
     .bowListBackground()
-    .navigationTitle("Manage Groups & Envelopes")
+    .navigationTitle("Groups and envelopes")
     .task(id: refreshVersion) {
       let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
       snapshot = try? await repository.snapshot(month: Date())
@@ -141,11 +144,11 @@ struct CategoryManagementScreen: View {
       )
     }
     .confirmationDialog("Hide envelope with money?", isPresented: showHideConfirmation) {
-      Button("Move Money First") {
+      Button("Move money first") {
         movingEnvelope = pendingHide
         pendingHide = nil
       }
-      Button("Hide and Keep Balance") {
+      Button("Hide and keep balance") {
         if let pendingHide { setHidden(pendingHide, true) }
         pendingHide = nil
       }
@@ -155,7 +158,7 @@ struct CategoryManagementScreen: View {
       }
     }
     .confirmationDialog("Delete unused envelope?", isPresented: showDeleteConfirmation) {
-      Button("Delete Envelope", role: .destructive) {
+      Button("Delete envelope", role: .destructive) {
         if let pendingDelete {
           do {
             try BudgetCommands.deleteUnusedEnvelope(pendingDelete, in: modelContext)
@@ -178,17 +181,25 @@ struct CategoryManagementScreen: View {
       editor = .editEnvelope(envelope)
     } label: {
       HStack {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 2) {
           Text(envelope.name)
-          if let target = envelope.totalMonthlyTargetMinor {
-            Text("Target \(BudgetMoney.formatted(target, currencyCode: currencyCode))")
-              .font(.caption).foregroundStyle(Bow.inkSoft)
-          }
+            .font(.bowBody)
+            .foregroundStyle(Bow.ink)
+          Text(envelope.totalMonthlyTargetMinor.map {
+            "Target \(BudgetMoney.formatted($0, currencyCode: currencyCode)) monthly"
+          } ?? "No target")
+            .font(.bowFootnote)
+            .foregroundStyle(Bow.inkSoft)
         }
         Spacer()
         Text(snapshot.map { BudgetMoney.formatted($0.available(for: envelope.id), currencyCode: currencyCode) } ?? "…")
-          .font(.subheadline)
+          .font(.bowAmountSm)
+          .monospacedDigit()
           .foregroundStyle(Bow.inkSoft)
+        Image(systemName: "chevron.right")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(Bow.inkFaint)
+          .accessibilityHidden(true)
       }
     }
     .swipeActions {

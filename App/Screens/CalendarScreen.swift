@@ -55,16 +55,19 @@ struct CalendarScreen: View {
         onPrevious: { moveMonth(by: -1) },
         onNext: { moveMonth(by: 1) }
       )
-      CalendarWeekdayHeader(calendar: calendar)
-      Divider()
-      CalendarMonthGrid(
-        days: monthPage.days,
-        selectedDate: $selectedDate,
-        schedules: schedules,
-        recordedDays: recordedDays,
-        calendar: calendar
-      )
-      Divider()
+      VStack(spacing: 0) {
+        CalendarWeekdayHeader(calendar: calendar)
+        CalendarMonthGrid(
+          days: monthPage.days,
+          selectedDate: $selectedDate,
+          schedules: schedules,
+          recordedDays: recordedDays,
+          calendar: calendar
+        )
+      }
+      .padding(.vertical, Bow.Space.s2)
+      .bowCard()
+      .padding(.horizontal, Bow.Space.s4)
       selectedDayAgenda
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -98,26 +101,37 @@ struct CalendarScreen: View {
     }
   }
 
+  private var daySummary: String {
+    let scheduled = selectedSchedules.count
+    let recorded = dayTransactions.count
+    let scheduledText = scheduled == 0 ? "Nothing scheduled" : "\(scheduled) scheduled"
+    let recordedText = recorded == 0 ? "nothing recorded yet" : "\(recorded) recorded"
+    return "\(scheduledText), \(recordedText)"
+  }
+
   private var selectedDayAgenda: some View {
     ScrollView {
       LazyVStack(alignment: .leading, spacing: 0) {
         HStack(alignment: .firstTextBaseline) {
           VStack(alignment: .leading, spacing: 4) {
             Text(selectedDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-              .font(.headline)
-            Text("\(selectedSchedules.count) scheduled · \(dayTransactions.count) recorded")
-              .font(.caption)
+              .font(.bowHeadline)
+              .foregroundStyle(Bow.ink)
+            Text(daySummary)
+              .font(.bowSubhead)
               .foregroundStyle(Bow.inkSoft)
           }
           Spacer()
-          VStack(alignment: .trailing, spacing: 4) {
-            Text("Spent on this day")
-              .font(.caption)
+          VStack(alignment: .trailing, spacing: 2) {
+            Text("Spent")
+              .font(.bowFootnote)
               .foregroundStyle(Bow.inkSoft)
             Text(BudgetMoney.formatted(spentMinor, currencyCode: currencyCode))
-              .font(.headline)
-              .fontDesign(.rounded).monospacedDigit()
+              .font(.bowAmount)
+              .monospacedDigit()
+              .foregroundStyle(Bow.ink)
           }
+          .accessibilityElement(children: .combine)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
@@ -132,7 +146,7 @@ struct CalendarScreen: View {
           .frame(maxWidth: .infinity)
         }
 
-        if let selectedSnapshot { ForEach(selectedSchedules) { schedule in
+        if let selectedSnapshot, !selectedSchedules.isEmpty { VStack(spacing: 0) { ForEach(selectedSchedules) { schedule in
           CalendarScheduleRow(
             schedule: schedule, selectedDate: selectedDate,
             occurrence: occurrences.first {
@@ -147,30 +161,42 @@ struct CalendarScreen: View {
               occurrence.isSkipped = false
               try? modelContext.save()
             },
-            onSelectTransaction: onSelectTransaction
+            onSkip: { occurrence in
+              occurrence.isSkipped = true
+              try? modelContext.save()
+            },
+            onSelectTransaction: onSelectTransaction,
+            showsDivider: schedule.id != selectedSchedules.last?.id
           )
         } }
+        .bowCard()
+        .padding(.horizontal, Bow.Space.s4)
+        }
 
         if !dayTransactions.isEmpty {
           Text("Transactions")
-            .font(.caption.weight(.semibold))
+            .font(.bowSubhead.weight(.semibold))
             .foregroundStyle(Bow.inkSoft)
             .padding(.horizontal, 20)
             .padding(.top, 14)
             .padding(.bottom, 6)
-          ForEach(dayTransactions) { transaction in
-            Button { onSelectTransaction(transaction.id) } label: {
-              TransactionRow(
-                transaction: transaction,
-                accountName: accounts.first { $0.id == transaction.accountID }?.name ?? "Account",
-                envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name,
-                currencyCode: currencyCode
-              )
-              .padding(.horizontal, 20)
+          VStack(spacing: 0) {
+            ForEach(dayTransactions) { transaction in
+              Button { onSelectTransaction(transaction.id) } label: {
+                TransactionRow(
+                  transaction: transaction,
+                  accountName: accounts.first { $0.id == transaction.accountID }?.name ?? "Account",
+                  envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name,
+                  currencyCode: currencyCode
+                )
+                .padding(.horizontal, Bow.Space.s4)
+                .padding(.vertical, Bow.Space.s2)
+              }
+              .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
-            .padding(.vertical, 3)
           }
+          .bowCard()
+          .padding(.horizontal, Bow.Space.s4)
         }
       }
       .frame(maxWidth: .infinity)
@@ -231,7 +257,8 @@ private struct CalendarMonthHeader: View {
   var body: some View {
     HStack(spacing: 12) {
       Text(month, format: .dateTime.month(.wide).year())
-        .font(.largeTitle.weight(.bold))
+        .font(.bowLargeTitle)
+        .foregroundStyle(Bow.ink)
         .lineLimit(1)
         .minimumScaleFactor(0.75)
         .accessibilityAddTraits(.isHeader)
@@ -318,15 +345,21 @@ private struct CalendarMonthDayButton: View {
     } label: {
       VStack(spacing: 2) {
         Text(day.formatted(.dateTime.day()))
-          .font(.system(.title3, design: .rounded, weight: isSelected ? .bold : .medium))
-          .foregroundStyle(isSelected ? Color(uiColor: .systemBackground) : (isToday ? Color.red : Color.primary))
+          .font(.system(.title3, design: .rounded, weight: isSelected || isToday ? .bold : .medium))
+          .foregroundStyle(isSelected ? Bow.onBow : (isToday ? Bow.bowInk : Bow.ink))
           .frame(width: 36, height: 36)
           .background {
-            if isSelected { Circle().fill(Bow.ink) }
+            if isSelected {
+              Circle().fill(Bow.bowSolid)
+            } else if isToday {
+              Circle().fill(Bow.bowTint)
+            }
           }
-        Circle()
-          .fill(scheduledCount > 0 || recorded ? Color.accentColor : Color.clear)
-          .frame(width: 5, height: 5)
+        HStack(spacing: 3) {
+          if recorded { Circle().fill(Bow.bow).frame(width: 5, height: 5) }
+          if scheduledCount > 0 { Circle().fill(Bow.needs).frame(width: 5, height: 5) }
+        }
+        .frame(height: 5)
       }
       .frame(maxWidth: .infinity)
       .frame(height: CalendarGridMetrics.rowHeight)
@@ -352,7 +385,9 @@ private struct CalendarScheduleRow: View {
   var onEdit: () -> Void
   var onRecord: (ScheduledTransactionDraft) -> Void
   var onRestore: (BudgetScheduleOccurrence) -> Void
+  var onSkip: (BudgetScheduleOccurrence) -> Void
   var onSelectTransaction: (UUID) -> Void
+  var showsDivider = true
 
   private var recordedTransaction: BudgetTransaction? {
     transactions.first {
@@ -368,15 +403,18 @@ private struct CalendarScheduleRow: View {
       Button(action: onEdit) {
         HStack {
           VStack(alignment: .leading, spacing: 3) {
-            Text(schedule.payee).font(.headline)
+            Text(schedule.payee)
+              .font(.bowBody)
+              .foregroundStyle(Bow.ink)
             Text(schedule.frequency.title + (recordedTransaction != nil
               ? " · Recorded" : occurrence?.isSkipped == true ? " · Skipped" : " · Expected"))
-              .font(.caption).foregroundStyle(Bow.inkSoft)
+              .font(.bowFootnote).foregroundStyle(Bow.inkSoft)
           }
           Spacer()
           Text(BudgetMoney.formatted(schedule.amountMinor, currencyCode: currencyCode))
-            .font(.subheadline.weight(.semibold))
-            .fontDesign(.rounded).monospacedDigit()
+            .font(.bowAmount)
+            .monospacedDigit()
+            .foregroundStyle(Bow.ink)
         }
         .contentShape(Rectangle())
       }
@@ -399,16 +437,24 @@ private struct CalendarScheduleRow: View {
             .font(.caption).foregroundStyle(Bow.needsInk)
         }
         if selectedDate <= Date(), schedule.accountID != nil {
-          Button(schedule.kind == .transfer ? "Record Transfer" : "Record Transaction", systemImage: "plus") {
-            onRecord(ScheduledTransactionDraft(
-              scheduleID: schedule.id, scheduledFor: selectedDate,
-              accountID: schedule.accountID, transferAccountID: schedule.transferAccountID,
-              envelopeID: schedule.envelopeID, kind: schedule.kind,
-              amountMinor: schedule.amountMinor, payee: schedule.payee,
-              notes: schedule.notes, date: selectedDate
-            ))
+          HStack(spacing: Bow.Space.s2) {
+            Spacer()
+            if let occurrence, !occurrence.isSkipped {
+              Button("Skip") { onSkip(occurrence) }
+                .bowSecondaryButton(size: .small)
+            }
+            Button("Record") {
+              onRecord(ScheduledTransactionDraft(
+                scheduleID: schedule.id, scheduledFor: selectedDate,
+                accountID: schedule.accountID, transferAccountID: schedule.transferAccountID,
+                envelopeID: schedule.envelopeID, kind: schedule.kind,
+                amountMinor: schedule.amountMinor, payee: schedule.payee,
+                notes: schedule.notes, date: selectedDate
+              ))
+            }
+            .bowPrimaryButton(size: .small)
+            .accessibilityLabel(schedule.kind == .transfer ? "Record transfer" : "Record transaction")
           }
-          .font(.subheadline)
         }
       } else if let recordedTransaction {
         Button("View Recorded Transaction", systemImage: "arrow.up.right") {
@@ -417,9 +463,13 @@ private struct CalendarScheduleRow: View {
         .font(.subheadline)
       }
     }
-    .padding(.horizontal, 20)
-    .padding(.vertical, 12)
+    .padding(.horizontal, Bow.Space.s4)
+    .padding(.vertical, Bow.Space.s3)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .overlay(alignment: .bottom) { Rectangle().fill(.quaternary).frame(height: 0.5) }
+    .overlay(alignment: .bottom) {
+      if showsDivider {
+        Rectangle().fill(Bow.line).frame(height: 0.5).padding(.leading, Bow.Space.s4)
+      }
+    }
   }
 }

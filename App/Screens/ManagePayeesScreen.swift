@@ -71,11 +71,13 @@ struct ManagePayeesScreen: View {
           Section("Transfers") {
             ForEach(transferEntries) { entry in payeeRow(entry) }
           }
+          .listRowBackground(Bow.card)
         }
         if !frequentEntries.isEmpty {
-          Section("Frequently Used") {
+          Section("Frequently used") {
             ForEach(frequentEntries) { entry in payeeRow(entry) }
           }
+          .listRowBackground(Bow.card)
         }
         ForEach(alphabeticalSections) { section in
           Section {
@@ -83,14 +85,16 @@ struct ManagePayeesScreen: View {
           } header: {
             VStack(alignment: .leading, spacing: 8) {
               if section.id == alphabeticalSections.first?.id {
-                Text("All Payees")
+                Text("All payees")
               }
               Text(section.letter)
             }
           }
+          .listRowBackground(Bow.card)
         }
       }
     }
+    .bowListBackground()
     .searchable(text: $searchText, prompt: "Search payees")
     .navigationTitle("Manage Payees")
     .task(id: refreshVersion) {
@@ -125,7 +129,7 @@ struct ManagePayeesScreen: View {
         Spacer(minLength: 12)
         Text(entry.transactionCount, format: .number)
           .font(.subheadline)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(Bow.inkSoft)
       }
       .accessibilityElement(children: .combine)
       .accessibilityLabel("\(entry.name), \(entry.transactionCount) transactions")

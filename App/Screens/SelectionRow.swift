@@ -14,14 +14,15 @@ struct SelectionRow: View {
         .opacity(isSelected ? 1 : 0)
         .accessibilityHidden(true)
       Text(title)
-        .foregroundStyle(.primary)
+        .foregroundStyle(Bow.ink)
         .frame(maxWidth: .infinity, alignment: .leading)
       if let balance {
         Text(balance)
           .fontWeight(.semibold)
-          .foregroundStyle(.primary)
+          .foregroundStyle(Bow.ink)
           .lineLimit(1)
           .minimumScaleFactor(0.75)
+          .fontDesign(.rounded).monospacedDigit()
       }
     }
     .padding(.vertical, 6)

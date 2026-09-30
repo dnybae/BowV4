@@ -49,12 +49,12 @@ struct PayeeLogoFinderSheet: View {
               } else {
                 Image(systemName: "storefront.fill")
                   .font(.system(size: 25))
-                  .foregroundStyle(.secondary)
+                  .foregroundStyle(Bow.inkSoft)
                   .frame(width: 54, height: 54)
               }
             }
             .frame(width: 64, height: 64)
-            .background(Color(uiColor: .secondarySystemGroupedBackground),
+            .background(Bow.well,
                         in: RoundedRectangle(cornerRadius: 16))
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .accessibilityHidden(true)
@@ -64,13 +64,14 @@ struct PayeeLogoFinderSheet: View {
               Text(isLoading ? "Looking for a logo…" : previewImage == nil
                    ? "No logo found" : "Logo found")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Bow.inkSoft)
             }
           }
           .padding(.vertical, 4)
         } footer: {
           Text("A logo is used only after you choose Use Logo. If this isn't the right company, enter its website domain.")
         }
+        .listRowBackground(Bow.card)
 
         Section {
           TextField("Website domain", text: $domain)
@@ -80,12 +81,14 @@ struct PayeeLogoFinderSheet: View {
           if !validDomain {
             Text("Enter a domain like starbucks.com.")
               .font(.footnote)
-              .foregroundStyle(.orange)
+              .foregroundStyle(Bow.needsInk)
           }
         } footer: {
           Text("Optional. A website domain gives a more precise result than the payee name.")
         }
+        .listRowBackground(Bow.card)
       }
+      .bowListBackground()
       .navigationTitle("Find Logo")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

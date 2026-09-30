@@ -59,10 +59,12 @@ struct TransactionFilterScreen: View {
             accounts: accounts, noneTitle: "All Accounts"
           )
         }
+        .listRowBackground(Bow.card)
 
         Section("Category") {
           CategoryScopeSelectionField(selection: $draft.envelopeScope, envelopes: envelopes)
         }
+        .listRowBackground(Bow.card)
 
         Section("Status") {
           Picker("Show", selection: $draft.status) {
@@ -72,8 +74,9 @@ struct TransactionFilterScreen: View {
           }
           .pickerStyle(.menu)
         }
+        .listRowBackground(Bow.card)
 
-        Section("Date Range") {
+        Section("Date range") {
           Toggle("From Date", isOn: $usesStartDate)
           if usesStartDate {
             DatePicker("From", selection: $startDate, displayedComponents: .date)
@@ -85,6 +88,7 @@ struct TransactionFilterScreen: View {
               .datePickerStyle(.compact)
           }
         }
+        .listRowBackground(Bow.card)
 
         Section {
           CurrencyAmountField("Minimum", minor: $minimumMinor, currencyCode: currencyCode)
@@ -94,6 +98,7 @@ struct TransactionFilterScreen: View {
         } footer: {
           Text("Leave at zero for no limit. Outflows are filtered by their absolute value.")
         }
+        .listRowBackground(Bow.card)
 
         Section {
           Button("Clear All Filters") {
@@ -101,7 +106,9 @@ struct TransactionFilterScreen: View {
             dismiss()
           }
         }
+        .listRowBackground(Bow.card)
       }
+      .bowListBackground()
       .navigationTitle("Filter Transactions")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

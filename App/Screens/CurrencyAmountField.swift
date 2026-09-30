@@ -33,12 +33,23 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
 
   func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
+  /// Body-size SF Pro Rounded with tabular digits, scaled for Dynamic Type.
+  private static var moneyFont: UIFont {
+    let body = UIFont.systemFont(ofSize: 17)
+    let descriptor = (body.fontDescriptor.withDesign(.rounded) ?? body.fontDescriptor)
+      .addingAttributes([.featureSettings: [[
+        UIFontDescriptor.FeatureKey.type: kNumberSpacingType,
+        UIFontDescriptor.FeatureKey.selector: kMonospacedNumbersSelector
+      ]]])
+    return UIFontMetrics(forTextStyle: .body).scaledFont(for: UIFont(descriptor: descriptor, size: 17))
+  }
+
   func makeUIView(context: Context) -> CurrencyInputTextField {
     let field = CurrencyInputTextField()
     field.delegate = context.coordinator
     field.keyboardType = .numberPad
     field.textAlignment = .right
-    field.font = .preferredFont(forTextStyle: .body)
+    field.font = Self.moneyFont
     field.adjustsFontForContentSizeCategory = true
     field.setContentHuggingPriority(.defaultLow, for: .horizontal)
     field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -73,7 +84,7 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
       let formatted = BudgetMoney.formatted(parent.minor, currencyCode: parent.currencyCode)
       let text = isNegativeZero ? "-" + formatted : formatted
       if field.text != text { field.text = text }
-      field.textColor = parent.minor == 0 ? .secondaryLabel : .label
+      field.textColor = parent.minor == 0 ? UIColor(Bow.inkSoft) : UIColor(Bow.ink)
     }
 
     func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange,

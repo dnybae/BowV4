@@ -40,7 +40,7 @@ struct AccountsScreen: View {
           Text("Add an account to start tracking your balances.")
         } actions: {
           Button("Add Account", systemImage: "plus", action: onAddAccount)
-            .buttonStyle(.borderedProminent)
+            .bowPrimaryButton()
         }
         .frame(maxWidth: .infinity)
       } else {
@@ -48,14 +48,14 @@ struct AccountsScreen: View {
           netWorthCard
 
           if hasOnBudgetAccounts {
-            budgetGroup("On Budget") {
+            budgetGroup("On budget") {
               accountGroup(.cash, title: "Cash")
               accountGroup(.credit, title: "Credit")
             }
           }
 
           if hasOffBudgetAccounts {
-            budgetGroup("Off Budget") {
+            budgetGroup("Off budget") {
               accountGroup(.asset, title: "Investments")
               accountGroup(.liability, title: "Loans")
             }
@@ -67,7 +67,7 @@ struct AccountsScreen: View {
         .padding(.bottom, 32)
       }
     }
-    .background(Color(uiColor: .systemGroupedBackground))
+    .background(Bow.mist)
     .navigationTitle("Accounts")
     .navigationDestination(for: AccountRoute.self) { route in
       if let account = accounts.first(where: { $0.id == route.id }) {
@@ -100,8 +100,7 @@ struct AccountsScreen: View {
     VStack(alignment: .leading, spacing: 18) {
       Text(title)
         .font(.caption.weight(.semibold))
-        .textCase(.uppercase)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Bow.inkSoft)
         .padding(.leading, 4)
         .accessibilityAddTraits(.isHeader)
       content()
@@ -128,12 +127,12 @@ struct AccountsScreen: View {
             Spacer(minLength: 8)
             Text(formattedTotal)
               .font(.subheadline.weight(.semibold))
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
               .monospacedDigit()
               .lineLimit(1)
               .minimumScaleFactor(0.85)
           }
-          .foregroundStyle(.primary)
+          .foregroundStyle(Bow.ink)
           .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -150,7 +149,7 @@ struct AccountsScreen: View {
               }
             }
           }
-          .background(Color(uiColor: .secondarySystemGroupedBackground),
+          .background(Bow.card,
                       in: RoundedRectangle(cornerRadius: 24))
         }
       }
@@ -165,7 +164,7 @@ struct AccountsScreen: View {
             .font(.headline)
           Text("View Insights")
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
         }
         Spacer(minLength: 8)
         Text(netWorthText)
@@ -175,13 +174,13 @@ struct AccountsScreen: View {
           .minimumScaleFactor(0.75)
         Image(systemName: "chevron.right")
           .font(.caption.weight(.semibold))
-          .foregroundStyle(.tertiary)
+          .foregroundStyle(Bow.inkFaint)
           .accessibilityHidden(true)
       }
-      .foregroundStyle(.primary)
+      .foregroundStyle(Bow.ink)
       .padding(18)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(Color(uiColor: .secondarySystemGroupedBackground),
+      .background(Bow.card,
                   in: RoundedRectangle(cornerRadius: 24))
       .contentShape(RoundedRectangle(cornerRadius: 24))
     }
@@ -208,19 +207,19 @@ struct AccountsScreen: View {
           .background(Color.accentColor, in: Circle())
           .accessibilityHidden(true)
         Text(account.name)
-          .foregroundStyle(.primary)
+          .foregroundStyle(Bow.ink)
           .frame(maxWidth: .infinity, alignment: .leading)
           .multilineTextAlignment(.leading)
         Text(BudgetMoney.formatted(balance, currencyCode: currencyCode))
           .font(.subheadline.weight(.semibold))
           .foregroundStyle(account.kind == .cash && balance >= 0
-            ? Color.accentColor : Color.primary)
+            ? Color.accentColor : Bow.ink)
           .monospacedDigit()
           .lineLimit(1)
           .minimumScaleFactor(0.85)
         Image(systemName: "chevron.right")
           .font(.caption.weight(.semibold))
-          .foregroundStyle(.tertiary)
+          .foregroundStyle(Bow.inkFaint)
           .accessibilityHidden(true)
       }
       .padding(.horizontal, 16)
@@ -253,9 +252,10 @@ private struct AccountDetailScreen: View {
         VStack(alignment: .leading, spacing: 6) {
           Text("Current Balance")
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
           Text(BudgetMoney.formatted(balanceMinor, currencyCode: currencyCode))
             .font(.title.weight(.semibold))
+            .fontDesign(.rounded).monospacedDigit()
         }
         .padding(.vertical, 8)
         LabeledContent("Type", value: account.accountType.title)
@@ -271,13 +271,18 @@ private struct AccountDetailScreen: View {
         if let date = account.lastReconciledAt,
            let balance = account.lastReconciledBalanceMinor {
           LabeledContent("Last Reconciled", value: date.formatted(date: .abbreviated, time: .omitted))
-          LabeledContent("Statement Balance", value: BudgetMoney.formatted(balance, currencyCode: currencyCode))
+          LabeledContent("Statement Balance") {
+            Text(BudgetMoney.formatted(balance, currencyCode: currencyCode))
+              .fontDesign(.rounded).monospacedDigit()
+          }
         }
       }
+      .listRowBackground(Bow.card)
       if feed.items.isEmpty && !feed.isLoading {
         Section("Ledger") {
           ContentUnavailableView("No transactions yet", systemImage: "list.bullet.rectangle")
         }
+        .listRowBackground(Bow.card)
       } else {
         ForEach(TransactionDateGroup.make(feed.items)) { group in
           Section(group.title) {
@@ -306,6 +311,7 @@ private struct AccountDetailScreen: View {
             }
           }
           }
+          .listRowBackground(Bow.card)
         }
         if feed.hasMore {
           Section {
@@ -313,9 +319,11 @@ private struct AccountDetailScreen: View {
               .frame(maxWidth: .infinity)
               .onAppear { Task { await feed.loadNext() } }
           }
+          .listRowBackground(Bow.card)
         }
       }
     }
+    .bowListBackground()
     .navigationTitle(account.name)
     .task(id: account.id) {
       await feed.reload(container: modelContext.container, searchText: "", filter: TransactionFilter(),

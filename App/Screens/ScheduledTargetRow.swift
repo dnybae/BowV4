@@ -14,13 +14,14 @@ struct ScheduledTargetRow: View {
   var body: some View {
     LabeledContent {
       Text(BudgetMoney.formatted(contribution.totalMinor, currencyCode: currencyCode))
+        .fontDesign(.rounded).monospacedDigit()
     } label: {
       Label {
         VStack(alignment: .leading, spacing: 2) {
           Text(contribution.payee)
           Text(detail)
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
         }
       } icon: {
         Image(systemName: "calendar.badge.clock")

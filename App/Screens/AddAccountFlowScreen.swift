@@ -12,8 +12,9 @@ struct AddAccountFlowScreen: View {
       List {
         Section {
           Text("Choose how you want to track this account.")
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
         }
+        .listRowBackground(Bow.card)
 
         Section {
           NavigationLink {
@@ -28,6 +29,7 @@ struct AddAccountFlowScreen: View {
         } footer: {
           Text("Works with any bank. Your account details stay in Bow on this iPhone.")
         }
+        .listRowBackground(Bow.card)
 
         Section {
           NavigationLink {
@@ -46,7 +48,9 @@ struct AddAccountFlowScreen: View {
             ? "Explore a sample bank connection. Demo mode never contacts a bank."
             : "SimpleFIN provides read-only bank data and has a separate signup and fee. Bank updates may arrive about once a day.")
         }
+        .listRowBackground(Bow.card)
       }
+      .bowListBackground()
       .navigationTitle("Add Account")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -67,10 +71,10 @@ struct AddAccountFlowScreen: View {
       VStack(alignment: .leading, spacing: 6) {
         Text(title)
           .font(.headline)
-          .foregroundStyle(.primary)
+          .foregroundStyle(Bow.ink)
         Text(detail)
           .font(.subheadline)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(Bow.inkSoft)
           .fixedSize(horizontal: false, vertical: true)
       }
       .frame(maxWidth: .infinity, alignment: .leading)

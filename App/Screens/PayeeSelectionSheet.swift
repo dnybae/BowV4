@@ -37,7 +37,7 @@ struct PayeeSelectionSheet: View {
     NavigationStack {
       List {
         if !localEntries.isEmpty {
-          Section("Your Payees") {
+          Section("Your payees") {
             ForEach(localEntries) { entry in
               Button {
                 selectLocal(entry)
@@ -47,7 +47,7 @@ struct PayeeSelectionSheet: View {
                     merchantName: entry.name,
                     domain: payees.first(where: { $0.id == entry.ruleID })?.merchantDomain
                   )
-                  Text(entry.name).foregroundStyle(.primary)
+                  Text(entry.name).foregroundStyle(Bow.ink)
                   Spacer()
                   if PayeeDirectory.key(entry.name) == PayeeDirectory.key(selectedName) {
                     Image(systemName: "checkmark").foregroundStyle(.tint)
@@ -58,17 +58,19 @@ struct PayeeSelectionSheet: View {
               .accessibilityLabel("Select \(entry.name)")
             }
           }
+          .listRowBackground(Bow.card)
         }
         if !query.isEmpty && !hasExactLocalMatch {
-          Section("New Payee") {
+          Section("New payee") {
             Button {
               createNamedPayee()
             } label: {
               Label("Create \"\(query)\"", systemImage: "plus")
-                .foregroundStyle(.primary)
+                .foregroundStyle(Bow.ink)
             }
             .accessibilityLabel("Create payee named \(query)")
           }
+          .listRowBackground(Bow.card)
         }
         if localEntries.isEmpty && query.isEmpty && isLoadingPayees {
           ProgressView("Loading payees…")
@@ -80,7 +82,7 @@ struct PayeeSelectionSheet: View {
           )
         }
       }
-      .listStyle(.insetGrouped)
+      .bowListBackground()
       .searchable(text: $searchText, placement: .toolbar, prompt: "Search payees")
       .searchFocused($searchFocused)
       .navigationTitle("Payee")

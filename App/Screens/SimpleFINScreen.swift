@@ -63,27 +63,29 @@ struct SimpleFINScreen: View {
             ? "Sample bank data never contacts a real bank. Try its transaction examples in Spending."
             : "Bow checks while you use the app and requests background refresh when iOS allows it. Bank data may update about once a day.")
         }
+        .listRowBackground(Bow.card)
 
         if let lastMessage = connection.lastMessage, !lastMessage.isEmpty {
-          Section("Connection Message") {
-            Text(lastMessage).foregroundStyle(.secondary)
+          Section("Connection message") {
+            Text(lastMessage).foregroundStyle(Bow.inkSoft)
           }
+          .listRowBackground(Bow.card)
         }
 
         Section {
           if linkedAccounts.isEmpty {
             Text("No bank accounts have been added to Bow yet.")
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
           }
           ForEach(linkedAccounts) { link in
             VStack(alignment: .leading, spacing: 4) {
               Text(accounts.first { $0.id == link.localAccountID }?.name ?? "Bow account")
                 .font(.body.weight(.medium))
               Text("Bank account: \(link.name)")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(Bow.inkSoft)
               if let reportedAt = link.reportedAt {
                 Text("Bank data as of \(reportedAt.formatted(date: .abbreviated, time: .shortened))")
-                  .font(.caption).foregroundStyle(.secondary)
+                  .font(.caption).foregroundStyle(Bow.inkSoft)
               }
             }
             .padding(.vertical, 3)
@@ -100,6 +102,7 @@ struct SimpleFINScreen: View {
         } footer: {
           Text("To change or stop an account’s bank sync, open that account from Accounts.")
         }
+        .listRowBackground(Bow.card)
 
         if !isDemoMode {
           Section {
@@ -109,6 +112,7 @@ struct SimpleFINScreen: View {
           } footer: {
             Text("This stops sync for every linked account. Accounts and transactions already in Bow remain.")
           }
+          .listRowBackground(Bow.card)
         }
       } else if isDemoMode {
         ContentUnavailableView(
@@ -118,15 +122,17 @@ struct SimpleFINScreen: View {
       } else {
         Section {
           Text("Connect SimpleFIN, then choose the bank accounts to add to Bow.")
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
           NavigationLink {
             SimpleFINAccountSetupScreen()
           } label: {
             Label("Connect a Bank", systemImage: "link")
           }
         }
+        .listRowBackground(Bow.card)
       }
     }
+    .bowListBackground()
     .navigationTitle("SimpleFIN")
     .overlay {
       if coordinator.isSyncing {

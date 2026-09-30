@@ -31,17 +31,21 @@ struct PayeeRuleEditorScreen: View {
           TextField("Exact bank text (optional)", text: $matchText)
             .textInputAutocapitalization(.words)
         }
-        Section("Default Envelope") {
+        .listRowBackground(Bow.card)
+        Section("Default envelope") {
           CategorySelectionField(title: "Category", selection: $envelopeID, envelopes: envelopes)
         }
+        .listRowBackground(Bow.card)
         if rule != nil {
           Section {
             Button("Delete Rule", role: .destructive) {
               showingDeleteConfirmation = true
             }
           }
+          .listRowBackground(Bow.card)
         }
       }
+      .bowListBackground()
       .navigationTitle(rule == nil ? "Add Payee Rule" : "Edit Payee Rule")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

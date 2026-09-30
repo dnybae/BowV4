@@ -99,8 +99,9 @@ struct TransactionEditorScreen: View {
         if transaction?.needsApproval == true {
           Section {
             Text("Review this imported transaction. Saving it marks it approved.")
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
           }
+          .listRowBackground(Bow.card)
         }
         if let matchingSchedule {
           ScheduledMatchSection(
@@ -119,6 +120,7 @@ struct TransactionEditorScreen: View {
           DatePicker(isScheduled ? "First due" : "Date", selection: $date,
                      in: Date.distantPast...Date.distantFuture, displayedComponents: .date)
         }
+        .listRowBackground(Bow.card)
         Section("Details") {
           AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts)
           if kind == .transfer {
@@ -131,14 +133,14 @@ struct TransactionEditorScreen: View {
               showingPayeeSelection = true
             } label: {
               HStack(spacing: 12) {
-                Text(kind == .expense ? "Payee" : "Source").foregroundStyle(.primary)
+                Text(kind == .expense ? "Payee" : "Source").foregroundStyle(Bow.ink)
                 Spacer(minLength: 12)
                 Text(payee.isEmpty ? "Choose a payee" : payee)
-                  .foregroundStyle(.secondary)
+                  .foregroundStyle(Bow.inkSoft)
                   .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
                   .font(.caption)
-                  .foregroundStyle(.tertiary)
+                  .foregroundStyle(Bow.inkFaint)
               }
               .contentShape(Rectangle())
             }
@@ -152,17 +154,18 @@ struct TransactionEditorScreen: View {
             if kind == .expense && envelopeID == nil {
               Text("Choose an envelope before saving this expense.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Bow.inkSoft)
             }
           }
           if kind != .transfer && (selectedAccount?.kind == .asset || selectedAccount?.kind == .liability) {
             Text("Categories on tracking accounts are for reference and don't change your budget.")
               .font(.footnote)
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
           }
           TextField("Notes", text: $notes, axis: .vertical)
             .lineLimit(2...4)
         }
+        .listRowBackground(Bow.card)
         if transaction == nil && scheduledDraft == nil {
           Section("Schedule") {
             Toggle("Schedule for later", isOn: $isScheduled)
@@ -174,9 +177,10 @@ struct TransactionEditorScreen: View {
               }
               .pickerStyle(.menu)
               Text("Scheduled entries appear on the calendar and affect balances only when recorded.")
-                .font(.footnote).foregroundStyle(.secondary)
+                .font(.footnote).foregroundStyle(Bow.inkSoft)
             }
           }
+          .listRowBackground(Bow.card)
         }
 
         if accounts.isEmpty {
@@ -187,6 +191,7 @@ struct TransactionEditorScreen: View {
               description: Text("Transactions need an account.")
             )
           }
+          .listRowBackground(Bow.card)
         }
 
         if transaction != nil {
@@ -195,8 +200,10 @@ struct TransactionEditorScreen: View {
               showingDeleteConfirmation = true
             }
           }
+          .listRowBackground(Bow.card)
         }
       }
+      .bowListBackground()
       .navigationTitle(transaction == nil ? (scheduledDraft == nil ? "Add Transaction" : "Record Scheduled Transaction") : "Edit Transaction")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -401,9 +408,10 @@ private struct ScheduledMatchSection: View {
     Section {
       Toggle("Link to \(payee) on \(date.formatted(date: .abbreviated, time: .omitted))", isOn: $isLinked)
     } header: {
-      Text("Scheduled Bill")
+      Text("Scheduled bill")
     } footer: {
       Text("Linking marks this bill recorded without creating another transaction.")
     }
+    .listRowBackground(Bow.card)
   }
 }

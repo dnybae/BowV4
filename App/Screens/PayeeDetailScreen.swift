@@ -35,15 +35,17 @@ struct PayeeDetailScreen: View {
             VStack(alignment: .leading, spacing: 3) {
               Text(entry.name).font(.headline)
               Text(payees.first { $0.id == entry.ruleID }?.logoSource.title ?? "Default Icon")
-                .font(.subheadline).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(Bow.inkSoft)
             }
           }
         }
+        .listRowBackground(Bow.card)
         if let payee = payees.first(where: { $0.id == entry.ruleID }),
            let envelope = envelopes.first(where: { $0.id == payee.defaultEnvelopeID }) {
-          Section("Default Envelope") {
+          Section("Default envelope") {
             LabeledContent("Envelope", value: envelope.name)
           }
+          .listRowBackground(Bow.card)
         }
         if !matchingSchedules.isEmpty {
           Section("Scheduled") {
@@ -53,18 +55,20 @@ struct PayeeDetailScreen: View {
               } label: {
                 HStack {
                   VStack(alignment: .leading, spacing: 3) {
-                    Text(schedule.payee).foregroundStyle(.primary)
+                    Text(schedule.payee).foregroundStyle(Bow.ink)
                     Text(schedule.frequency.title)
                       .font(.caption)
-                      .foregroundStyle(.secondary)
+                      .foregroundStyle(Bow.inkSoft)
                   }
                   Spacer()
                   Text(BudgetMoney.formatted(schedule.amountMinor, currencyCode: currencyCode))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Bow.inkSoft)
+                    .fontDesign(.rounded).monospacedDigit()
                 }
               }
             }
           }
+          .listRowBackground(Bow.card)
         }
         if feed.items.isEmpty && !feed.isLoading {
           ContentUnavailableView(
@@ -89,6 +93,7 @@ struct PayeeDetailScreen: View {
                 .accessibilityHint("Open transaction")
               }
             }
+            .listRowBackground(Bow.card)
           }
           if feed.hasMore {
             ProgressView("Loading more…")
@@ -98,6 +103,7 @@ struct PayeeDetailScreen: View {
         }
       }
     }
+    .bowListBackground()
     .navigationTitle(entry?.name ?? "Payee")
     .task(id: payeeKey) {
       let repository = PayeeDirectoryRepository(modelContainer: modelContext.container)

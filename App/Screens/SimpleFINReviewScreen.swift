@@ -29,8 +29,9 @@ struct SimpleFINReviewScreen: View {
             .font(.title3.weight(.semibold))
           Text(BudgetMoney.formatted(record.amountMinor, currencyCode: currencyCode))
             .font(.title2.weight(.bold))
+            .fontDesign(.rounded).monospacedDigit()
           Text("\(account?.name ?? "Account") · \(record.date.formatted(date: .abbreviated, time: .omitted))")
-            .font(.subheadline).foregroundStyle(.secondary)
+            .font(.subheadline).foregroundStyle(Bow.inkSoft)
         }
         .padding(.vertical, 8)
       } header: {
@@ -40,16 +41,17 @@ struct SimpleFINReviewScreen: View {
           ? "Choose what this imported transaction represents. Your choice completes the review."
           : "This bank item is not in your budget yet. Choose what it represents to complete the review.")
       }
+      .listRowBackground(Bow.card)
 
       if relatedSchedule?.kind == .transfer,
          let relatedOccurrence, let relatedSchedule {
         Section {
           if candidates.contains(where: { $0.scheduleID == relatedSchedule.id }) {
             Text("The scheduled transfer is recorded. Confirm its match below.")
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
           } else {
             Text("Record the scheduled transfer first, then match this bank transaction to it.")
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
             Button("Record Scheduled Transfer", systemImage: "arrow.left.arrow.right") {
               onRecordScheduledTransfer?(ScheduledTransactionDraft(
                 scheduleID: relatedSchedule.id,
@@ -63,6 +65,7 @@ struct SimpleFINReviewScreen: View {
             }
           }
         } header: { Text("Scheduled transfer") }
+        .listRowBackground(Bow.card)
       }
 
       if !candidates.isEmpty {
@@ -78,12 +81,12 @@ struct SimpleFINReviewScreen: View {
                 .accessibilityHidden(true)
               VStack(alignment: .leading, spacing: 3) {
                 Text(candidate.payee.isEmpty ? "Transfer" : candidate.payee)
-                  .foregroundStyle(.primary)
+                  .foregroundStyle(Bow.ink)
                 Text(candidate.date.formatted(date: .abbreviated, time: .omitted))
-                  .font(.caption).foregroundStyle(.secondary)
+                  .font(.caption).foregroundStyle(Bow.inkSoft)
                 if candidate.amountMinor != record.amountMinor {
                   Text("Amount differs; matching uses the posted bank amount")
-                    .font(.caption).foregroundStyle(.orange)
+                    .font(.caption).foregroundStyle(Bow.needsInk)
                 }
               }
               Spacer(minLength: 6)
@@ -92,7 +95,8 @@ struct SimpleFINReviewScreen: View {
                   ? -candidate.amountMinor : candidate.amountMinor,
                 currencyCode: currencyCode
               ))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Bow.ink)
+                .fontDesign(.rounded).monospacedDigit()
             }
             .contentShape(Rectangle())
           }
@@ -112,6 +116,7 @@ struct SimpleFINReviewScreen: View {
         } footer: {
           Text("Matching keeps your existing payee, envelope, and notes. You can unmatch it later.")
         }
+        .listRowBackground(Bow.card)
       }
 
       if relatedSchedule?.kind != .transfer
@@ -129,9 +134,9 @@ struct SimpleFINReviewScreen: View {
                   .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
                   Text("Add as new transaction")
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Bow.ink)
                   Text("Use this if you have not entered it before")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(Bow.inkSoft)
                 }
               }
               .contentShape(Rectangle())
@@ -140,7 +145,7 @@ struct SimpleFINReviewScreen: View {
             .accessibilityAddTraits(selected == .addNew ? .isSelected : [])
           } else if record.amountMinor >= 0 {
             Text("This income will go to Ready to Assign.")
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
           }
           if selected == .addNew, record.amountMinor < 0 {
             CategorySelectionField(
@@ -151,6 +156,7 @@ struct SimpleFINReviewScreen: View {
         } header: {
           Text(record.status == .imported ? "Complete review" : "Add to Spending")
         }
+        .listRowBackground(Bow.card)
       }
 
       Section {
@@ -160,7 +166,9 @@ struct SimpleFINReviewScreen: View {
       } footer: {
         Text("Ignore only if this bank item should not appear in your budget.")
       }
+      .listRowBackground(Bow.card)
     }
+    .bowListBackground()
     .navigationTitle("Review Transaction")
     .navigationBarTitleDisplayMode(.inline)
     .safeAreaInset(edge: .bottom) {
@@ -170,8 +178,7 @@ struct SimpleFINReviewScreen: View {
         Text(primaryTitle)
           .frame(maxWidth: .infinity)
       }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
+        .bowPrimaryButton()
         .disabled(selected == nil || needsEnvelope)
         .padding(.horizontal, 20)
         .padding(.vertical, 10)

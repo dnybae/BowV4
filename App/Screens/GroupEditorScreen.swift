@@ -19,15 +19,18 @@ struct GroupEditorScreen: View {
   var body: some View {
     NavigationStack {
       Form {
-        Section("Group Name") {
+        Section("Group name") {
           TextField("For example, Food & Home", text: $name)
         }
+        .listRowBackground(Bow.card)
         if group != nil {
           Section {
             Button("Delete Group", role: .destructive) { showingDelete = true }
           }
+          .listRowBackground(Bow.card)
         }
       }
+      .bowListBackground()
       .navigationTitle(group == nil ? "Add Group" : "Edit Group")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

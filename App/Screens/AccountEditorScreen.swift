@@ -60,6 +60,7 @@ struct AccountEditorScreen: View {
       } footer: {
         Text(type.explanation)
       }
+      .listRowBackground(Bow.card)
 
       Section {
         CurrencyAmountField(account == nil ? "Starting Balance" : "Current Balance",
@@ -67,7 +68,7 @@ struct AccountEditorScreen: View {
         if type.kind == .liability && (parsedOpeningBalance ?? 0) > 0 {
           Text("Enter money owed as a negative balance.")
             .font(.footnote)
-            .foregroundStyle(.red)
+            .foregroundStyle(Bow.overInk)
         }
       } header: {
         Text("Balance")
@@ -76,11 +77,13 @@ struct AccountEditorScreen: View {
           ? "Enter the balance this account should start with. New transactions will change it."
           : "Changing the current balance records a dated adjustment. Earlier net worth history stays intact.")
       }
+      .listRowBackground(Bow.card)
 
       Section("Note") {
         TextField("Optional note", text: $note, axis: .vertical)
           .lineLimit(2...4)
       }
+      .listRowBackground(Bow.card)
       if let account, !isDemoMode, !simpleFINConnections.isEmpty {
         Section {
           if let link = simpleFINLinks.first(where: { $0.localAccountID == account.id }) {
@@ -93,18 +96,20 @@ struct AccountEditorScreen: View {
             }
           } else {
             Text("This account is not connected to a bank.")
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
             Button("Link a Bank Account", systemImage: "link") {
               showingBankLinkPicker = true
             }
           }
         } header: {
-          Text("Bank Sync")
+          Text("Bank sync")
         } footer: {
           Text("Changing or stopping sync keeps transactions already in Bow.")
         }
+        .listRowBackground(Bow.card)
       }
     }
+    .bowListBackground()
     .navigationTitle(account == nil ? "Private Account" : "Edit Account")
     .task {
       guard let account, !loadedCurrentBalance else { return }
@@ -137,7 +142,7 @@ struct AccountEditorScreen: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 4)
         }
-        .buttonStyle(.borderedProminent)
+        .bowPrimaryButton()
         .disabled(!canSave)
         .padding(.horizontal, 20)
         .padding(.vertical, 10)

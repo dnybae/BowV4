@@ -67,10 +67,11 @@ struct ScheduleEditorScreen: View {
             if kind == .expense && envelopeID == nil {
               Text("Choose an envelope for this scheduled expense.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Bow.inkSoft)
             }
           }
         }
+        .listRowBackground(Bow.card)
         Section("Schedule") {
           DatePicker("First due", selection: $startDate, displayedComponents: .date)
           Picker("Repeats", selection: $frequency) {
@@ -83,16 +84,20 @@ struct ScheduleEditorScreen: View {
             Toggle("Active", isOn: $isActive)
           }
         }
+        .listRowBackground(Bow.card)
         Section("Notes") {
           TextField("Optional notes", text: $notes, axis: .vertical)
             .lineLimit(2...4)
         }
+        .listRowBackground(Bow.card)
         if schedule != nil {
           Section {
             Button("Delete Schedule", role: .destructive) { showingDelete = true }
           }
+          .listRowBackground(Bow.card)
         }
       }
+      .bowListBackground()
       .navigationTitle("Edit Schedule")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

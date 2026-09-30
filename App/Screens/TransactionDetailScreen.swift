@@ -49,13 +49,15 @@ struct TransactionDetailScreen: View {
               .font(.title2.weight(.semibold))
             Text(BudgetMoney.formatted(transaction.amountMinor, currencyCode: currencyCode))
               .font(.largeTitle.weight(.bold))
+              .fontDesign(.rounded).monospacedDigit()
             Text(statusTitle)
               .font(.subheadline.weight(.medium))
               .foregroundStyle(needsLegacyReview
-                ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                ? AnyShapeStyle(Bow.needsInk) : AnyShapeStyle(Bow.inkSoft))
           }
           .padding(.vertical, 12)
         }
+        .listRowBackground(Bow.card)
 
         Section("Details") {
           LabeledContent("Account", value: accountName)
@@ -66,13 +68,17 @@ struct TransactionDetailScreen: View {
           }
           LabeledContent("Cleared", value: transaction.isCleared ? "Yes" : "No")
         }
+        .listRowBackground(Bow.card)
 
         if let record = bankRecord, record.status == .linked {
           Section {
             LabeledContent("Bank description", value: record.payee)
-            LabeledContent("Posted amount", value: BudgetMoney.formatted(
-              record.amountMinor, currencyCode: currencyCode
+            LabeledContent("Posted amount") {
+            Text(BudgetMoney.formatted(
+                record.amountMinor, currencyCode: currencyCode
             ))
+              .fontDesign(.rounded).monospacedDigit()
+          }
             LabeledContent("Posted date", value: record.date.formatted(date: .abbreviated, time: .omitted))
             LabeledContent("Matched", value: record.matchedAutomatically ? "Automatically" : "During review")
             Button("Unmatch Bank Transaction", role: .destructive) {
@@ -83,11 +89,13 @@ struct TransactionDetailScreen: View {
           } footer: {
             Text("Unmatching keeps your entered transaction and returns the bank item to review.")
           }
+          .listRowBackground(Bow.card)
         } else if bankRecord?.status == .imported {
           Section("Bank import") {
             Text("Added from a posted bank transaction.")
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
           }
+          .listRowBackground(Bow.card)
         }
 
         if needsLegacyReview {
@@ -103,14 +111,17 @@ struct TransactionDetailScreen: View {
           } footer: {
             Text("This older transaction needs a one-time check. Expenses must have an envelope before review can finish.")
           }
+          .listRowBackground(Bow.card)
         } else if transaction.needsApproval
           || (transaction.kind == .expense && transaction.envelopeID == nil) {
           Section {
             Text("Finish this transaction in Spending → Bank Review.")
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
           }
+          .listRowBackground(Bow.card)
         }
       }
+      .bowListBackground()
       .navigationTitle("Transaction")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

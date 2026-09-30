@@ -25,7 +25,7 @@ struct WelcomeScreen: View {
             Text("Give every dollar a job.")
               .font(.title2.weight(.semibold))
             Text("A calmer way to plan with the money you have.")
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
           .listRowBackground(Color.clear)
@@ -38,10 +38,11 @@ struct WelcomeScreen: View {
           }
           Toggle("Add starter envelopes", isOn: $withDefaults)
         } header: {
-          Text("Your Budget")
+          Text("Your budget")
         } footer: {
           Text("You can also import your YNAB groups and envelopes after creating the budget.")
         }
+        .listRowBackground(Bow.card)
 
         Section {
           Button("Create Budget", systemImage: "arrow.right") {
@@ -58,6 +59,7 @@ struct WelcomeScreen: View {
           .frame(maxWidth: .infinity)
           .fontWeight(.semibold)
         }
+        .listRowBackground(Bow.card)
 
         Section {
           Button("Try Demo Budget", systemImage: "play.rectangle") {
@@ -66,7 +68,9 @@ struct WelcomeScreen: View {
         } footer: {
           Text("Explore sample accounts, transactions, scheduled bills, and bank review. Your own budget stays separate.")
         }
+        .listRowBackground(Bow.card)
       }
+      .bowListBackground()
       .navigationTitle("Welcome to Bow")
       .alert("Couldn’t Create Budget", isPresented: Binding(
         get: { errorMessage != nil },

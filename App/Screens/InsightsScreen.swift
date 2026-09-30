@@ -98,7 +98,7 @@ struct InsightsScreen: View {
           Text("See where your money goes")
             .font(.title2.weight(.semibold))
           Text("Six months of income, spending, and net worth")
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
         }
 
         VStack(alignment: .leading, spacing: 12) {
@@ -119,7 +119,7 @@ struct InsightsScreen: View {
           .chartYAxis { currencyAxis }
           Text("Tap a month to see its transactions.")
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
         }
         .insightCard()
 
@@ -127,7 +127,7 @@ struct InsightsScreen: View {
           Text("Spending by Group").font(.headline)
           Text((months.last ?? Date()).formatted(.dateTime.month(.wide).year()))
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
           if spendingGroups.isEmpty {
             ContentUnavailableView("No spending yet", systemImage: "chart.pie", description: Text("Categorized expenses will appear here."))
           } else {
@@ -146,7 +146,8 @@ struct InsightsScreen: View {
                   Text(group.name)
                   Spacer()
                   Text(BudgetMoney.formatted(group.totalMinor, currencyCode: currencyCode))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Bow.inkSoft)
+                    .fontDesign(.rounded).monospacedDigit()
                 }
                 .contentShape(Rectangle())
               }
@@ -168,7 +169,7 @@ struct InsightsScreen: View {
               .font(.subheadline.weight(.semibold))
             Text(netWorthIssueDescription)
               .font(.caption)
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
           }
           Chart(monthItems) { item in
             if let value = item.netWorthMinor {
@@ -183,7 +184,7 @@ struct InsightsScreen: View {
           .chartYAxis { currencyAxis }
           Text("Includes tracking accounts and credit balances.")
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
         }
         .insightCard()
 
@@ -193,7 +194,7 @@ struct InsightsScreen: View {
           Text("Shooting for financial freedom")
             .font(.title3.weight(.semibold))
           Text("Six-month net worth estimate from recent spending, income, and scheduled activity.")
-            .font(.subheadline).foregroundStyle(.secondary)
+            .font(.subheadline).foregroundStyle(Bow.inkSoft)
           Chart {
             ForEach(monthItems.suffix(3)) { item in
               if let value = item.netWorthMinor {
@@ -206,22 +207,24 @@ struct InsightsScreen: View {
               LineMark(x: .value("Month", item.month, unit: .month),
                        y: .value("Projected Net Worth", Double(item.netWorthMinor) / 100))
                 .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 4]))
-                .foregroundStyle(.orange)
+                .foregroundStyle(Bow.needsInk)
               PointMark(x: .value("Month", item.month, unit: .month),
                         y: .value("Projected Net Worth", Double(item.netWorthMinor) / 100))
-                .foregroundStyle(.orange)
+                .foregroundStyle(Bow.needsInk)
             }
           }
           .frame(height: 210)
           .chartYAxis { currencyAxis }
           .accessibilityLabel("Net worth forecast for the next six months")
           if let last = forecast.last {
-            LabeledContent("Projected in six months",
-              value: BudgetMoney.formatted(last.netWorthMinor, currencyCode: currencyCode))
+            LabeledContent("Projected in six months") {
+              Text(BudgetMoney.formatted(last.netWorthMinor, currencyCode: currencyCode))
+                .fontDesign(.rounded).monospacedDigit()
+            }
               .font(.subheadline.weight(.medium))
           }
           Text("Estimate only · Transfers between your own accounts do not change net worth.")
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.caption).foregroundStyle(Bow.inkSoft)
         }
         .insightCard()
       }
@@ -246,6 +249,7 @@ struct InsightsScreen: View {
       Task { await snapshotRepository.invalidate() }
       refreshVersion += 1
     }
+    .background(Bow.mist)
     .navigationTitle("Insights")
     .onChange(of: selectedBarMonth) { _, value in
       guard let value else { return }
@@ -282,18 +286,21 @@ struct InsightsScreen: View {
               )
               VStack(alignment: .leading) {
                 Text(transaction.payee.isEmpty ? transaction.kind.title : transaction.payee)
-                  .foregroundStyle(.primary)
+                  .foregroundStyle(Bow.ink)
                 Text(transaction.date, style: .date)
                   .font(.caption)
-                  .foregroundStyle(.secondary)
+                  .foregroundStyle(Bow.inkSoft)
               }
               Spacer()
               Text(BudgetMoney.formatted(transaction.amountMinor, currencyCode: currencyCode))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Bow.ink)
+                .fontDesign(.rounded).monospacedDigit()
             }
           }
           .buttonStyle(.plain)
+          .listRowBackground(Bow.card)
         }
+        .bowListBackground()
         .overlay {
           if !transactions.contains(where: { value.transactionIDs.contains($0.id) }) {
             ContentUnavailableView("No transactions", systemImage: "list.bullet.rectangle")
@@ -346,6 +353,6 @@ private extension View {
   func insightCard() -> some View {
     self.padding(16)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+      .background(Bow.card, in: RoundedRectangle(cornerRadius: 20))
   }
 }

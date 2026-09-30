@@ -24,15 +24,15 @@ struct BudgetBucketSelectionField: View {
       showingSelection = true
     } label: {
       HStack(spacing: 12) {
-        Text(title).foregroundStyle(.primary)
+        Text(title).foregroundStyle(Bow.ink)
         Spacer(minLength: 12)
         Text(selectedName)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(Bow.inkSoft)
           .lineLimit(1)
           .truncationMode(.middle)
         Image(systemName: "chevron.up.chevron.down")
           .font(.caption)
-          .foregroundStyle(.tertiary)
+          .foregroundStyle(Bow.inkFaint)
       }
       .contentShape(Rectangle())
     }
@@ -77,6 +77,7 @@ struct BudgetBucketSelectionSheet: View {
               )
             }
           }
+          .listRowBackground(Bow.card)
         }
         ForEach(groups.sorted { $0.sortOrder < $1.sortOrder }) { group in
           let matching = envelopes.filter {
@@ -87,6 +88,7 @@ struct BudgetBucketSelectionSheet: View {
             Section(group.name) {
               ForEach(matching) { envelope in categoryButton(envelope) }
             }
+            .listRowBackground(Bow.card)
           }
         }
         let ungrouped = envelopes.filter { envelope in
@@ -97,20 +99,22 @@ struct BudgetBucketSelectionSheet: View {
           Section("Other") {
             ForEach(ungrouped) { envelope in categoryButton(envelope) }
           }
+          .listRowBackground(Bow.card)
         }
         let hidden = envelopes.filter {
           $0.paymentAccountID == nil && $0.isHidden && (searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText))
         }.sorted { $0.name < $1.name }
         if !hidden.isEmpty {
-          Section("Hidden Envelopes") {
+          Section("Hidden envelopes") {
             ForEach(hidden) { envelope in categoryButton(envelope) }
           }
+          .listRowBackground(Bow.card)
         }
         let matchingCards = cardAccounts.filter {
           searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText)
         }
         if !matchingCards.isEmpty {
-          Section("Credit Card Payments") {
+          Section("Credit card payments") {
             ForEach(matchingCards) { account in
               Button {
                 onSelect(.cardPayment(account.id))
@@ -126,9 +130,10 @@ struct BudgetBucketSelectionSheet: View {
               }
             }
           }
+          .listRowBackground(Bow.card)
         }
       }
-      .listStyle(.insetGrouped)
+      .bowListBackground()
       .searchable(text: $searchText, prompt: "Search categories")
       .navigationTitle(title)
       .navigationBarTitleDisplayMode(.inline)

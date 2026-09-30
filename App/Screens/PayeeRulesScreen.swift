@@ -26,12 +26,13 @@ struct PayeeRulesScreen: View {
           } label: {
             VStack(alignment: .leading, spacing: 3) {
               Text(rule.name)
-                .foregroundStyle(.primary)
+                .foregroundStyle(Bow.ink)
               Text("\(rule.exactMatchText.isEmpty ? rule.name : rule.exactMatchText) → \(envelopes.first { $0.id == rule.defaultEnvelopeID }?.name ?? "Choose an envelope")")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Bow.inkSoft)
             }
           }
+          .listRowBackground(Bow.card)
         }
       }
 
@@ -43,7 +44,9 @@ struct PayeeRulesScreen: View {
       } footer: {
         Text("Rules match the payee name or exact bank text, ignoring case and surrounding spaces. They never change an envelope you selected yourself.")
       }
+      .listRowBackground(Bow.card)
     }
+    .bowListBackground()
     .navigationTitle("Payee Rules")
     .sheet(isPresented: $showingAdd) {
       PayeeRuleEditorScreen(rule: nil, rules: rules, envelopes: envelopes)

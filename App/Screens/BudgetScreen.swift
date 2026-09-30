@@ -97,6 +97,7 @@ struct BudgetScreen: View {
                 }
               }
             }
+            .listRowBackground(Bow.card)
           }
         }
 
@@ -107,13 +108,14 @@ struct BudgetScreen: View {
         }
 
         if !creditCards.isEmpty {
-          Section("Credit Card Payments") {
+          Section("Credit card payments") {
             ForEach(creditCards) { card in
               NavigationLink(value: BudgetRoute.cardPayment(card.id)) {
                 CardPaymentRow(card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode)
               }
             }
           }
+          .listRowBackground(Bow.card)
           .id("credit-card-payments")
         }
 
@@ -124,8 +126,10 @@ struct BudgetScreen: View {
             Button("Add Group", systemImage: "folder.badge.plus", action: onAddGroup)
             Button("Import YNAB Categories", systemImage: "square.and.arrow.down", action: onImportYNAB)
           }
+          .listRowBackground(Bow.card)
         }
       }
+      .bowListBackground()
       .animation(reduceMotion ? nil : .snappy, value: selectedMonth)
       .searchable(text: $searchText, prompt: "Search envelopes or groups")
       .navigationTitle(selectedMonth.formatted(.dateTime.month(.wide).year()))
@@ -253,19 +257,20 @@ private struct BudgetOverviewSection: View {
       VStack(alignment: .leading, spacing: 10) {
         Text("Ready to Assign")
           .font(.subheadline.weight(.medium))
-          .foregroundStyle(.secondary)
+          .foregroundStyle(Bow.inkSoft)
         Text(BudgetMoney.formatted(summary.readyToAssignMinor, currencyCode: currencyCode))
           .font(.system(.largeTitle, design: .rounded, weight: .semibold))
-          .foregroundStyle(summary.readyToAssignMinor < 0 ? Color.red : Color.primary)
+          .foregroundStyle(summary.readyToAssignMinor < 0 ? Bow.overInk : Bow.ink)
           .minimumScaleFactor(0.7)
           .lineLimit(1)
+          .fontDesign(.rounded).monospacedDigit()
         Text(summary.readyToAssignMinor < 0
           ? "Move money back or add cash to cover this deficit."
           : isPastMonth ? "View only · Past budget month" : "Cash available to give a job.")
           .font(.footnote)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(Bow.inkSoft)
         Button("Move Money", systemImage: "arrow.left.arrow.right", action: onAssign)
-          .buttonStyle(.borderedProminent)
+          .bowPrimaryButton()
           .disabled(!canMove)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -279,7 +284,10 @@ private struct BudgetOverviewSection: View {
       }
       .padding(.vertical, 6)
 
-      LabeledContent("Assigned in future months", value: BudgetMoney.formatted(summary.assignedInFutureMinor, currencyCode: currencyCode))
+      LabeledContent("Assigned in future months") {
+        Text(BudgetMoney.formatted(summary.assignedInFutureMinor, currencyCode: currencyCode))
+          .fontDesign(.rounded).monospacedDigit()
+      }
         .font(.subheadline)
 
       if hasCards {
@@ -292,12 +300,12 @@ private struct BudgetOverviewSection: View {
                 ? "Payment money is set aside for current debt."
                 : "\(BudgetMoney.formatted(summary.creditUncoveredMinor, currencyCode: currencyCode)) of card debt is uncovered")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Bow.inkSoft)
             }
             Spacer()
             Image(systemName: "chevron.down")
               .font(.caption.weight(.semibold))
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
           }
           .frame(maxWidth: .infinity, minHeight: 44)
           .contentShape(Rectangle())
@@ -305,16 +313,18 @@ private struct BudgetOverviewSection: View {
         .buttonStyle(.plain)
       }
     }
+    .listRowBackground(Bow.card)
   }
 
   private func metric(_ title: String, amount: Int64, emphasized: Bool) -> some View {
     VStack(alignment: .leading, spacing: 4) {
-      Text(title).font(.caption).foregroundStyle(.secondary)
+      Text(title).font(.caption).foregroundStyle(Bow.inkSoft)
       Text(BudgetMoney.formatted(amount, currencyCode: currencyCode))
         .font(.headline)
-        .foregroundStyle(emphasized ? Color.red : Color.primary)
+        .foregroundStyle(emphasized ? Bow.overInk : Bow.ink)
         .lineLimit(1)
         .minimumScaleFactor(0.75)
+        .fontDesign(.rounded).monospacedDigit()
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .accessibilityElement(children: .combine)
@@ -333,18 +343,19 @@ private struct EnvelopeBudgetRow: View {
   var body: some View {
     HStack(spacing: 12) {
       VStack(alignment: .leading, spacing: 3) {
-        Text(name).foregroundStyle(.primary)
+        Text(name).foregroundStyle(Bow.ink)
         Text(availableMinor < 0
           ? (cashOverspentMinor > 0 ? "Cash overspent" : creditOverspentMinor > 0 ? "Credit overspent · adds debt" : "Overspent")
           : "Assigned \(BudgetMoney.formatted(assignedMinor, currencyCode: currencyCode)) · Activity \(BudgetMoney.formatted(activityMinor, currencyCode: currencyCode))")
           .font(.caption)
-          .foregroundStyle(availableMinor < 0 ? Color.red : Color.secondary)
+          .foregroundStyle(availableMinor < 0 ? Bow.overInk : Bow.inkSoft)
           .lineLimit(1)
       }
       Spacer(minLength: 8)
       Text(BudgetMoney.formatted(availableMinor, currencyCode: currencyCode))
         .fontWeight(.semibold)
-        .foregroundStyle(availableMinor < 0 ? Color.red : Color.primary)
+        .foregroundStyle(availableMinor < 0 ? Bow.overInk : Bow.ink)
+        .fontDesign(.rounded).monospacedDigit()
     }
     .padding(.vertical, 4)
     .accessibilityElement(children: .combine)
@@ -364,18 +375,19 @@ private struct CardPaymentRow: View {
     let previousReserved = max(0, previousSnapshot?.paymentAvailable[card.id] ?? 0)
     HStack {
       VStack(alignment: .leading, spacing: 3) {
-        Text(card.name).foregroundStyle(.primary)
+        Text(card.name).foregroundStyle(Bow.ink)
         Text(owed > reserved
           ? (previousOwed > previousReserved
             ? "Carrying \(BudgetMoney.formatted(owed - reserved, currencyCode: currencyCode)) of debt"
             : "Credit spending needs funding")
           : "Ready to pay in full")
           .font(.caption)
-          .foregroundStyle(owed > reserved ? Color.orange : Color.secondary)
+          .foregroundStyle(owed > reserved ? Bow.needsInk : Bow.inkSoft)
       }
       Spacer()
       Text(BudgetMoney.formatted(reserved, currencyCode: currencyCode))
         .fontWeight(.semibold)
+        .fontDesign(.rounded).monospacedDigit()
     }
     .padding(.vertical, 4)
     .accessibilityElement(children: .combine)

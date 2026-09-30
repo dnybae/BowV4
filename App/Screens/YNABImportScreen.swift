@@ -33,21 +33,25 @@ struct YNABImportScreen: View {
         } footer: {
           Text("Bow imports category groups and envelopes only. Transactions, past assignments, balances, and targets are left behind.")
         }
+        .listRowBackground(Bow.card)
 
         if let preview {
           Section {
             Text("\(preview.groups.count) groups · \(preview.envelopeCount) envelopes")
               .font(.headline)
           }
+          .listRowBackground(Bow.card)
           ForEach(preview.groups) { group in
             Section(group.name) {
               ForEach(group.envelopes, id: \.self) { name in
                 Label(name, systemImage: "square.grid.2x2.fill")
               }
             }
+            .listRowBackground(Bow.card)
           }
         }
       }
+      .bowListBackground()
       .navigationTitle("Import from YNAB")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

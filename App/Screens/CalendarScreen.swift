@@ -68,6 +68,7 @@ struct CalendarScreen: View {
       selectedDayAgenda
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+    .background(Bow.mist)
     .navigationTitle("Calendar")
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
@@ -106,15 +107,16 @@ struct CalendarScreen: View {
               .font(.headline)
             Text("\(selectedSchedules.count) scheduled · \(dayTransactions.count) recorded")
               .font(.caption)
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
           }
           Spacer()
           VStack(alignment: .trailing, spacing: 4) {
             Text("Spent on this day")
               .font(.caption)
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
             Text(BudgetMoney.formatted(spentMinor, currencyCode: currencyCode))
               .font(.headline)
+              .fontDesign(.rounded).monospacedDigit()
           }
         }
         .padding(.horizontal, 20)
@@ -152,7 +154,7 @@ struct CalendarScreen: View {
         if !dayTransactions.isEmpty {
           Text("Transactions")
             .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
             .padding(.horizontal, 20)
             .padding(.top, 14)
             .padding(.bottom, 6)
@@ -236,10 +238,10 @@ private struct CalendarMonthHeader: View {
       Spacer(minLength: 0)
       Button("Previous Month", systemImage: "chevron.left") { onPrevious() }
         .labelStyle(.iconOnly)
-        .buttonStyle(.bordered)
+        .bowSecondaryButton()
       Button("Next Month", systemImage: "chevron.right") { onNext() }
         .labelStyle(.iconOnly)
-        .buttonStyle(.bordered)
+        .bowSecondaryButton()
     }
     .padding(.horizontal, 20)
     .padding(.top, 12)
@@ -257,7 +259,7 @@ private struct CalendarWeekdayHeader: View {
           (calendar.firstWeekday - 1 + index) % 7
         ])
         .font(.caption2.weight(.semibold))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Bow.inkSoft)
         .frame(maxWidth: .infinity)
         .accessibilityHidden(true)
       }
@@ -320,7 +322,7 @@ private struct CalendarMonthDayButton: View {
           .foregroundStyle(isSelected ? Color(uiColor: .systemBackground) : (isToday ? Color.red : Color.primary))
           .frame(width: 36, height: 36)
           .background {
-            if isSelected { Circle().fill(Color.primary) }
+            if isSelected { Circle().fill(Bow.ink) }
           }
         Circle()
           .fill(scheduledCount > 0 || recorded ? Color.accentColor : Color.clear)
@@ -369,11 +371,12 @@ private struct CalendarScheduleRow: View {
             Text(schedule.payee).font(.headline)
             Text(schedule.frequency.title + (recordedTransaction != nil
               ? " · Recorded" : occurrence?.isSkipped == true ? " · Skipped" : " · Expected"))
-              .font(.caption).foregroundStyle(.secondary)
+              .font(.caption).foregroundStyle(Bow.inkSoft)
           }
           Spacer()
           Text(BudgetMoney.formatted(schedule.amountMinor, currencyCode: currencyCode))
             .font(.subheadline.weight(.semibold))
+            .fontDesign(.rounded).monospacedDigit()
         }
         .contentShape(Rectangle())
       }
@@ -387,13 +390,13 @@ private struct CalendarScheduleRow: View {
         }
         if schedule.kind == .transfer && schedule.envelopeID == nil {
           Text("This transfer does not spend an envelope")
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.caption).foregroundStyle(Bow.inkSoft)
         } else if schedule.envelopeID == nil {
           Text("Choose an envelope to check funding")
-            .font(.caption).foregroundStyle(.orange)
+            .font(.caption).foregroundStyle(Bow.needsInk)
         } else if shortfall > 0 {
           Text("Envelope short by \(BudgetMoney.formatted(shortfall, currencyCode: currencyCode))")
-            .font(.caption).foregroundStyle(.orange)
+            .font(.caption).foregroundStyle(Bow.needsInk)
         }
         if selectedDate <= Date(), schedule.accountID != nil {
           Button(schedule.kind == .transfer ? "Record Transfer" : "Record Transaction", systemImage: "plus") {

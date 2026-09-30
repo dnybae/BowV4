@@ -59,12 +59,13 @@ struct BankFileImportScreen: View {
               }
             }
           }
-          if let fileName { Text(fileName).foregroundStyle(.secondary) }
+          if let fileName { Text(fileName).foregroundStyle(Bow.inkSoft) }
         } header: {
           Text("File")
         } footer: {
           Text("Choose a CSV, OFX, QFX, or QIF export from your bank.")
         }
+        .listRowBackground(Bow.card)
 
         Section {
           AccountSelectionField(title: "Bow Account", selection: $accountID, accounts: accounts)
@@ -73,9 +74,10 @@ struct BankFileImportScreen: View {
         } footer: {
           Text("Choose the Bow account represented by this bank file.")
         }
+        .listRowBackground(Bow.card)
 
         if format == .csv, let csvTable {
-          Section("CSV Columns") {
+          Section("CSV columns") {
             columnPicker("Date", selection: $mapping.dateColumn, headers: csvTable.headers)
             columnPicker("Payee", selection: $mapping.payeeColumn, headers: csvTable.headers)
             columnPicker("Memo", selection: $mapping.memoColumn, headers: csvTable.headers)
@@ -94,8 +96,9 @@ struct BankFileImportScreen: View {
             }
             .pickerStyle(.menu)
           }
+          .listRowBackground(Bow.card)
         } else if format == .qif {
-          Section("QIF Dates") {
+          Section("QIF dates") {
             Picker("Date Order", selection: $qifDateOrder) {
               ForEach(BankDateOrder.allCases) { order in
                 Text(order.title).tag(order)
@@ -103,6 +106,7 @@ struct BankFileImportScreen: View {
             }
             .pickerStyle(.menu)
           }
+          .listRowBackground(Bow.card)
         }
 
         if format != nil {
@@ -114,6 +118,7 @@ struct BankFileImportScreen: View {
             if isPreviewing { ProgressView("Preparing preview…") }
             if isImporting { ProgressView("Importing transactions…") }
           }
+          .listRowBackground(Bow.card)
         }
 
         if !proposals.isEmpty {
@@ -125,6 +130,7 @@ struct BankFileImportScreen: View {
           } footer: {
             Text("Clear matches and categorized transactions are completed automatically. Anything uncertain waits in Spending → Bank Review. Historical imports preserve today’s cash balance.")
           }
+          .listRowBackground(Bow.card)
 
           Section("Transactions") {
             ForEach(proposals.prefix(visibleProposalCount)) { proposal in
@@ -134,13 +140,14 @@ struct BankFileImportScreen: View {
                     .fontWeight(.medium)
                   Spacer()
                   Text(BudgetMoney.formatted(proposal.row.amountMinor, currencyCode: currencyCode))
+                    .fontDesign(.rounded).monospacedDigit()
                 }
                 Text(proposal.row.date.formatted(date: .abbreviated, time: .omitted))
                   .font(.caption)
-                  .foregroundStyle(.secondary)
+                  .foregroundStyle(Bow.inkSoft)
                 Text(actionLabel(for: proposal))
                   .font(.caption)
-                  .foregroundStyle(.secondary)
+                  .foregroundStyle(Bow.inkSoft)
               }
               .padding(.vertical, 4)
             }
@@ -150,8 +157,10 @@ struct BankFileImportScreen: View {
               }
             }
           }
+          .listRowBackground(Bow.card)
         }
       }
+      .bowListBackground()
       .navigationTitle("Import Bank File")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

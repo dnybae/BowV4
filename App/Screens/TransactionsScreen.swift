@@ -60,6 +60,7 @@ struct TransactionsScreen: View {
             Button("Clear") { filter = TransactionFilter() }
           }
         }
+        .listRowBackground(Bow.card)
       }
       if timeline.isEmpty && feed.isLoading {
         ProgressView("Loading transactions…")
@@ -77,6 +78,7 @@ struct TransactionsScreen: View {
           Button("Jump to Newest", systemImage: "arrow.up.to.line") {
             Task { await feed.returnToNewest(searchText: searchText, filter: filter) }
           }
+          .listRowBackground(Bow.card)
         }
         ForEach(timeline.days) { group in
           Section(group.title) {
@@ -88,6 +90,7 @@ struct TransactionsScreen: View {
               )
             }
           }
+          .listRowBackground(Bow.card)
         }
         if feed.hasMore {
           ProgressView("Loading more…")
@@ -96,6 +99,7 @@ struct TransactionsScreen: View {
         }
       }
     }
+    .bowListBackground()
     .searchable(text: $searchText, prompt: "Payee, note, account, or envelope")
     .task(id: TransactionFeedKey(searchText: searchText, filter: filter,
                                  refreshVersion: refreshVersion)) {
@@ -157,27 +161,28 @@ struct TransactionSummaryRow: View {
       VStack(alignment: .leading, spacing: 3) {
         Text(transaction.kind == .transfer ? "Transfer" :
           transaction.payee.isEmpty ? "Transaction" : transaction.payee)
-          .foregroundStyle(.primary)
+          .foregroundStyle(Bow.ink)
         Text(showsDate
           ? "\(transaction.accountName) · \(transaction.date.formatted(date: .abbreviated, time: .omitted))"
           : transaction.accountName)
-          .font(.caption).foregroundStyle(.secondary)
+          .font(.caption).foregroundStyle(Bow.inkSoft)
         if transaction.needsApproval {
-          Text("Needs review").font(.caption).foregroundStyle(.orange)
+          Text("Needs review").font(.caption).foregroundStyle(Bow.needsInk)
         } else if transaction.sourceRaw == "manualLinked" {
           Label("Matched", systemImage: "link")
             .font(.caption).foregroundStyle(.tint)
         }
         if transaction.envelopeID == nil && transaction.kind == .expense {
-          Text("Choose an envelope in Bank Review").font(.caption).foregroundStyle(.orange)
+          Text("Choose an envelope in Bank Review").font(.caption).foregroundStyle(Bow.needsInk)
         } else if let envelopeName = transaction.envelopeName {
-          Text(envelopeName).font(.caption).foregroundStyle(.secondary)
+          Text(envelopeName).font(.caption).foregroundStyle(Bow.inkSoft)
         }
       }
       Spacer(minLength: 8)
       Text(BudgetMoney.formatted(displayAmountMinor ?? transaction.amountMinor, currencyCode: currencyCode))
         .fontWeight(.medium)
-        .foregroundStyle((displayAmountMinor ?? transaction.amountMinor) < 0 ? Color.primary : Color.accentColor)
+        .foregroundStyle((displayAmountMinor ?? transaction.amountMinor) < 0 ? Bow.ink : Color.accentColor)
+        .fontDesign(.rounded).monospacedDigit()
     }
     .padding(.vertical, 4)
     .contentShape(Rectangle())
@@ -210,14 +215,14 @@ struct TransactionRow: View {
       )
       VStack(alignment: .leading, spacing: 3) {
         Text(title)
-          .foregroundStyle(.primary)
+          .foregroundStyle(Bow.ink)
         Text("\(accountName) · \(transaction.date.formatted(date: .abbreviated, time: .omitted))")
           .font(.caption)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(Bow.inkSoft)
         if transaction.needsApproval {
           Text("Needs review")
             .font(.caption)
-            .foregroundStyle(.orange)
+            .foregroundStyle(Bow.needsInk)
         } else if transaction.sourceRaw == "manualLinked" {
           Label("Matched", systemImage: "link")
             .font(.caption).foregroundStyle(.tint)
@@ -225,11 +230,11 @@ struct TransactionRow: View {
         if transaction.envelopeID == nil && transaction.kind == .expense {
           Text("Choose an envelope in Bank Review")
             .font(.caption)
-            .foregroundStyle(.orange)
+            .foregroundStyle(Bow.needsInk)
         } else if let envelopeName {
           Text(envelopeName)
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
         }
       }
       Spacer(minLength: 8)
@@ -239,7 +244,8 @@ struct TransactionRow: View {
       ))
         .fontWeight(.medium)
         .foregroundStyle((displayAmountMinor ?? transaction.amountMinor) < 0
-          ? Color.primary : Color.accentColor)
+          ? Bow.ink : Color.accentColor)
+        .fontDesign(.rounded).monospacedDigit()
     }
     .padding(.vertical, 4)
     .contentShape(Rectangle())

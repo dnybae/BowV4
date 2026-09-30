@@ -16,9 +16,12 @@ struct PendingBankDetailScreen: View {
     Form {
       Section {
         LabeledContent("Merchant", value: record.payee)
-        LabeledContent("Amount", value: BudgetMoney.formatted(
-          record.amountMinor, currencyCode: account?.currencyCode ?? "USD"
-        ))
+        LabeledContent("Amount") {
+          Text(BudgetMoney.formatted(
+            record.amountMinor, currencyCode: account?.currencyCode ?? "USD"
+          ))
+            .fontDesign(.rounded).monospacedDigit()
+        }
         LabeledContent("Date", value: record.date.formatted(date: .abbreviated, time: .omitted))
         LabeledContent("Account", value: account?.name ?? "Account")
       } header: {
@@ -26,6 +29,7 @@ struct PendingBankDetailScreen: View {
       } footer: {
         Text("The final posted amount and date may differ. Bow will check for a match when it posts.")
       }
+      .listRowBackground(Bow.card)
 
       if let transactionID = record.transactionID {
         Section {
@@ -35,6 +39,7 @@ struct PendingBankDetailScreen: View {
         } footer: {
           Text("Your entered transaction already affects your budget. The bank authorization does not add a second transaction.")
         }
+        .listRowBackground(Bow.card)
       } else {
         Section {
           if record.amountMinor < 0 {
@@ -46,8 +51,10 @@ struct PendingBankDetailScreen: View {
         } footer: {
           Text("Record Now creates a manual transaction and affects your budget immediately. Choose an envelope for an expense.")
         }
+        .listRowBackground(Bow.card)
       }
     }
+    .bowListBackground()
     .navigationTitle("Pending Bank Item")
     .navigationBarTitleDisplayMode(.inline)
     .safeAreaInset(edge: .bottom) {
@@ -64,8 +71,7 @@ struct PendingBankDetailScreen: View {
           Text("Record Now")
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
+        .bowPrimaryButton()
         .disabled(record.amountMinor < 0 && envelopeID == nil)
         .padding(.horizontal, 20)
         .padding(.vertical, 10)

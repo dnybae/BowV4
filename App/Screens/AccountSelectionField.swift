@@ -19,15 +19,15 @@ struct AccountSelectionField: View {
       showingSelection = true
     } label: {
       HStack(spacing: 12) {
-        Text(title).foregroundStyle(.primary)
+        Text(title).foregroundStyle(Bow.ink)
         Spacer(minLength: 12)
         Text(selectedName)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(Bow.inkSoft)
           .lineLimit(1)
           .truncationMode(.middle)
         Image(systemName: "chevron.up.chevron.down")
           .font(.caption)
-          .foregroundStyle(.tertiary)
+          .foregroundStyle(Bow.inkFaint)
       }
       .contentShape(Rectangle())
     }
@@ -74,6 +74,7 @@ struct AccountSelectionSheet: View {
               isSelected: selectedID == nil
             )
           }
+          .listRowBackground(Bow.card)
         }
         ForEach(BudgetAccountKind.allCases) { kind in
           let matching = accounts.filter {
@@ -97,10 +98,11 @@ struct AccountSelectionSheet: View {
                 }
               }
             }
+            .listRowBackground(Bow.card)
           }
         }
       }
-      .listStyle(.insetGrouped)
+      .bowListBackground()
       .searchable(text: $searchText, prompt: "Search accounts")
       .navigationTitle(title)
       .navigationBarTitleDisplayMode(.inline)

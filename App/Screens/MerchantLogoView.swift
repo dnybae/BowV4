@@ -42,7 +42,7 @@ struct MerchantLogoView: View {
       }
     }
     .frame(width: size, height: size)
-    .background(Color(uiColor: .secondarySystemGroupedBackground),
+    .background(Bow.well,
                 in: RoundedRectangle(cornerRadius: size * 0.26))
     .clipShape(RoundedRectangle(cornerRadius: size * 0.26))
     .accessibilityHidden(true)
@@ -53,7 +53,7 @@ struct MerchantLogoView: View {
       for: kind, payee: merchantName, category: categoryName
     ))
       .font(.system(size: size * 0.44, weight: .medium))
-      .foregroundStyle(.secondary)
+      .foregroundStyle(Bow.inkSoft)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }

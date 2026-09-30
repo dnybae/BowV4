@@ -42,8 +42,10 @@ struct EnvelopeDirectoryScreen: View {
             })
           }
         }
+        .listRowBackground(Bow.card)
       }
     }
+    .bowListBackground()
     .navigationTitle("Envelope Directory")
     .navigationBarTitleDisplayMode(.inline)
     .sheet(item: $selected) { suggestion in
@@ -58,11 +60,14 @@ struct EnvelopeDirectoryScreen: View {
               }
             }
           }
+          .listRowBackground(Bow.card)
           Section {
             Text("A directory envelope starts with no money assigned. You can edit its target later.")
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
           }
+          .listRowBackground(Bow.card)
         }
+        .bowListBackground()
         .navigationTitle("Add Envelope")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

@@ -47,6 +47,7 @@ struct PayeeEditorScreen: View {
           TextField("Payee Name", text: $name)
             .textInputAutocapitalization(.words)
         }
+        .listRowBackground(Bow.card)
         Section {
           HStack(spacing: 12) {
             MerchantLogoView(
@@ -63,7 +64,7 @@ struct PayeeEditorScreen: View {
               Text("Payee Icon")
               Text(logoSource.title)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Bow.inkSoft)
             }
           }
           .padding(.vertical, 3)
@@ -87,6 +88,7 @@ struct PayeeEditorScreen: View {
         } footer: {
           Text("Every payee starts with a native icon. You can use your own image or choose a Logo.dev logo instead.")
         }
+        .listRowBackground(Bow.card)
         Section {
           CategorySelectionField(
             title: "Default Category", selection: $defaultEnvelopeID,
@@ -95,19 +97,23 @@ struct PayeeEditorScreen: View {
         } footer: {
           Text("Bow suggests this envelope when you enter this payee on an expense. You can always choose a different one.")
         }
+        .listRowBackground(Bow.card)
         Section {
           TextField("Exact bank description", text: $exactMatchText)
             .textInputAutocapitalization(.characters)
         } footer: {
           Text("Optional. Match a bank’s full payee description to this payee and its default envelope when importing transactions.")
         }
+        .listRowBackground(Bow.card)
         if let entry, entry.transactionCount == 0 && entry.scheduleCount == 0,
            entry.ruleID != nil {
           Section {
             Button("Delete Payee", role: .destructive) { showingDelete = true }
           }
+          .listRowBackground(Bow.card)
         }
       }
+      .bowListBackground()
       .navigationTitle(entry == nil ? "New Payee" : "Edit Payee")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

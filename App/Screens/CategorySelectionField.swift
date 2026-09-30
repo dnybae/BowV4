@@ -18,15 +18,15 @@ struct CategorySelectionField: View {
       showingSelection = true
     } label: {
       HStack(spacing: 12) {
-        Text(title).foregroundStyle(.primary)
+        Text(title).foregroundStyle(Bow.ink)
         Spacer(minLength: 12)
         Text(selectedName)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(Bow.inkSoft)
           .lineLimit(1)
           .truncationMode(.middle)
         Image(systemName: "chevron.up.chevron.down")
           .font(.caption)
-          .foregroundStyle(.tertiary)
+          .foregroundStyle(Bow.inkFaint)
       }
       .contentShape(Rectangle())
     }
@@ -61,14 +61,14 @@ struct CategoryScopeSelectionField: View {
       showingSelection = true
     } label: {
       HStack(spacing: 12) {
-        Text("Category").foregroundStyle(.primary)
+        Text("Category").foregroundStyle(Bow.ink)
         Spacer(minLength: 12)
         Text(selectedName)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(Bow.inkSoft)
           .lineLimit(1)
         Image(systemName: "chevron.up.chevron.down")
           .font(.caption)
-          .foregroundStyle(.tertiary)
+          .foregroundStyle(Bow.inkFaint)
       }
       .contentShape(Rectangle())
     }
@@ -122,6 +122,7 @@ struct CategorySelectionSheet: View {
                 isSelected: selectedID == nil && !isUncategorizedSelected
               )
             }
+            .listRowBackground(Bow.card)
           }
           if showsUncategorized {
             Button {
@@ -132,6 +133,7 @@ struct CategorySelectionSheet: View {
                 isSelected: isUncategorizedSelected
               )
             }
+            .listRowBackground(Bow.card)
           }
         }
         ForEach(groups.sorted { $0.sortOrder < $1.sortOrder }) { group in
@@ -142,6 +144,7 @@ struct CategorySelectionSheet: View {
                 categoryButton(envelope, snapshot: currentSnapshot)
               }
             }
+            .listRowBackground(Bow.card)
           }
         }
         let ungrouped = matchingEnvelopes(in: nil)
@@ -151,9 +154,10 @@ struct CategorySelectionSheet: View {
               categoryButton(envelope, snapshot: currentSnapshot)
             }
           }
+          .listRowBackground(Bow.card)
         }
       }
-      .listStyle(.insetGrouped)
+      .bowListBackground()
       .searchable(text: $searchText, prompt: "Search categories")
       .navigationTitle("Category")
       .navigationBarTitleDisplayMode(.inline)

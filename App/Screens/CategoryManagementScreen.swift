@@ -65,6 +65,7 @@ struct CategoryManagementScreen: View {
           editor = .newGroup
         }
       }
+      .listRowBackground(Bow.card)
 
       if groups.isEmpty {
         ContentUnavailableView(
@@ -81,7 +82,7 @@ struct CategoryManagementScreen: View {
             HStack {
               Text(group.name).fontWeight(.semibold)
               Spacer()
-              Text("Edit Group").font(.caption).foregroundStyle(.secondary)
+              Text("Edit Group").font(.caption).foregroundStyle(Bow.inkSoft)
             }
           }
           ForEach(activeEnvelopes(in: group)) { envelope in
@@ -90,16 +91,19 @@ struct CategoryManagementScreen: View {
         } header: {
           Text(group.name)
         }
+        .listRowBackground(Bow.card)
       }
 
       if !hiddenEnvelopes.isEmpty {
-        Section("Hidden Envelopes") {
+        Section("Hidden envelopes") {
           ForEach(hiddenEnvelopes) { envelope in
             envelopeRow(envelope)
           }
         }
+        .listRowBackground(Bow.card)
       }
     }
+    .bowListBackground()
     .navigationTitle("Manage Groups & Envelopes")
     .task(id: refreshVersion) {
       let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
@@ -178,13 +182,13 @@ struct CategoryManagementScreen: View {
           Text(envelope.name)
           if let target = envelope.totalMonthlyTargetMinor {
             Text("Target \(BudgetMoney.formatted(target, currencyCode: currencyCode))")
-              .font(.caption).foregroundStyle(.secondary)
+              .font(.caption).foregroundStyle(Bow.inkSoft)
           }
         }
         Spacer()
         Text(snapshot.map { BudgetMoney.formatted($0.available(for: envelope.id), currencyCode: currencyCode) } ?? "…")
           .font(.subheadline)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(Bow.inkSoft)
       }
     }
     .swipeActions {

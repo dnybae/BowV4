@@ -32,16 +32,24 @@ struct ReconciliationScreen: View {
         } footer: {
           Text("Enter the balance shown by your bank on the statement date.")
         }
+        .listRowBackground(Bow.card)
         Section("Difference") {
-          LabeledContent("Cleared balance", value: BudgetMoney.formatted(clearedBalanceMinor, currencyCode: currencyCode))
+          LabeledContent("Cleared balance") {
+            Text(BudgetMoney.formatted(clearedBalanceMinor, currencyCode: currencyCode))
+              .fontDesign(.rounded).monospacedDigit()
+          }
           if let difference {
-            LabeledContent("Difference", value: BudgetMoney.formatted(difference, currencyCode: currencyCode))
-              .foregroundStyle(difference == 0 ? .green : .orange)
+            LabeledContent("Difference") {
+              Text(BudgetMoney.formatted(difference, currencyCode: currencyCode))
+                .fontDesign(.rounded).monospacedDigit()
+            }
+              .foregroundStyle(difference == 0 ? Bow.fundedInk : Bow.needsInk)
           } else {
             Text("Enter a statement balance to compare.")
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
           }
         }
+        .listRowBackground(Bow.card)
         Section {
           if entries.isEmpty {
             ContentUnavailableView("No entries by this date", systemImage: "list.bullet.rectangle")
@@ -57,18 +65,19 @@ struct ReconciliationScreen: View {
               } label: {
                 HStack(spacing: 12) {
                   Image(systemName: selectedIDs.contains(entry.id) ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selectedIDs.contains(entry.id) ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(selectedIDs.contains(entry.id) ? Color.accentColor : Bow.inkSoft)
                     .font(.title3)
                   VStack(alignment: .leading) {
                     Text(payeeNames[entry.id].flatMap { $0.isEmpty ? nil : $0 } ?? "Transfer")
-                      .foregroundStyle(.primary)
+                      .foregroundStyle(Bow.ink)
                     Text(entry.date, style: .date)
                       .font(.caption)
-                      .foregroundStyle(.secondary)
+                      .foregroundStyle(Bow.inkSoft)
                   }
                   Spacer()
                   Text(BudgetMoney.formatted(entry.amountMinor, currencyCode: currencyCode))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Bow.ink)
+                    .fontDesign(.rounded).monospacedDigit()
                 }
                 .contentShape(Rectangle())
               }
@@ -95,7 +104,9 @@ struct ReconciliationScreen: View {
         } footer: {
           Text("Select the transactions that cleared by your statement date. Reconciliation does not add or remove money.")
         }
+        .listRowBackground(Bow.card)
       }
+      .bowListBackground()
       .navigationTitle("Reconcile \(account.name)")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

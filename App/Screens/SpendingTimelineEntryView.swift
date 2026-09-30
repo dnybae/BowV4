@@ -111,14 +111,14 @@ private struct SpendingTimelineRow: View {
       .opacity(isPending ? 0.6 : 1)
       VStack(alignment: .leading, spacing: 3) {
         Text(item.title)
-          .foregroundStyle(isPending ? .secondary : .primary)
+          .foregroundStyle(isPending ? Bow.inkSoft : Bow.ink)
         Text(item.envelopeName.map { "\(item.accountName) · \($0)" } ?? item.accountName)
           .font(.caption)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(Bow.inkSoft)
         if let status = item.status {
           Label(status.title, systemImage: status.systemImage)
             .font(.caption.weight(status.needsAttention ? .medium : .regular))
-            .foregroundStyle(status.needsAttention ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+            .foregroundStyle(status.needsAttention ? AnyShapeStyle(Bow.needsInk) : AnyShapeStyle(Bow.inkSoft))
         } else if item.isMatched {
           Label("Matched", systemImage: "link")
             .font(.caption)
@@ -129,8 +129,9 @@ private struct SpendingTimelineRow: View {
       Text(BudgetMoney.formatted(item.amountMinor, currencyCode: item.currencyCode))
         .fontWeight(.medium)
         .foregroundStyle(isPending
-          ? AnyShapeStyle(.secondary)
-          : item.amountMinor < 0 ? AnyShapeStyle(.primary) : AnyShapeStyle(.tint))
+          ? AnyShapeStyle(Bow.inkSoft)
+          : item.amountMinor < 0 ? AnyShapeStyle(Bow.ink) : AnyShapeStyle(.tint))
+        .fontDesign(.rounded).monospacedDigit()
     }
     .padding(.vertical, 4)
     .contentShape(Rectangle())

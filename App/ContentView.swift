@@ -32,6 +32,7 @@ struct ContentView: View {
         BudgetHomeView(isDemoMode: false)
       }
     }
+    .bowAppTint()
     .task(id: isDemoMode) {
       if isDemoMode && demoContainer == nil { prepareDemo() }
     }
@@ -267,7 +268,7 @@ private struct BudgetHomeView: View {
           }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
-        .tint(Color.accentColor)
+        .bowAppTint()
         .sheet(isPresented: $showingSettings) {
           SettingsScreen()
         }

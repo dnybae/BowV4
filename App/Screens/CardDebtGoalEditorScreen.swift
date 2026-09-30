@@ -26,7 +26,10 @@ struct CardDebtGoalEditorScreen: View {
     NavigationStack {
       Form {
         Section {
-          LabeledContent("Debt today", value: BudgetMoney.formatted(currentDebtMinor, currencyCode: currencyCode))
+          LabeledContent("Debt today") {
+            Text(BudgetMoney.formatted(currentDebtMinor, currencyCode: currencyCode))
+              .fontDesign(.rounded).monospacedDigit()
+          }
           CurrencyAmountField("Monthly funding target", minor: $monthlyMinor, currencyCode: currencyCode)
           Toggle("Set payoff date", isOn: $hasDate)
           if hasDate {
@@ -35,6 +38,7 @@ struct CardDebtGoalEditorScreen: View {
         } footer: {
           Text("A target guides your plan. It does not move money into the card payment envelope.")
         }
+        .listRowBackground(Bow.card)
         if card.debtGoalStartMinor != nil {
           Section {
             Button("Start a New Payoff Goal", systemImage: "arrow.counterclockwise") {
@@ -45,8 +49,10 @@ struct CardDebtGoalEditorScreen: View {
               ? "Saving will restart progress from today’s debt balance."
               : "Restarts progress from today’s debt balance when you save.")
           }
+          .listRowBackground(Bow.card)
         }
       }
+      .bowListBackground()
       .navigationTitle("Payoff Goal")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

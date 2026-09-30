@@ -39,16 +39,17 @@ struct CardPaymentDetailScreen: View {
     List {
       Section {
         VStack(alignment: .leading, spacing: 10) {
-          Text("Payment Available").font(.subheadline).foregroundStyle(.secondary)
+          Text("Payment Available").font(.subheadline).foregroundStyle(Bow.inkSoft)
           Text(BudgetMoney.formatted(reserved, currencyCode: currencyCode))
             .font(.system(.largeTitle, design: .rounded, weight: .semibold))
+            .fontDesign(.rounded).monospacedDigit()
           Text(snapshot.month.formatted(.dateTime.month(.wide).year()))
-            .font(.footnote).foregroundStyle(.secondary)
+            .font(.footnote).foregroundStyle(Bow.inkSoft)
           Text(owed > reserved
             ? (carriedDebt > 0 ? "Carrying debt from a previous month. Fund \(BudgetMoney.formatted(owed - reserved, currencyCode: currencyCode)) to pay in full." : "Current credit spending needs \(BudgetMoney.formatted(owed - reserved, currencyCode: currencyCode)) of funding.")
             : "Payment money covers the full card balance.")
             .font(.footnote)
-            .foregroundStyle(owed > reserved ? Color.orange : Color.secondary)
+            .foregroundStyle(owed > reserved ? Bow.needsInk : Bow.inkSoft)
           Button("Move Money", systemImage: "arrow.left.arrow.right") {
             if snapshot.readyToAssignMinor > 0 {
               onMoveMoney(.readyToAssign, .cardPayment(card.id))
@@ -58,7 +59,7 @@ struct CardPaymentDetailScreen: View {
               onMoveMoney(.cardPayment(card.id), .readyToAssign)
             }
           }
-          .buttonStyle(.borderedProminent)
+          .bowPrimaryButton()
           .disabled(isPastMonth || snapshot.readyToAssignMinor <= 0 && reserved <= 0
             && !envelopes.contains { snapshot.available(for: $0.id) > 0 })
           .padding(.top, 6)
@@ -66,9 +67,13 @@ struct CardPaymentDetailScreen: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 8)
       }
+      .listRowBackground(Bow.card)
 
-      Section("Debt Progress") {
-        LabeledContent("Amount owed", value: BudgetMoney.formatted(owed, currencyCode: currencyCode))
+      Section("Debt progress") {
+        LabeledContent("Amount owed") {
+          Text(BudgetMoney.formatted(owed, currencyCode: currencyCode))
+            .fontDesign(.rounded).monospacedDigit()
+        }
         ProgressView(value: debtProgress) {
           Text("Debt paid down")
         }
@@ -78,14 +83,17 @@ struct CardPaymentDetailScreen: View {
             ? "Debt is \(BudgetMoney.formatted(owed - start, currencyCode: currencyCode)) above the goal’s starting balance."
             : "\(BudgetMoney.formatted(start - owed, currencyCode: currencyCode)) paid down from \(BudgetMoney.formatted(start, currencyCode: currencyCode))")
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
         } else {
           Text("Set a payoff goal to track progress from today’s balance.")
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
         }
         if let monthly = card.debtMonthlyTargetMinor {
-          LabeledContent("Fund each month", value: BudgetMoney.formatted(monthly, currencyCode: currencyCode))
+          LabeledContent("Fund each month") {
+            Text(BudgetMoney.formatted(monthly, currencyCode: currencyCode))
+              .fontDesign(.rounded).monospacedDigit()
+          }
         }
         if let date = card.debtGoalDate {
           LabeledContent("Target date", value: date.formatted(date: .abbreviated, time: .omitted))
@@ -93,28 +101,31 @@ struct CardPaymentDetailScreen: View {
         Button("Edit Payoff Goal", systemImage: "pencil") { showingGoalEditor = true }
           .disabled(isPastMonth)
       }
+      .listRowBackground(Bow.card)
 
-      Section("Recurring Transactions") {
+      Section("Recurring transactions") {
         if cardSchedules.isEmpty {
-          Text("No recurring transactions").foregroundStyle(.secondary)
+          Text("No recurring transactions").foregroundStyle(Bow.inkSoft)
         } else {
           ForEach(cardSchedules) { schedule in
             Button { onEditSchedule(schedule.id) } label: {
               VStack(alignment: .leading, spacing: 3) {
                 Text(schedule.payee)
                 Text("\(schedule.frequency.title) · \(BudgetMoney.formatted(schedule.amountMinor, currencyCode: currencyCode))")
-                  .font(.caption).foregroundStyle(.secondary)
+                  .font(.caption).foregroundStyle(Bow.inkSoft)
               }
             }
             .disabled(isPastMonth)
           }
         }
       }
+      .listRowBackground(Bow.card)
 
       if feed.items.isEmpty && !feed.isLoading {
-        Section("Card Activity") {
-          Text("No transactions yet").foregroundStyle(.secondary)
+        Section("Card activity") {
+          Text("No transactions yet").foregroundStyle(Bow.inkSoft)
         }
+        .listRowBackground(Bow.card)
       } else {
         ForEach(TransactionDateGroup.make(feed.items)) { group in
           Section(group.title) {
@@ -128,6 +139,7 @@ struct CardPaymentDetailScreen: View {
               .disabled(isPastMonth)
             }
           }
+          .listRowBackground(Bow.card)
         }
         if feed.hasMore {
           Section {
@@ -135,6 +147,7 @@ struct CardPaymentDetailScreen: View {
               .frame(maxWidth: .infinity)
               .onAppear { Task { await feed.loadNext() } }
           }
+          .listRowBackground(Bow.card)
         }
       }
 
@@ -142,16 +155,18 @@ struct CardPaymentDetailScreen: View {
         $0.sourceCardID == card.id || $0.targetCardID == card.id
       }.sorted { $0.date > $1.date }
       if !cardAllocations.isEmpty {
-        Section("Payment Money Moves") {
+        Section("Payment money moves") {
           ForEach(cardAllocations) { allocation in
-            LabeledContent(
-              allocation.targetCardID == card.id ? "Moved in" : "Moved out",
-              value: BudgetMoney.formatted(allocation.amountMinor, currencyCode: currencyCode)
-            )
+            LabeledContent(allocation.targetCardID == card.id ? "Moved in" : "Moved out") {
+              Text(BudgetMoney.formatted(allocation.amountMinor, currencyCode: currencyCode))
+                .fontDesign(.rounded).monospacedDigit()
+            }
           }
         }
+        .listRowBackground(Bow.card)
       }
     }
+    .bowListBackground()
     .navigationTitle(card.name + " Payment")
     .task(id: snapshot.month) {
       let nextMonth = Calendar.current.date(byAdding: .month, value: 1, to: snapshot.month) ?? .distantFuture

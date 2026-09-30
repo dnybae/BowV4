@@ -25,8 +25,9 @@ struct SimpleFINLinkPickerScreen: View {
       List {
         Section {
           Text("Choose the bank account that belongs to \(account.name). New bank activity will sync here. Transactions already in Bow stay where they are.")
-            .font(.subheadline).foregroundStyle(.secondary)
+            .font(.subheadline).foregroundStyle(Bow.inkSoft)
         }
+        .listRowBackground(Bow.card)
         if choices.isEmpty {
           ContentUnavailableView(
             "No Bank Accounts Available", systemImage: "link",
@@ -40,10 +41,10 @@ struct SimpleFINLinkPickerScreen: View {
               } label: {
                 HStack {
                   VStack(alignment: .leading, spacing: 3) {
-                    Text(link.name).foregroundStyle(.primary)
+                    Text(link.name).foregroundStyle(Bow.ink)
                     if let balance = link.reportedBalance {
                       Text("Bank balance: \(BudgetMoney.formatted(bankAmount: balance, currencyCode: link.currencyCode))")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(Bow.inkSoft)
                     }
                   }
                   Spacer()
@@ -59,8 +60,10 @@ struct SimpleFINLinkPickerScreen: View {
               .accessibilityAddTraits(link.id == currentLink?.id ? .isSelected : [])
             }
           }
+          .listRowBackground(Bow.card)
         }
       }
+      .bowListBackground()
       .navigationTitle("Linked Bank Account")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

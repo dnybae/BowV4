@@ -40,6 +40,7 @@ struct EnvelopeEditorScreen: View {
             }
           }
         }
+        .listRowBackground(Bow.card)
         Section {
           CurrencyAmountField("Monthly Target", minor: $targetAmountMinor, currencyCode: currencyCode)
           Toggle("Set target date", isOn: $hasTargetDate)
@@ -53,7 +54,9 @@ struct EnvelopeEditorScreen: View {
             Text("Optional planning goal. A target does not assign money to this envelope.")
           }
         }
+        .listRowBackground(Bow.card)
       }
+      .bowListBackground()
       .navigationTitle(envelope == nil ? "Add Envelope" : "Edit Envelope")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

@@ -67,19 +67,26 @@ struct EnvelopeDetailScreen: View {
         VStack(alignment: .leading, spacing: 8) {
           Text("Available")
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
           Text(BudgetMoney.formatted(snapshot.available(for: envelope.id), currencyCode: currencyCode))
             .font(.system(.largeTitle, design: .rounded, weight: .semibold))
-            .foregroundStyle(snapshot.available(for: envelope.id) < 0 ? Color.red : Color.primary)
+            .foregroundStyle(snapshot.available(for: envelope.id) < 0 ? Bow.overInk : Bow.ink)
+            .fontDesign(.rounded).monospacedDigit()
           Text(snapshot.month.formatted(.dateTime.month(.wide).year()))
-            .font(.footnote).foregroundStyle(.secondary)
+            .font(.footnote).foregroundStyle(Bow.inkSoft)
           HStack(spacing: 16) {
-            LabeledContent("Assigned", value: BudgetMoney.formatted(
-              snapshot.assigned[envelope.id, default: 0], currencyCode: currencyCode
-            ))
-            LabeledContent("Activity", value: BudgetMoney.formatted(
-              snapshot.activity[envelope.id, default: 0], currencyCode: currencyCode
-            ))
+            LabeledContent("Assigned") {
+              Text(BudgetMoney.formatted(
+                snapshot.assigned[envelope.id, default: 0], currencyCode: currencyCode
+              ))
+                .fontDesign(.rounded).monospacedDigit()
+            }
+            LabeledContent("Activity") {
+              Text(BudgetMoney.formatted(
+                snapshot.activity[envelope.id, default: 0], currencyCode: currencyCode
+              ))
+                .fontDesign(.rounded).monospacedDigit()
+            }
           }
           .font(.caption)
           Button("Move Money", systemImage: "arrow.left.arrow.right") {
@@ -98,7 +105,7 @@ struct EnvelopeDetailScreen: View {
               onMoveMoney(target, .readyToAssign)
             }
           }
-          .buttonStyle(.borderedProminent)
+          .bowPrimaryButton()
           .disabled(isPastMonth || snapshot.readyToAssignMinor <= 0
             && snapshot.available(for: envelope.id) <= 0
             && !envelopes.contains { $0.id != envelope.id && snapshot.available(for: $0.id) > 0 }
@@ -108,13 +115,20 @@ struct EnvelopeDetailScreen: View {
         }
         .padding(.vertical, 8)
       }
+      .listRowBackground(Bow.card)
 
       Section {
         if let totalTarget {
-          LabeledContent("Fund this month", value: BudgetMoney.formatted(totalTarget, currencyCode: currencyCode))
+          LabeledContent("Fund this month") {
+            Text(BudgetMoney.formatted(totalTarget, currencyCode: currencyCode))
+              .fontDesign(.rounded).monospacedDigit()
+          }
             .fontWeight(.semibold)
           if !scheduledContributions.isEmpty {
-            LabeledContent("Your target", value: BudgetMoney.formatted(envelope.targetMinor ?? 0, currencyCode: currencyCode))
+            LabeledContent("Your target") {
+              Text(BudgetMoney.formatted(envelope.targetMinor ?? 0, currencyCode: currencyCode))
+                .fontDesign(.rounded).monospacedDigit()
+            }
             ForEach(scheduledContributions) { contribution in
               ScheduledTargetRow(contribution: contribution, currencyCode: currencyCode)
             }
@@ -127,13 +141,16 @@ struct EnvelopeDetailScreen: View {
             ? "Monthly target met"
             : "\(BudgetMoney.formatted(remaining, currencyCode: currencyCode)) left to assign this month")
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
         } else {
           Text("No funding target set")
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
         }
         if let suggestedTarget {
-          LabeledContent("Suggested from spending", value: BudgetMoney.formatted(suggestedTarget, currencyCode: currencyCode))
+          LabeledContent("Suggested from spending") {
+              Text(BudgetMoney.formatted(suggestedTarget, currencyCode: currencyCode))
+                .fontDesign(.rounded).monospacedDigit()
+            }
           if envelope.targetMinor != suggestedTarget && !isPastMonth {
             Button("Use Suggested Target", systemImage: "target") {
               envelope.targetMinor = suggestedTarget
@@ -144,7 +161,7 @@ struct EnvelopeDetailScreen: View {
         Button("Edit Target", systemImage: "pencil", action: onEdit)
           .disabled(isPastMonth)
       } header: {
-        Text("Funding Target")
+        Text("Funding target")
       } footer: {
         if !scheduledContributions.isEmpty {
           Text("Scheduled transactions add \(BudgetMoney.formatted(scheduledTotal, currencyCode: currencyCode)) to this month’s target, on top of your own.")
@@ -152,11 +169,12 @@ struct EnvelopeDetailScreen: View {
           Text("Suggestion is average monthly spending across up to six completed months.")
         }
       }
+      .listRowBackground(Bow.card)
 
-      Section("Recurring Transactions") {
+      Section("Recurring transactions") {
         if envelopeSchedules.isEmpty {
           Text("No recurring transactions")
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
         } else {
           ForEach(envelopeSchedules) { schedule in
             Button { onEditSchedule(schedule.id) } label: {
@@ -164,19 +182,21 @@ struct EnvelopeDetailScreen: View {
                 Text(schedule.payee)
                 Text("\(schedule.frequency.title) · \(BudgetMoney.formatted(schedule.amountMinor, currencyCode: currencyCode))")
                   .font(.caption)
-                  .foregroundStyle(.secondary)
+                  .foregroundStyle(Bow.inkSoft)
               }
             }
             .disabled(isPastMonth)
           }
         }
       }
+      .listRowBackground(Bow.card)
 
       if feed.items.isEmpty && !feed.isLoading {
         Section("Transactions") {
           Text("No transactions yet")
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Bow.inkSoft)
         }
+        .listRowBackground(Bow.card)
       } else {
         ForEach(TransactionDateGroup.make(feed.items)) { group in
           Section(group.title) {
@@ -194,6 +214,7 @@ struct EnvelopeDetailScreen: View {
               .disabled(isPastMonth)
             }
           }
+          .listRowBackground(Bow.card)
         }
         if feed.hasMore {
           Section {
@@ -201,22 +222,24 @@ struct EnvelopeDetailScreen: View {
               .frame(maxWidth: .infinity)
               .onAppear { Task { await feed.loadNext() } }
           }
+          .listRowBackground(Bow.card)
         }
       }
 
       if !envelopeAllocations.isEmpty {
-        Section("Money Moves") {
+        Section("Money moves") {
           ForEach(envelopeAllocations) { allocation in
             VStack(alignment: .leading, spacing: 3) {
-              LabeledContent(
-                allocation.targetEnvelopeID == envelope.id ? "Moved in" : "Moved out",
-                value: BudgetMoney.formatted(allocation.amountMinor, currencyCode: currencyCode)
-              )
+              LabeledContent(allocation.targetEnvelopeID == envelope.id ? "Moved in" : "Moved out") {
+                Text(BudgetMoney.formatted(allocation.amountMinor, currencyCode: currencyCode))
+                  .fontDesign(.rounded).monospacedDigit()
+              }
               Text(allocation.date.formatted(date: .abbreviated, time: .omitted))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(Bow.inkSoft)
             }
           }
         }
+        .listRowBackground(Bow.card)
       }
 
       if !isPastMonth { Section {
@@ -235,8 +258,10 @@ struct EnvelopeDetailScreen: View {
         if hasHistory {
           Text("Hiding keeps this envelope’s balance and history. You can unhide it in Budget Settings.")
         }
-      } }
+      }
+      .listRowBackground(Bow.card) }
     }
+    .bowListBackground()
     .navigationTitle(envelope.name)
     .task(id: envelope.id) {
       let nextMonth = Calendar.current.date(byAdding: .month, value: 1, to: snapshot.month) ?? .distantFuture

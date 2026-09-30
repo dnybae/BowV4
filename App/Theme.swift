@@ -282,6 +282,7 @@ extension View {
     /// Main action: system Liquid Glass prominent button, tinted ink. One per screen.
     func bowPrimaryButton() -> some View {
         self.buttonStyle(.glassProminent).tint(Bow.button)
+            .foregroundStyle(Bow.onButton)
             .buttonBorderShape(.capsule).controlSize(.large)
     }
     /// Secondary action: system Liquid Glass button.

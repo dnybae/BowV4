@@ -46,15 +46,16 @@ struct MoneyMoveScreen: View {
           VStack(alignment: .leading, spacing: 7) {
             Text(month.formatted(.dateTime.month(.wide).year()) + " Budget")
               .font(.title2.weight(.semibold))
-              .foregroundStyle(.primary)
+              .foregroundStyle(Bow.ink)
             Text("This move is recorded in this month. Remaining balances carry into later months.")
               .font(.subheadline)
-              .foregroundStyle(.secondary)
+              .foregroundStyle(Bow.inkSoft)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
           .padding(.vertical, 6)
           .accessibilityElement(children: .combine)
         }
+        .listRowBackground(Bow.card)
 
         if let snapshot { Section {
           BudgetBucketSelectionField(
@@ -62,7 +63,10 @@ struct MoneyMoveScreen: View {
             envelopes: currentEnvelopes, cardAccounts: cardAccounts,
             snapshot: snapshot, currencyCode: currencyCode
           )
-          LabeledContent("Available", value: BudgetMoney.formatted(sourceAvailable, currencyCode: currencyCode))
+          LabeledContent("Available") {
+            Text(BudgetMoney.formatted(sourceAvailable, currencyCode: currencyCode))
+              .fontDesign(.rounded).monospacedDigit()
+          }
           BudgetBucketSelectionField(
             title: "To", selection: $target,
             envelopes: currentEnvelopes, cardAccounts: cardAccounts,
@@ -75,11 +79,12 @@ struct MoneyMoveScreen: View {
           }
           .disabled(source == target)
         } header: {
-          Text("Move Between")
+          Text("Move between")
         } footer: {
           Text("Choose the money’s current location and where it should go.")
         } } else {
           Section { ProgressView("Calculating balances…") }
+          .listRowBackground(Bow.card)
         }
 
         Section("Amount") {
@@ -94,20 +99,29 @@ struct MoneyMoveScreen: View {
           if let enteredMinor, enteredMinor > sourceAvailable {
             Text("Only \(BudgetMoney.formatted(max(0, sourceAvailable), currencyCode: currencyCode)) is available to move.")
               .font(.footnote)
-              .foregroundStyle(.red)
+              .foregroundStyle(Bow.overInk)
           }
         }
+        .listRowBackground(Bow.card)
 
-        Section("After Moving") {
-          LabeledContent(bucketName(source), value: BudgetMoney.formatted(
-            sourceAvailable - (enteredMinor ?? 0), currencyCode: currencyCode
-          ))
-          LabeledContent(bucketName(target), value: BudgetMoney.formatted(
-            balance(of: target) + (enteredMinor ?? 0), currencyCode: currencyCode
-          ))
+        Section("After moving") {
+          LabeledContent(bucketName(source)) {
+            Text(BudgetMoney.formatted(
+              sourceAvailable - (enteredMinor ?? 0), currencyCode: currencyCode
+            ))
+              .fontDesign(.rounded).monospacedDigit()
+          }
+          LabeledContent(bucketName(target)) {
+            Text(BudgetMoney.formatted(
+              balance(of: target) + (enteredMinor ?? 0), currencyCode: currencyCode
+            ))
+              .fontDesign(.rounded).monospacedDigit()
+          }
         }
+        .listRowBackground(Bow.card)
 
       }
+      .bowListBackground()
       .navigationTitle("Move Money")
       .task(id: refreshVersion) {
         let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
@@ -128,7 +142,7 @@ struct MoneyMoveScreen: View {
             .fontWeight(.semibold)
             .frame(maxWidth: .infinity, minHeight: 44)
         }
-        .buttonStyle(.borderedProminent)
+        .bowPrimaryButton()
         .disabled(!isValid)
         .padding(.horizontal, 20)
         .padding(.vertical, 8)

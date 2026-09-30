@@ -25,7 +25,7 @@ struct SettingsScreen: View {
   var body: some View {
     NavigationStack {
       Form {
-        Section("Budget Settings") {
+        Section("Budget settings") {
           Button {
             budgetNameDraft = profiles.first?.name ?? "My Budget"
             showingRename = true
@@ -34,7 +34,7 @@ struct SettingsScreen: View {
               Label("Budget Name", systemImage: "pencil")
               Spacer(minLength: 8)
               Text(profiles.first?.name ?? "My Budget")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Bow.inkSoft)
                 .lineLimit(1)
             }
             .contentShape(Rectangle())
@@ -56,8 +56,9 @@ struct SettingsScreen: View {
             Label("Payee Rules", systemImage: "person.text.rectangle")
           }
         }
+        .listRowBackground(Bow.card)
 
-        Section("Bank Connections & Import") {
+        Section("Bank connections & import") {
           NavigationLink {
             SimpleFINScreen()
           } label: {
@@ -70,6 +71,7 @@ struct SettingsScreen: View {
             showingYNABImport = true
           }
         }
+        .listRowBackground(Bow.card)
 
         Section("More") {
           NavigationLink {
@@ -82,6 +84,7 @@ struct SettingsScreen: View {
             Label("Home Inventory", systemImage: "shippingbox")
           }
         }
+        .listRowBackground(Bow.card)
 
         Section("Preferences") {
           Picker(selection: $appearanceRaw) {
@@ -112,8 +115,9 @@ struct SettingsScreen: View {
             Label("Notifications", systemImage: "bell")
           }
         }
+        .listRowBackground(Bow.card)
 
-        Section("Privacy & Legal") {
+        Section("Privacy & legal") {
           LabeledContent {
             Text(isDemoMode ? "Temporary demo" : "On this iPhone")
           } label: {
@@ -138,6 +142,7 @@ struct SettingsScreen: View {
             Label("Terms of Use", systemImage: "doc.text")
           }
         }
+        .listRowBackground(Bow.card)
 
         Section("Support") {
           Button("Leave a Review", systemImage: "star.bubble") {
@@ -154,10 +159,12 @@ struct SettingsScreen: View {
             ComingSoonRowLabel(title: "Feedback", systemImage: "bubble.left.and.text.bubble.right")
           }
         }
+        .listRowBackground(Bow.card)
 
         Section("About") {
           LabeledContent("Version", value: version)
         }
+        .listRowBackground(Bow.card)
 
         Section {
           HStack(spacing: 12) {
@@ -183,7 +190,9 @@ struct SettingsScreen: View {
         } footer: {
           Text("Sample data stays separate from your budget.")
         }
+        .listRowBackground(Bow.card)
       }
+      .bowListBackground()
       .navigationTitle("Settings")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

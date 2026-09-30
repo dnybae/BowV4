@@ -13,7 +13,7 @@ struct SettingsPlaceholderScreen: View {
       Text(description)
     } actions: {
       if isComingSoon {
-        Text("Coming Soon")
+        Text("Coming soon")
           .font(.subheadline.weight(.semibold))
           .foregroundStyle(.tint)
           .padding(.horizontal, 12)

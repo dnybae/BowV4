@@ -7,6 +7,7 @@ struct ComingSoonRowLabel: View {
   var body: some View {
     HStack {
       Label(title, systemImage: systemImage)
+        .labelStyle(.bowTile)
       Spacer(minLength: 8)
       Text("Soon")
         .font(.subheadline)

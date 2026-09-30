@@ -25,13 +25,13 @@ struct SettingsScreen: View {
   var body: some View {
     NavigationStack {
       Form {
-        Section("Budget settings") {
+        Section("Budget") {
           Button {
             budgetNameDraft = profiles.first?.name ?? "My Budget"
             showingRename = true
           } label: {
             HStack {
-              Label("Budget Name", systemImage: "pencil")
+              Label("Name", systemImage: "pencil")
               Spacer(minLength: 8)
               Text(profiles.first?.name ?? "My Budget")
                 .foregroundStyle(Bow.inkSoft)
@@ -39,35 +39,35 @@ struct SettingsScreen: View {
             }
             .contentShape(Rectangle())
           }
-          .accessibilityLabel("Rename Budget, current name \(profiles.first?.name ?? "My Budget")")
+          .accessibilityLabel("Rename budget, current name \(profiles.first?.name ?? "My Budget")")
           NavigationLink {
             CategoryManagementScreen()
           } label: {
-            Label("Manage Groups & Envelopes", systemImage: "square.grid.2x2")
+            Label("Groups and envelopes", systemImage: "square.grid.2x2")
           }
           NavigationLink {
             ManagePayeesScreen()
           } label: {
-            Label("Manage Payees", systemImage: "person.crop.circle")
+            Label("Payees", systemImage: "person.crop.circle")
           }
           NavigationLink {
             PayeeRulesScreen()
           } label: {
-            Label("Payee Rules", systemImage: "person.text.rectangle")
+            Label("Payee rules", systemImage: "line.3.horizontal.decrease")
           }
         }
         .listRowBackground(Bow.card)
 
-        Section("Bank connections & import") {
+        Section("Bank and import") {
           NavigationLink {
             SimpleFINScreen()
           } label: {
-            Label("SimpleFIN Bank Sync", systemImage: "arrow.clockwise")
+            Label("SimpleFIN bank sync", systemImage: "link")
           }
-          Button("Import Bank File", systemImage: "doc.text") {
+          Button("Import a bank file", systemImage: "doc.text") {
             showingBankImport = true
           }
-          Button("Import YNAB Categories", systemImage: "square.and.arrow.down") {
+          Button("Import from YNAB", systemImage: "arrow.down.to.line") {
             showingYNABImport = true
           }
         }
@@ -76,12 +76,12 @@ struct SettingsScreen: View {
         Section("More") {
           NavigationLink {
             SettingsPlaceholderScreen(
-              title: "Home Inventory",
+              title: "Home inventory",
               description: "A place to track personal items and home supplies is coming soon.",
               systemImage: "shippingbox"
             )
           } label: {
-            Label("Home Inventory", systemImage: "shippingbox")
+            Label("Home inventory", systemImage: "shippingbox")
           }
         }
         .listRowBackground(Bow.card)
@@ -92,18 +92,21 @@ struct SettingsScreen: View {
               Text(appearance.title).tag(appearance.rawValue)
             }
           } label: {
-            Label("Appearance", systemImage: "circle.lefthalf.filled")
+            HStack(spacing: Bow.Space.s3) {
+              BowTileIcon(systemImage: "circle.lefthalf.filled")
+              Text("Appearance")
+            }
           }
           .pickerStyle(.menu)
           NavigationLink {
             SettingsPlaceholderScreen(
-              title: "App Icon",
+              title: "App icon",
               description: "Choose from alternate Bow app icons.",
               systemImage: "app.badge",
               isComingSoon: true
             )
           } label: {
-            ComingSoonRowLabel(title: "App Icon", systemImage: "app.badge")
+            ComingSoonRowLabel(title: "App icon", systemImage: "app.badge")
           }
           NavigationLink {
             SettingsPlaceholderScreen(
@@ -125,27 +128,27 @@ struct SettingsScreen: View {
           }
           NavigationLink {
             SettingsPlaceholderScreen(
-              title: "Privacy Policy",
+              title: "Privacy policy",
               description: "The privacy policy has not been published in the app yet.",
               systemImage: "hand.raised"
             )
           } label: {
-            Label("Privacy Policy", systemImage: "hand.raised")
+            Label("Privacy policy", systemImage: "hand.raised")
           }
           NavigationLink {
             SettingsPlaceholderScreen(
-              title: "Terms of Use",
+              title: "Terms of use",
               description: "The terms of use have not been published in the app yet.",
               systemImage: "doc.text"
             )
           } label: {
-            Label("Terms of Use", systemImage: "doc.text")
+            Label("Terms of use", systemImage: "doc.text")
           }
         }
         .listRowBackground(Bow.card)
 
         Section("Support") {
-          Button("Leave a Review", systemImage: "star.bubble") {
+          Button("Leave a review", systemImage: "star.bubble") {
             openURL(AppStoreLink.writeReview)
           }
           NavigationLink {
@@ -168,7 +171,7 @@ struct SettingsScreen: View {
 
         Section {
           HStack(spacing: 12) {
-            Toggle("Demo Mode", systemImage: "play.rectangle", isOn: $isDemoMode)
+            Toggle("Demo mode", systemImage: "play.rectangle", isOn: $isDemoMode)
             if isDemoMode {
               Menu {
                 Picker("Situation", selection: $demoScenarioRaw) {
@@ -176,7 +179,7 @@ struct SettingsScreen: View {
                     Text(scenario.title).tag(scenario.rawValue)
                   }
                 }
-                Button("Reset Demo Data", systemImage: "arrow.counterclockwise", role: .destructive) {
+                Button("Reset demo data", systemImage: "arrow.counterclockwise", role: .destructive) {
                   showingResetDemo = true
                 }
               } label: {
@@ -184,7 +187,7 @@ struct SettingsScreen: View {
                   .frame(minWidth: 32, minHeight: 44)
                   .contentShape(Rectangle())
               }
-              .accessibilityLabel("Demo Options")
+              .accessibilityLabel("Demo options")
             }
           }
         } footer: {
@@ -192,6 +195,7 @@ struct SettingsScreen: View {
         }
         .listRowBackground(Bow.card)
       }
+      .labelStyle(.bowTile)
       .bowListBackground()
       .navigationTitle("Settings")
       .navigationBarTitleDisplayMode(.inline)

@@ -34,40 +34,34 @@ struct SimpleFINScreen: View {
     Form {
       if let connection {
         Section {
-          VStack(alignment: .leading, spacing: Bow.Space.s4) {
-            HStack(spacing: Bow.Space.s3) {
-              Image(systemName: needsAttention ? "exclamationmark.triangle" : "link")
-                .bowScaledIcon(frame: 44, glyph: 18, weight: .medium)
-                .foregroundStyle(needsAttention ? Bow.needsInk : Bow.fundedInk)
-                .background(needsAttention ? Bow.needsTint : Bow.fundedTint, in: Circle())
-                .accessibilityHidden(true)
-              VStack(alignment: .leading, spacing: 2) {
-                Text(connectionStatus == "Connected" ? "SimpleFIN connected" : connectionStatus)
-                  .font(.bowHeadline)
-                  .foregroundStyle(Bow.ink)
-                if let date = connection.lastSuccessfulAt {
-                  Text("Last synced \(date.formatted(date: .abbreviated, time: .shortened))")
-                    .font(.bowSubhead)
-                    .foregroundStyle(Bow.inkSoft)
-                }
-              }
+          VStack(spacing: Bow.Space.s4) {
+            BowIdentityHeader(
+              name: "SimpleFIN",
+              context: connection.lastSuccessfulAt.map {
+                "Last synced \($0.formatted(.dateTime.month(.abbreviated).day().hour().minute()))"
+              } ?? connectionStatus,
+              pill: needsAttention ? StatusPill(text: "Sync needs attention", state: .needs)
+                : isDemoMode ? StatusPill(text: "Sample connection", state: .empty) : nil
+            ) {
+              BowGlossyTile(systemImage: needsAttention ? "exclamationmark.triangle" : "link")
             }
-            .accessibilityElement(children: .combine)
             if !isDemoMode {
-              Button {
+              Button("Sync now") {
                 Task { await sync() }
-              } label: {
-                Text("Sync now")
-                  .fontWeight(.semibold)
-                  .frame(maxWidth: .infinity)
               }
+              .fontWeight(.semibold)
               .bowSecondaryButton()
               .disabled(coordinator.isSyncing)
             }
           }
-          .padding(.vertical, Bow.Space.s2)
-          if !isDemoMode {
-            Toggle("Automatic sync", isOn: Binding(
+          .frame(maxWidth: .infinity)
+          .listRowBackground(Color.clear)
+          .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: Bow.Space.s2, trailing: 0))
+        }
+
+        if !isDemoMode {
+          Section {
+            Toggle(isOn: Binding(
               get: { connection.automaticSync },
               set: { enabled in
                 let previous = connection.automaticSync
@@ -80,14 +74,19 @@ struct SimpleFINScreen: View {
                   message = error.localizedDescription
                 }
               }
-            ))
+            )) {
+              Label("Automatic sync", systemImage: "arrow.triangle.2.circlepath").labelStyle(.bowTile)
+            }
+          } footer: {
+            Text("Bow checks while you use the app and requests background refresh when iOS allows it. Bank data may update about once a day.")
           }
-        } footer: {
-          Text(isDemoMode
-            ? "Sample bank data never contacts a real bank. Try its transaction examples in Spending."
-            : "Bow checks while you use the app and requests background refresh when iOS allows it. Bank data may update about once a day.")
+          .listRowBackground(Bow.card)
+        } else {
+          Section {
+          } footer: {
+            Text("Sample bank data never contacts a real bank. Try its transaction examples in Spending.")
+          }
         }
-        .listRowBackground(Bow.card)
 
         if let lastMessage = connection.lastMessage, !lastMessage.isEmpty {
           Section("Connection message") {
@@ -103,37 +102,32 @@ struct SimpleFINScreen: View {
           }
           ForEach(linkedAccounts) { link in
             let account = accounts.first { $0.id == link.localAccountID }
-            HStack(spacing: Bow.Space.s3) {
-              Image(systemName: account?.kind.systemImage ?? "building.columns")
-                .bowScaledIcon(frame: 36, glyph: 15, weight: .semibold)
-                .foregroundStyle(Bow.bowInk)
-                .background(Bow.bowTint, in: Circle())
-                .accessibilityHidden(true)
+            Label {
               VStack(alignment: .leading, spacing: 2) {
                 Text(account?.name ?? "Bow account")
-                  .font(.bowBody)
                   .foregroundStyle(Bow.ink)
                 Text(link.name)
-                  .font(.bowFootnote).foregroundStyle(Bow.inkSoft)
+                  .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
                 if let reportedAt = link.reportedAt {
-                  Text("Bank data as of \(reportedAt.formatted(date: .abbreviated, time: .shortened))")
-                    .font(.bowFootnote).foregroundStyle(Bow.inkSoft)
+                  Text("Bank data as of \(reportedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()))")
+                    .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
                 }
               }
-              Spacer(minLength: Bow.Space.s2)
-              Image(systemName: "checkmark")
-                .font(.body.weight(.semibold))
-                .foregroundStyle(Bow.fundedInk)
-                .accessibilityLabel("Syncing")
+            } icon: {
+              Image(systemName: account?.kind.systemImage ?? "building.columns")
             }
+            .labelStyle(.bowTile)
             .padding(.vertical, Bow.Space.s1)
             .accessibilityElement(children: .combine)
+            .accessibilityValue("Syncing")
           }
           if availableCount > 0 {
             NavigationLink {
               SimpleFINAccountSetupScreen(isDemoMode: isDemoMode)
             } label: {
               Label("Add \(availableCount) found at your bank", systemImage: "plus")
+                .labelStyle(.bowTile)
+                .foregroundStyle(Bow.bowInk)
             }
           }
         } header: {
@@ -171,8 +165,9 @@ struct SimpleFINScreen: View {
         .listRowBackground(Bow.card)
       }
     }
-    .bowListBackground()
+    .bowSkyList(mood: needsAttention ? .review : .dawn, height: 460)
     .navigationTitle("Bank sync")
+    .navigationBarTitleDisplayMode(.inline)
     .overlay {
       if coordinator.isSyncing {
         ProgressView("Contacting SimpleFIN…")

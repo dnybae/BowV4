@@ -42,66 +42,86 @@ struct ScheduleEditorScreen: View {
     _isActive = State(initialValue: schedule?.isActive ?? true)
   }
 
+  /// Expenses and inflows use an envelope; a transfer only does when it moves cash to a tracking account.
+  private var needsEnvelope: Bool {
+    kind != .transfer || (accounts.first { $0.id == accountID }?.kind == .cash &&
+      [.asset, .liability].contains(accounts.first { $0.id == destinationID }?.kind))
+  }
+
   var body: some View {
     NavigationStack {
       Form {
-        Section("Transaction") {
-          Picker("Type", selection: $kind) {
-            ForEach(BudgetTransactionKind.allCases) { option in
-              Text(option.title).tag(option)
+        Section {
+          VStack(spacing: Bow.Space.s4) {
+            Picker("Type", selection: $kind) {
+              ForEach(BudgetTransactionKind.allCases) { option in
+                Text(option.title).tag(option)
+              }
+            }
+            .pickerStyle(.segmented)
+            CurrencyAmountField("Amount", minor: $amountMinor, currencyCode: currencyCode, style: .editorHero)
+          }
+          .padding(.bottom, Bow.Space.s2)
+          .listRowBackground(Color.clear)
+          .listRowInsets(EdgeInsets())
+        }
+        Section {
+          if kind != .transfer {
+            LabeledContent {
+              TextField("Payee", text: $payee)
+                .multilineTextAlignment(.trailing)
+                .textInputAutocapitalization(.words)
+            } label: {
+              Label("Payee", systemImage: "person").labelStyle(.bowTile)
             }
           }
-          .pickerStyle(.segmented)
-          if kind != .transfer {
-            TextField("Payee", text: $payee)
-              .textInputAutocapitalization(.words)
-          }
-          CurrencyAmountField("Expected amount", minor: $amountMinor, currencyCode: currencyCode)
-          AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts)
-          if kind == .transfer {
-            AccountSelectionField(title: "To account", selection: $destinationID, accounts: accounts, excludingID: accountID)
-          }
-          if kind != .transfer || (accounts.first { $0.id == accountID }?.kind == .cash &&
-              [.asset, .liability].contains(accounts.first { $0.id == destinationID }?.kind)) {
+          if needsEnvelope {
             EnvelopeSelectionField(
               title: "Envelope", selection: $envelopeID,
-              envelopes: envelopes, noneTitle: "No envelope"
+              envelopes: envelopes, noneTitle: "No envelope", systemImage: "square.grid.2x2"
             )
-            if kind == .expense && envelopeID == nil {
-              Text("Choose an envelope for this scheduled expense.")
-                .font(.footnote)
-                .foregroundStyle(Bow.inkSoft)
-            }
+          }
+          AccountSelectionField(title: kind == .transfer ? "From account" : "Account",
+                                selection: $accountID, accounts: accounts, systemImage: "creditcard")
+          if kind == .transfer {
+            AccountSelectionField(title: "To account", selection: $destinationID, accounts: accounts,
+                                  excludingID: accountID, systemImage: "arrow.right")
+          }
+          BowNotesRow(notes: $notes)
+        } footer: {
+          if needsEnvelope && kind == .expense && envelopeID == nil {
+            Text("Choose an envelope for this scheduled expense.")
           }
         }
         .listRowBackground(Bow.card)
-        Section("Schedule") {
-          DatePicker("First due", selection: $startDate, displayedComponents: .date)
-          Picker("Repeats", selection: $frequency) {
+        Section {
+          NavigationLink {
+            BowDatePickerScreen(title: "First due", date: $startDate)
+          } label: {
+            BowTileValueRow("First due", systemImage: "calendar",
+                            value: startDate.formatted(date: .abbreviated, time: .omitted))
+          }
+          Picker(selection: $frequency) {
             ForEach(ScheduleFrequency.allCases) { value in
               Text(value.title).tag(value)
             }
+          } label: {
+            Label("Repeats", systemImage: "repeat").labelStyle(.bowTile)
           }
           .pickerStyle(.menu)
           if schedule != nil {
-            Toggle("Active", isOn: $isActive)
+            Toggle(isOn: $isActive) {
+              Label("Active", systemImage: "bolt").labelStyle(.bowTile)
+            }
           }
-        }
-        .listRowBackground(Bow.card)
-        Section("Notes") {
-          TextField("Optional notes", text: $notes, axis: .vertical)
-            .lineLimit(2...4)
         }
         .listRowBackground(Bow.card)
         if schedule != nil {
-          Section {
-            Button("Delete schedule", role: .destructive) { showingDelete = true }
-          }
-          .listRowBackground(Bow.card)
+          BowDestructiveSection("Delete schedule") { showingDelete = true }
         }
       }
-      .bowListBackground()
-      .navigationTitle(schedule == nil ? "New schedule" : "Edit schedule")
+      .bowSkyList(mood: .dawn, height: 420)
+      .navigationTitle(schedule == nil ? "New schedule" : "Schedule")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }

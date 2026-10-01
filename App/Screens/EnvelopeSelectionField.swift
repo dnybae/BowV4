@@ -8,7 +8,14 @@ struct EnvelopeSelectionField: View {
   var noneTitle: String? = nil
   /// Shows the title as an icon-tile label, as in the editor sheets.
   var systemImage: String? = nil
+  /// Shows the empty choice in amber, when saving needs an envelope.
+  var highlightsNone = false
   @State private var showingSelection = false
+
+  private var valueStyle: Color {
+    if envelopes.contains(where: { $0.id == selection }) { return Bow.ink }
+    return highlightsNone ? Bow.needsInk : Bow.inkSoft
+  }
 
   private var selectedName: String {
     if let envelope = envelopes.first(where: { $0.id == selection }) { return envelope.name }
@@ -23,7 +30,7 @@ struct EnvelopeSelectionField: View {
         BowFieldTitle(title: title, systemImage: systemImage)
         Spacer(minLength: 12)
         Text(selectedName)
-          .foregroundStyle(Bow.inkSoft)
+          .foregroundStyle(valueStyle)
           .lineLimit(1)
           .truncationMode(.middle)
         Image(systemName: "chevron.up.chevron.down")

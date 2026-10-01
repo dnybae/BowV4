@@ -24,7 +24,7 @@ struct AccountSelectionField: View {
         BowFieldTitle(title: title, systemImage: systemImage)
         Spacer(minLength: 12)
         Text(selectedName)
-          .foregroundStyle(Bow.inkSoft)
+          .foregroundStyle(accounts.contains { $0.id == selection } ? Bow.ink : Bow.inkSoft)
           .lineLimit(1)
           .truncationMode(.middle)
         Image(systemName: "chevron.up.chevron.down")

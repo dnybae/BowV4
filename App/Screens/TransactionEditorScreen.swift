@@ -239,7 +239,7 @@ struct TransactionEditorScreen: View {
                 BowFieldTitle(title: kind == .expense ? "Payee" : "Source", systemImage: "person")
                 Spacer(minLength: 12)
                 Text(payee.isEmpty ? "Choose a payee" : payee)
-                  .foregroundStyle(Bow.inkSoft)
+                  .foregroundStyle(payee.isEmpty ? Bow.inkSoft : Bow.ink)
                   .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
                   .font(.subheadline)
@@ -252,7 +252,8 @@ struct TransactionEditorScreen: View {
           if kind != .transfer || needsEnvelopeForTransfer {
             EnvelopeSelectionField(
               title: "Envelope", selection: $envelopeID,
-              envelopes: envelopes, noneTitle: envelopeNoneTitle, systemImage: "square.grid.2x2"
+              envelopes: envelopes, noneTitle: envelopeNoneTitle, systemImage: "square.grid.2x2",
+              highlightsNone: kind == .expense
             )
           }
           if kind != .transfer {
@@ -304,17 +305,23 @@ struct TransactionEditorScreen: View {
           .listRowBackground(Bow.card)
         }
         if transaction == nil && scheduledDraft == nil {
-          Section("Schedule") {
-            Toggle("Schedule for later", isOn: $isScheduled)
+          Section {
+            Toggle(isOn: $isScheduled) {
+              Label("Schedule for later", systemImage: "repeat").labelStyle(.bowTile)
+            }
             if isScheduled {
-              Picker("Repeats", selection: $recurrence) {
+              Picker(selection: $recurrence) {
                 ForEach(ScheduleFrequency.allCases) { frequency in
                   Text(frequency.title).tag(frequency)
                 }
+              } label: {
+                Label("Repeats", systemImage: "arrow.clockwise").labelStyle(.bowTile)
               }
               .pickerStyle(.menu)
+            }
+          } footer: {
+            if isScheduled {
               Text("Scheduled entries appear on the calendar and affect balances only when recorded.")
-                .font(.footnote).foregroundStyle(Bow.inkSoft)
             }
           }
           .listRowBackground(Bow.card)

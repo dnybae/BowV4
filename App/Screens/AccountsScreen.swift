@@ -276,71 +276,50 @@ private struct AccountDetailScreen: View {
         parts.append("Linked to \(link.name).")
       }
     }
-    let onBudget = account.kind == .cash || account.kind == .credit
-    parts.append("\(account.accountType.title), \(onBudget ? "on budget" : "off budget").")
     if !account.note.isEmpty { parts.append(account.note) }
     return parts.joined(separator: " ")
   }
 
-  private func stat(_ title: String, value: String) -> some View {
-    VStack(alignment: .leading, spacing: 2) {
-      Text(title)
-        .font(.bowFootnote)
-        .foregroundStyle(Bow.inkSoft)
-      Text(value)
-        .font(.bowAmount)
-        .monospacedDigit()
-        .foregroundStyle(Bow.ink)
-        .lineLimit(1)
-        .minimumScaleFactor(0.7)
+  private var reconcileStats: [BowStat] {
+    var stats: [BowStat] = []
+    if let reported = link?.reportedBalance {
+      stats.append(.text("Bank says", BudgetMoney.formatted(bankAmount: reported, currencyCode: currencyCode)))
     }
-    .accessibilityElement(children: .combine)
+    if let date = account.lastReconciledAt, let balance = account.lastReconciledBalanceMinor {
+      stats.append(.money("Reconciled \(date.formatted(.dateTime.month(.abbreviated).day()))", balance))
+    }
+    return stats
   }
 
   var body: some View {
     List {
       Section {
-        VStack(alignment: .leading, spacing: Bow.Space.s4) {
-          VStack(alignment: .leading, spacing: Bow.Space.s1) {
-            Text("Balance")
-              .font(.bowSubhead.weight(.semibold))
-              .foregroundStyle(Bow.inkSoft)
-            MoneyText(minor: balanceMinor, currencyCode: currencyCode)
-              .bowHeroFont()
-              .monospacedDigit()
-              .foregroundStyle(Bow.ink)
-              .lineLimit(1)
-              .minimumScaleFactor(0.5)
+        VStack(spacing: Bow.Space.s4) {
+          BowIdentityHeader(
+            name: account.name,
+            context: "\(account.accountType.title), \(account.kind == .cash || account.kind == .credit ? "on budget" : "off budget")",
+            amountMinor: balanceMinor,
+            currencyCode: currencyCode
+          ) {
+            BowGlossyTile(systemImage: account.kind.systemImage)
           }
-          .accessibilityElement(children: .combine)
-
-          if link?.reportedBalance != nil || account.lastReconciledBalanceMinor != nil {
-            HStack(alignment: .top, spacing: Bow.Space.s4) {
-              if let reported = link?.reportedBalance {
-                stat("Bank says", value: BudgetMoney.formatted(bankAmount: reported, currencyCode: currencyCode))
-              }
-              if let date = account.lastReconciledAt, let balance = account.lastReconciledBalanceMinor {
-                stat("Reconciled \(date.formatted(.dateTime.month(.abbreviated).day()))",
-                     value: BudgetMoney.formatted(balance, currencyCode: currencyCode))
-              }
-            }
+          if !reconcileStats.isEmpty {
+            BowStatStrip(stats: reconcileStats, currencyCode: currencyCode)
           }
-
-          Button("Reconcile", systemImage: "checkmark") {
+          Button("Reconcile") {
             showingReconciliation = true
           }
           .bowSecondaryButton()
-          .frame(maxWidth: .infinity)
         }
-        .padding(Bow.Space.s5)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .bowCard(radius: Bow.Radius.xl)
+        .frame(maxWidth: .infinity)
         .listRowBackground(Color.clear)
-        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: Bow.Space.s2, trailing: 0))
       } footer: {
-        Text(detailCaption)
-          .font(.bowFootnote)
-          .foregroundStyle(Bow.inkSoft)
+        if link != nil || !account.note.isEmpty {
+          Text(detailCaption)
+            .font(.bowFootnote)
+            .foregroundStyle(Bow.inkSoft)
+        }
       }
 
       if feed.items.isEmpty && !feed.isLoading {
@@ -390,8 +369,9 @@ private struct AccountDetailScreen: View {
         }
       }
     }
-    .bowListBackground()
+    .bowSkyList(mood: .dawn, height: 460)
     .navigationTitle(account.name)
+    .navigationBarTitleDisplayMode(.inline)
     .task(id: account.id) {
       await feed.reload(container: modelContext.container, searchText: "", filter: TransactionFilter(),
                         scopedAccountID: account.id, includeUncategorizedCount: false,

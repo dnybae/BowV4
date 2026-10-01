@@ -68,7 +68,7 @@ struct CoverOverspendingScreen: View {
           dismiss()
         }
       } else {
-        ProgressView("Calculating balances…")
+        BowLoadingLabel("Calculating balances…")
       }
     }
     .toolbar {
@@ -92,7 +92,7 @@ struct CoverOverspendingScreen: View {
             }
           }
         } else {
-          ProgressView("Calculating balances…")
+          BowLoadingLabel("Calculating balances…")
             .frame(maxWidth: .infinity)
             .listRowBackground(Color.clear)
         }
@@ -102,7 +102,9 @@ struct CoverOverspendingScreen: View {
           SkyBackground(mood: overspending?.isEmpty == false ? .coral : .mint, height: 460)
         }
       }
-      .animation(Bow.motion(reduceMotion: reduceMotion), value: overspending?.items.map(\.envelopeID))
+      .bowSoftScrollEdge()
+      .bowAnimation(value: overspending?.items.map(\.envelopeID))
+      .bowAnimation(value: overspending?.isEmpty)
       .navigationTitle("Cover overspending")
       .navigationSubtitle(cardName.map { "Spent on \($0)" } ?? "")
       .navigationBarTitleDisplayMode(.inline)
@@ -129,7 +131,6 @@ struct CoverOverspendingScreen: View {
           dismiss()
         }
       }
-      .sensoryFeedback(.success, trigger: coveredCount)
   }
 
   @ViewBuilder
@@ -140,6 +141,7 @@ struct CoverOverspendingScreen: View {
           Image(systemName: "checkmark.circle.fill")
             .font(.system(.largeTitle, weight: .semibold)).imageScale(.large)
             .foregroundStyle(Bow.funded)
+            .transition(.symbolEffect(.appear))
             .accessibilityHidden(true)
           Text("Everything’s covered")
             .font(.bowTitle)
@@ -147,9 +149,7 @@ struct CoverOverspendingScreen: View {
         } else {
           MoneyText(minor: overspending.totalMinor, currencyCode: currencyCode)
             .bowHeroFont()
-            .monospacedDigit()
             .foregroundStyle(Bow.overInk)
-            .contentTransition(.numericText())
             .lineLimit(1)
             .minimumScaleFactor(0.5)
           Text(overspending.items.count == 1 ? "overspent in 1 envelope" : "overspent in \(overspending.items.count) envelopes")

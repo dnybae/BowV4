@@ -15,6 +15,8 @@ struct MoneyMoveScreen: View {
   @State private var errorMessage: String?
   @State private var snapshot: BudgetSnapshot?
   @State private var refreshVersion = 0
+  @Environment(\.bowToasts) private var toasts
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   init(
     currencyCode: String,
@@ -34,6 +36,9 @@ struct MoneyMoveScreen: View {
 
   private var sourceAvailable: Int64 { balance(of: source) }
   private var enteredMinor: Int64? { amountMinor }
+  /// The amount typed is more than the source has.
+  private var isOverAvailable: Bool { (enteredMinor ?? 0) > max(0, sourceAvailable) && snapshot != nil }
+
   private var isValid: Bool {
     snapshot != nil && source != target && (enteredMinor ?? 0) > 0
       && (enteredMinor ?? 0) <= max(0, sourceAvailable)
@@ -44,11 +49,18 @@ struct MoneyMoveScreen: View {
       Form {
         Section {
           VStack(spacing: Bow.Space.s3) {
-            CurrencyAmountField("Amount", minor: $amountMinor, currencyCode: currencyCode, style: .editorHero)
-            if let enteredMinor, enteredMinor > sourceAvailable {
-              Text("Only \(BudgetMoney.formatted(max(0, sourceAvailable), currencyCode: currencyCode)) is available to move.")
-                .font(.bowFootnote)
-                .foregroundStyle(Bow.overInk)
+            CurrencyAmountField("Amount", minor: $amountMinor, currencyCode: currencyCode, style: .editorHero,
+                                focusOnAppear: true)
+            if isOverAvailable {
+              HStack(spacing: Bow.Space.s1) {
+                Text("Only")
+                MoneyText(minor: max(0, sourceAvailable), currencyCode: currencyCode)
+                Text("is available to move.")
+              }
+              .font(.bowFootnote)
+              .foregroundStyle(Bow.overInk)
+              .accessibilityElement(children: .combine)
+              .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
             Button("Move all") {
               amountMinor = max(0, sourceAvailable)
@@ -86,7 +98,10 @@ struct MoneyMoveScreen: View {
         }
         .listRowBackground(Bow.card)
         } else {
-          Section { ProgressView("Calculating balances…") }
+          Section {
+            BowLoadingLabel("Calculating balances…")
+              .frame(maxWidth: .infinity)
+          }
           .listRowBackground(Bow.card)
         }
 
@@ -101,6 +116,9 @@ struct MoneyMoveScreen: View {
         .listRowBackground(Bow.card)
       }
       .bowSkyList(mood: .dawn, height: 420)
+      .bowEditorSheet(hasChanges: amountMinor != 0)
+      .bowAnimation(value: isOverAvailable)
+      .sensoryFeedback(.warning, trigger: isOverAvailable) { wasOver, isOver in !wasOver && isOver }
       .navigationTitle("Move money")
       .task(id: refreshVersion) {
         let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
@@ -111,30 +129,17 @@ struct MoneyMoveScreen: View {
       }
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }
-        }
+        BowCancelButton(hasChanges: amountMinor != 0) { dismiss() }
       }
       .safeAreaInset(edge: .bottom) {
-        Button { Task { await save() } } label: {
-          Text("Move \(BudgetMoney.formatted(enteredMinor ?? 0, currencyCode: currencyCode))")
-            .fontWeight(.semibold)
-            .monospacedDigit()
-            .frame(maxWidth: .infinity, minHeight: 44)
+        BowBottomAction(isEnabled: isValid, action: { Task { await save() } }) {
+          HStack(spacing: Bow.Space.s1) {
+            Text("Move")
+            MoneyText(minor: enteredMinor ?? 0, currencyCode: currencyCode)
+          }
         }
-        .bowPrimaryButton()
-        .disabled(!isValid)
-        .padding(.horizontal, Bow.Space.s4)
-        .padding(.bottom, Bow.Space.s2)
       }
-      .alert("Couldn’t Move Money", isPresented: Binding(
-        get: { errorMessage != nil },
-        set: { if !$0 { errorMessage = nil } }
-      )) {
-        Button("OK") { errorMessage = nil }
-      } message: {
-        Text(errorMessage ?? "")
-      }
+      .bowErrorAlert("Couldn’t Move Money", message: $errorMessage)
     }
   }
 
@@ -156,8 +161,8 @@ struct MoneyMoveScreen: View {
         .foregroundStyle(Bow.ink)
       Spacer(minLength: Bow.Space.s2)
       ViewThatFits(in: .horizontal) {
-        HStack(spacing: Bow.Space.s2) { amounts(changes: changes, before: beforeText, after: afterText, isNegative: after < 0) }
-        VStack(alignment: .trailing, spacing: 1) { amounts(changes: changes, before: beforeText, after: afterText, isNegative: after < 0) }
+        HStack(spacing: Bow.Space.s2) { amounts(changes: changes, before: before, after: after) }
+        VStack(alignment: .trailing, spacing: 1) { amounts(changes: changes, before: before, after: after) }
       }
     }
     .accessibilityElement(children: .ignore)
@@ -165,16 +170,17 @@ struct MoneyMoveScreen: View {
     .accessibilityValue(changes ? "\(beforeText) now, \(afterText) after moving" : afterText)
   }
 
-  /// The balance before (struck through, only when it changes) and after moving.
+  /// The balance before (struck through, only when it changes) and after moving, which rolls as you type.
   @ViewBuilder
-  private func amounts(changes: Bool, before: String, after: String, isNegative: Bool) -> some View {
+  private func amounts(changes: Bool, before: Int64, after: Int64) -> some View {
     if changes {
-      Text(before)
+      Text(BudgetMoney.formatted(before, currencyCode: currencyCode))
+        .monospacedDigit()
         .strikethrough()
         .foregroundStyle(Bow.inkSoft)
     }
-    Text(after)
-      .foregroundStyle(isNegative ? Bow.overInk : Bow.ink)
+    MoneyText(minor: after, currencyCode: currencyCode)
+      .foregroundStyle(after < 0 ? Bow.overInk : Bow.ink)
   }
 
   private func bucketSymbol(_ bucket: BudgetBucket) -> String {
@@ -229,6 +235,7 @@ struct MoneyMoveScreen: View {
         amountMinor: minor, from: source, to: target,
         date: allocationDate, snapshot: current, in: modelContext
       )
+      toasts?.show(.moved("Moved \(BudgetMoney.formatted(minor, currencyCode: currencyCode)) to \(bucketName(target))"))
       dismiss()
     } catch {
       errorMessage = error.localizedDescription

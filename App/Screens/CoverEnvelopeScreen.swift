@@ -20,6 +20,8 @@ struct CoverEnvelopeScreen: View {
   @State private var errorMessage: String?
   @State private var isSaving = false
   @State private var didOfferDonors = false
+  @Environment(\.bowToasts) private var toasts
+  @ScaledMetric(relativeTo: .body) private var amountFieldWidth: CGFloat = 104
 
   init(
     envelopeID: UUID, currencyCode: String, month: Date, snapshot: BudgetSnapshot,
@@ -100,22 +102,19 @@ struct CoverEnvelopeScreen: View {
       .listRowBackground(Bow.card)
     }
     .bowSkyList(mood: isCovered ? .mint : .coral, height: 420)
-    .animation(Bow.motion(reduceMotion: reduceMotion), value: remaining)
-    .animation(Bow.motion(reduceMotion: reduceMotion), value: draft.donors.map(\.bucket))
+    .bowAnimation(value: remaining)
+    .bowAnimation(value: draft.donors.map(\.bucket))
     .navigationTitle("Cover overspending")
     .navigationBarTitleDisplayMode(.inline)
     .safeAreaInset(edge: .bottom) {
-      Button { Task { await save() } } label: {
-        Text("Cover \(BudgetMoney.formatted(draft.coveredMinor, currencyCode: currencyCode))")
-          .fontWeight(.semibold)
-          .monospacedDigit()
-          .frame(maxWidth: .infinity, minHeight: 44)
+      BowBottomAction(isEnabled: draft.canSave(in: snapshot) && !isSaving, action: { Task { await save() } }) {
+        HStack(spacing: Bow.Space.s1) {
+          Text("Cover")
+          MoneyText(minor: draft.coveredMinor, currencyCode: currencyCode)
+        }
       }
-      .bowPrimaryButton()
-      .disabled(!draft.canSave(in: snapshot) || isSaving)
-      .padding(.horizontal, Bow.Space.s4)
-      .padding(.bottom, Bow.Space.s2)
     }
+    .scrollDismissesKeyboard(.interactively)
     .sensoryFeedback(.success, trigger: isCovered) { _, covered in covered }
     .onChange(of: snapshot.month) { _, _ in draft.clamp(to: snapshot) }
     .onChange(of: snapshot.available(for: envelopeID)) { _, _ in draft.clamp(to: snapshot) }
@@ -133,14 +132,7 @@ struct CoverEnvelopeScreen: View {
         showingDonorPicker = false
       }
     }
-    .alert("Couldn’t Cover Overspending", isPresented: Binding(
-      get: { errorMessage != nil },
-      set: { if !$0 { errorMessage = nil } }
-    )) {
-      Button("OK") { errorMessage = nil }
-    } message: {
-      Text(errorMessage ?? "")
-    }
+    .bowErrorAlert("Couldn’t Cover Overspending", message: $errorMessage)
   }
 
   private func donorRow(_ donor: OverspendingCoverDraft.Donor) -> some View {
@@ -152,7 +144,8 @@ struct CoverEnvelopeScreen: View {
       set: { draft.setAmount($0, for: donor.bucket, in: snapshot) }
     )
     let leftover = available - donor.amountMinor
-    let leftoverText = "\(BudgetMoney.formatted(leftover, currencyCode: currencyCode)) left"
+    // A tick every tenth of the way along the slider, not on every cent.
+    let sliderStep = maximum > 0 ? Int((Double(donor.amountMinor) / Double(maximum) * 10).rounded()) : 0
     return VStack(alignment: .leading, spacing: Bow.Space.s2) {
       HStack(spacing: Bow.Space.s3) {
         Label {
@@ -160,11 +153,12 @@ struct CoverEnvelopeScreen: View {
             Text(name)
               .foregroundStyle(Bow.ink)
               .lineLimit(1)
-            Text(leftoverText)
-              .font(.bowSubhead)
-              .monospacedDigit()
-              .foregroundStyle(leftoverState(for: donor.bucket, leftover: leftover).ink)
-              .contentTransition(.numericText())
+            HStack(spacing: Bow.Space.s1) {
+              MoneyText(minor: leftover, currencyCode: currencyCode)
+              Text("left")
+            }
+            .font(.bowSubhead)
+            .foregroundStyle(leftoverState(for: donor.bucket, leftover: leftover).ink)
           }
         } icon: {
           Image(systemName: donorSymbol(donor.bucket))
@@ -174,7 +168,7 @@ struct CoverEnvelopeScreen: View {
         Spacer(minLength: Bow.Space.s2)
         CurrencyAmountField("Amount from \(name)", minor: amount, currencyCode: currencyCode)
           .labelsHidden()
-          .frame(width: 104)
+          .frame(width: amountFieldWidth)
       }
       Slider(
         value: Binding(
@@ -186,6 +180,7 @@ struct CoverEnvelopeScreen: View {
         Text("Amount from \(name)")
       }
       .disabled(maximum == 0)
+      .sensoryFeedback(.selection, trigger: sliderStep)
       .accessibilityValue(BudgetMoney.formatted(amount.wrappedValue, currencyCode: currencyCode))
     }
     .padding(.vertical, Bow.Space.s1)
@@ -231,6 +226,7 @@ struct CoverEnvelopeScreen: View {
         date: BudgetCommands.allocationDate(inMonth: month),
         snapshot: current, in: modelContext
       )
+      toasts?.show(.moved("Covered \(envelope?.name ?? "envelope") · \(BudgetMoney.formatted(draft.coveredMinor, currencyCode: currencyCode))"))
       onCovered()
     } catch {
       errorMessage = error.localizedDescription

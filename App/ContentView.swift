@@ -331,7 +331,8 @@ private struct BudgetHomeView: View {
               envelopes: envelopes,
               payees: payees,
               currencyCode: currencyCode,
-              scheduledDraft: draft
+              scheduledDraft: draft,
+              onEditSchedule: { activeSheet = .editSchedule($0) }
             )
           case .editSchedule(let id):
             ScheduleEditorScreen(

@@ -197,6 +197,9 @@ struct StatusPill: View {
     var state: EnvelopeState
     /// Optional symbol before the amount, e.g. a card for credit overspending.
     var symbol: String? = nil
+    /// Overrides the state's colors, e.g. blue for a scheduled bill.
+    var inkColor: Color? = nil
+    var tintColor: Color? = nil
     var body: some View {
         HStack(spacing: 4) {
             if let symbol {
@@ -209,9 +212,9 @@ struct StatusPill: View {
                 .contentTransition(.numericText())
         }
         .font(.bowAmountSm)
-        .foregroundStyle(state.ink)
+        .foregroundStyle(inkColor ?? state.ink)
         .padding(.vertical, 5).padding(.horizontal, 10)
-        .background(state.tint, in: Capsule())
+        .background(tintColor ?? state.tint, in: Capsule())
         .bowAnimation(value: text)
         .bowAnimation(value: state)
     }
@@ -222,6 +225,10 @@ extension StatusPill {
     static var cleared: StatusPill { StatusPill(text: "Cleared", state: .funded, symbol: "checkmark") }
     static var pendingAtBank: StatusPill { StatusPill(text: "Pending at bank", state: .empty, symbol: "clock") }
     static var needsReview: StatusPill { StatusPill(text: "Needs review", state: .needs) }
+    /// Blue, for scheduled bills ("Due today").
+    static func scheduled(_ text: String) -> StatusPill {
+        StatusPill(text: text, state: .empty, inkColor: Bow.bowInk, tintColor: Bow.bowTint)
+    }
 }
 
 // MARK: - Sky background (atmosphere)

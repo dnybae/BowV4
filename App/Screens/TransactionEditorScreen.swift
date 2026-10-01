@@ -15,6 +15,8 @@ struct TransactionEditorScreen: View {
   var scheduledDraft: ScheduledTransactionDraft?
   /// A bank item not yet in the budget, reviewed in this sheet before it's added or matched.
   var reviewRecord: SimpleFINImportRecord?
+  /// Opens the schedule editor for the bill being recorded.
+  var onEditSchedule: ((UUID) -> Void)?
   @State private var kind: BudgetTransactionKind
   @State private var accountID: UUID?
   @State private var destinationID: UUID?
@@ -48,7 +50,8 @@ struct TransactionEditorScreen: View {
     payees: [BudgetPayee],
     currencyCode: String,
     scheduledDraft: ScheduledTransactionDraft? = nil,
-    reviewRecord: SimpleFINImportRecord? = nil
+    reviewRecord: SimpleFINImportRecord? = nil,
+    onEditSchedule: ((UUID) -> Void)? = nil
   ) {
     let reviewRecord = transaction == nil ? reviewRecord : nil
     self.transaction = transaction
@@ -58,6 +61,7 @@ struct TransactionEditorScreen: View {
     self.currencyCode = currencyCode
     self.scheduledDraft = scheduledDraft
     self.reviewRecord = reviewRecord
+    self.onEditSchedule = onEditSchedule
     let recordKind: BudgetTransactionKind? = reviewRecord.map { $0.amountMinor < 0 ? .expense : .inflow }
     _kind = State(initialValue: transaction?.kind ?? scheduledDraft?.kind ?? recordKind ?? .expense)
     let defaultAccountID = transaction?.accountID ?? scheduledDraft?.accountID ?? reviewRecord?.localAccountID
@@ -116,10 +120,21 @@ struct TransactionEditorScreen: View {
     }
   }
 
+  /// Recording a scheduled bill that's come due.
+  private var isRecordingBill: Bool { transaction == nil && scheduledDraft != nil }
+
   private var title: String {
     if isReviewing { return "Review transaction" }
     if transaction != nil { return "Edit transaction" }
-    return scheduledDraft == nil ? "New transaction" : "Record scheduled bill"
+    return scheduledDraft == nil ? "New transaction" : "Scheduled bill"
+  }
+
+  /// "Record −$280.00": the amount as it will land in the account.
+  private var recordTitle: String {
+    let signed = kind == .expense ? -amountMinor : amountMinor
+    let amount = BudgetMoney.formatted(signed, currencyCode: currencyCode, showsPlusSign: kind == .inflow)
+      .replacingOccurrences(of: "-", with: "\u{2212}")
+    return "Record \(amount)"
   }
 
   private var canSave: Bool {
@@ -171,11 +186,20 @@ struct TransactionEditorScreen: View {
           }
           .listRowBackground(Color.clear)
           .listRowInsets(EdgeInsets())
+        } else if isRecordingBill, let scheduledDraft {
+          Section {
+            ScheduledBillContextCard(
+              draft: scheduledDraft, kind: kind,
+              frequency: schedules.first { $0.id == scheduledDraft.scheduleID }?.frequency
+            )
+          }
+          .listRowBackground(Color.clear)
+          .listRowInsets(EdgeInsets())
         }
         Section {
           VStack(spacing: Bow.Space.s4) {
-            // The bank sets the direction of an imported transaction.
-            if !isReviewing {
+            // The bank sets an imported transaction's direction; the schedule sets a bill's.
+            if !isReviewing && !isRecordingBill {
               Picker("Type", selection: $kind) {
                 ForEach(BudgetTransactionKind.allCases) { option in
                   Text(option.title).tag(option)
@@ -268,6 +292,17 @@ struct TransactionEditorScreen: View {
             isLinked: $linkScheduledBill
           )
         }
+        if isRecordingBill, let scheduledDraft {
+          Section {
+            Button("Skip this date") { skip(scheduledDraft) }
+            if let onEditSchedule {
+              Button("Edit schedule") { onEditSchedule(scheduledDraft.scheduleID) }
+            }
+          } footer: {
+            Text("Skipping keeps the schedule active for future dates.")
+          }
+          .listRowBackground(Bow.card)
+        }
         if transaction == nil && scheduledDraft == nil {
           Section("Schedule") {
             Toggle("Schedule for later", isOn: $isScheduled)
@@ -308,7 +343,17 @@ struct TransactionEditorScreen: View {
       }
       .bowSkyList(mood: isReviewing ? .review : .dawn, height: 420)
       .safeAreaInset(edge: .bottom) {
-        if isReviewing {
+        if isRecordingBill {
+          Button { save() } label: {
+            Text(recordTitle)
+              .monospacedDigit()
+              .frame(maxWidth: .infinity)
+          }
+          .bowPrimaryButton()
+          .disabled(!canSave)
+          .padding(.horizontal, Bow.Space.s4)
+          .padding(.bottom, Bow.Space.s2)
+        } else if isReviewing {
           Button { approve() } label: {
             Text(approveTitle)
               .frame(maxWidth: .infinity)
@@ -633,6 +678,27 @@ struct TransactionEditorScreen: View {
     }
   }
 
+  /// Skips this date of the bill, the same as Skip in Spending; the schedule stays active.
+  private func skip(_ draft: ScheduledTransactionDraft) {
+    let scheduleID = draft.scheduleID
+    do {
+      let occurrences = try modelContext.fetch(FetchDescriptor<BudgetScheduleOccurrence>(
+        predicate: #Predicate { $0.scheduleID == scheduleID }
+      ))
+      guard let occurrence = occurrences.first(where: {
+        Calendar.current.isDate($0.scheduledFor, inSameDayAs: draft.scheduledFor)
+      }) else {
+        errorMessage = "This date is no longer scheduled."
+        return
+      }
+      occurrence.isSkipped = true
+      try modelContext.save()
+      dismiss()
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
   private func ignoreImport() {
     guard let bankRecord else { return }
     do {
@@ -700,6 +766,37 @@ private struct ReviewContextCard: View {
   var body: some View {
     BowContextCard(name: name.isEmpty ? "Bank transaction" : name, context: context) {
       MerchantLogoView(merchantName: name, domain: domain, kind: kind, size: 44, style: .glossy)
+    } trailing: {
+      pill
+    }
+  }
+}
+
+/// The card at the top of the record sheet: the bill, how often it repeats and when it's due.
+private struct ScheduledBillContextCard: View {
+  var draft: ScheduledTransactionDraft
+  var kind: BudgetTransactionKind
+  var frequency: ScheduleFrequency?
+
+  private var calendar: Calendar { .current }
+  private var isDueToday: Bool { calendar.isDateInToday(draft.scheduledFor) }
+  private var isOverdue: Bool { !isDueToday && draft.scheduledFor < Date() }
+  private var dueDate: String { draft.scheduledFor.formatted(.dateTime.month(.abbreviated).day()) }
+
+  private var context: String {
+    let due = isDueToday ? "due today" : "due \(dueDate)"
+    return ["Scheduled", frequency?.title.lowercased(), due].compactMap { $0 }.joined(separator: ", ")
+  }
+
+  private var pill: StatusPill {
+    if isDueToday { return .scheduled("Due today") }
+    if isOverdue { return StatusPill(text: "Overdue", state: .needs) }
+    return .scheduled("Due \(dueDate)")
+  }
+
+  var body: some View {
+    BowContextCard(name: draft.payee.isEmpty ? "Scheduled bill" : draft.payee, context: context) {
+      MerchantLogoView(merchantName: draft.payee, kind: kind, size: 44, style: .glossy)
     } trailing: {
       pill
     }

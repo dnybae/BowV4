@@ -71,7 +71,10 @@ struct CalendarScreen: View {
       selectedDayAgenda
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    .background(Bow.mist)
+    .background {
+      Bow.mist.overlay(alignment: .top) { SkyBackground(mood: .dawn) }
+        .ignoresSafeArea()
+    }
     .navigationTitle("Calendar")
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
@@ -146,57 +149,28 @@ struct CalendarScreen: View {
           .frame(maxWidth: .infinity)
         }
 
-        if let selectedSnapshot, !selectedSchedules.isEmpty { VStack(spacing: 0) { ForEach(selectedSchedules) { schedule in
-          CalendarScheduleRow(
-            schedule: schedule, selectedDate: selectedDate,
-            occurrence: occurrences.first {
-              $0.scheduleID == schedule.id
-                && calendar.isDate($0.scheduledFor, inSameDayAs: selectedDate)
-            },
-            transactions: monthTransactions, snapshot: selectedSnapshot,
-            currencyCode: currencyCode,
-            onEdit: { editingSchedule = schedule },
-            onRecord: onRecord,
-            onRestore: { occurrence in
-              occurrence.isSkipped = false
-              try? modelContext.save()
-            },
-            onSkip: { occurrence in
-              occurrence.isSkipped = true
-              try? modelContext.save()
-            },
-            onSelectTransaction: onSelectTransaction,
-            showsDivider: schedule.id != selectedSchedules.last?.id
-          )
-        } }
-        .bowCard()
-        .padding(.horizontal, Bow.Space.s4)
-        }
-
-        if !dayTransactions.isEmpty {
-          Text("Transactions")
-            .font(.bowSubhead.weight(.semibold))
-            .foregroundStyle(Bow.inkSoft)
-            .padding(.horizontal, 20)
-            .padding(.top, 14)
-            .padding(.bottom, 6)
+        if !scheduleEntries.isEmpty || !dayTransactions.isEmpty {
+          // The same rows and status lines as Spending, in one card.
           VStack(spacing: 0) {
+            ForEach(scheduleEntries) { entry in
+              scheduleRow(entry, showsDivider: entry.id != scheduleEntries.last?.id || !dayTransactions.isEmpty)
+            }
             ForEach(dayTransactions) { transaction in
-              Button { onSelectTransaction(transaction.id) } label: {
-                TransactionRowView(
-                  model: TransactionRowModel(
-                    transaction,
-                    accountName: accounts.first { $0.id == transaction.accountID }?.name ?? "Account",
-                    envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name
-                  ),
-                  currencyCode: currencyCode
-                )
-                .padding(.horizontal, Bow.Space.s4)
-                .padding(.vertical, Bow.Space.s2)
+              CalendarAgendaRow(
+                model: TransactionRowModel(
+                  transaction,
+                  accountName: accounts.first { $0.id == transaction.accountID }?.name ?? "Account",
+                  envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name
+                ),
+                currencyCode: currencyCode,
+                showsDivider: transaction.id != dayTransactions.last?.id,
+                action: { onSelectTransaction(transaction.id) }
+              ) {
+                EmptyView()
               }
-              .buttonStyle(.plain)
             }
           }
+          .clipShape(RoundedRectangle(cornerRadius: Bow.Radius.lg, style: .continuous))
           .bowCard()
           .padding(.horizontal, Bow.Space.s4)
         }
@@ -205,6 +179,114 @@ struct CalendarScreen: View {
       .padding(.bottom, 88)
     }
     .scrollsToTopOnReselect(of: .calendar)
+  }
+
+  /// The selected day's bills, except ones already recorded and listed among the day's transactions.
+  private var scheduleEntries: [CalendarScheduleEntry] {
+    selectedSchedules.compactMap { schedule in
+      let recorded = monthTransactions.first {
+        $0.scheduleID == schedule.id
+          && $0.scheduledFor.map { calendar.isDate($0, inSameDayAs: selectedDate) } == true
+      }
+      if let recorded, dayTransactions.contains(where: { $0.id == recorded.id }) { return nil }
+      return CalendarScheduleEntry(
+        schedule: schedule,
+        occurrence: occurrences.first {
+          $0.scheduleID == schedule.id && calendar.isDate($0.scheduledFor, inSameDayAs: selectedDate)
+        },
+        recorded: recorded
+      )
+    }
+  }
+
+  /// Bills can be recorded once they're due, and only with an account.
+  private func canRecord(_ schedule: BudgetSchedule) -> Bool {
+    selectedDate <= Date() && schedule.accountID != nil
+  }
+
+  private func scheduleRow(_ entry: CalendarScheduleEntry, showsDivider: Bool) -> some View {
+    let schedule = entry.schedule
+    let isSkipped = entry.occurrence?.isSkipped == true
+    let canRecordBill = canRecord(schedule) && !isSkipped
+    return CalendarAgendaRow(
+      model: scheduleModel(entry),
+      currencyCode: currencyCode,
+      showsDivider: showsDivider,
+      accessibilityHint: entry.recorded != nil ? "Opens the recorded transaction"
+        : canRecordBill ? "Opens the bill to record it" : "Opens the schedule",
+      action: {
+        if let recorded = entry.recorded {
+          onSelectTransaction(recorded.id)
+        } else if canRecordBill {
+          onRecord(draft(for: schedule))
+        } else {
+          editingSchedule = schedule
+        }
+      }
+    ) {
+      if entry.recorded == nil {
+        if canRecordBill {
+          Button("Record", systemImage: "plus") { onRecord(draft(for: schedule)) }
+          if let occurrence = entry.occurrence {
+            Button("Skip This Date", systemImage: "forward") {
+              occurrence.isSkipped = true
+              try? modelContext.save()
+            }
+          }
+        }
+        if isSkipped, let occurrence = entry.occurrence {
+          Button("Restore Reminder", systemImage: "arrow.uturn.backward") {
+            occurrence.isSkipped = false
+            try? modelContext.save()
+          }
+        }
+      }
+      Button("Edit Schedule", systemImage: "calendar") { editingSchedule = schedule }
+    }
+  }
+
+  /// A bill as a Spending row. The status line carries what the old row said: skipped,
+  /// recorded, or whether its envelope can cover it.
+  private func scheduleModel(_ entry: CalendarScheduleEntry) -> TransactionRowModel {
+    let schedule = entry.schedule
+    let state: TransactionRowModel.State
+    if entry.recorded != nil {
+      state = .normal
+    } else if entry.occurrence?.isSkipped == true {
+      state = .pending("Skipped")
+    } else if schedule.kind == .transfer && schedule.envelopeID == nil {
+      state = .scheduled("Scheduled")
+    } else if schedule.envelopeID == nil {
+      state = .scheduled("Scheduled · Choose an envelope")
+    } else if let selectedSnapshot, let envelopeID = schedule.envelopeID {
+      let shortfall = max(0, schedule.amountMinor - max(0, selectedSnapshot.available(for: envelopeID)))
+      state = .scheduled(shortfall > 0
+        ? "Scheduled · Envelope short \(BudgetMoney.formatted(shortfall, currencyCode: currencyCode))"
+        : "Scheduled")
+    } else {
+      state = .scheduled("Scheduled")
+    }
+    return TransactionRowModel(
+      id: "scheduled-\(schedule.id)",
+      title: schedule.payee.isEmpty ? "Scheduled bill" : schedule.payee,
+      logoName: schedule.kind == .transfer ? "" : schedule.payee,
+      merchantDomain: nil,
+      kind: schedule.kind,
+      accountName: accounts.first { $0.id == schedule.accountID }?.name ?? "Account",
+      envelopeName: envelopes.first { $0.id == schedule.envelopeID }?.name,
+      amountMinor: -schedule.amountMinor,
+      state: state
+    )
+  }
+
+  private func draft(for schedule: BudgetSchedule) -> ScheduledTransactionDraft {
+    ScheduledTransactionDraft(
+      scheduleID: schedule.id, scheduledFor: selectedDate,
+      accountID: schedule.accountID, transferAccountID: schedule.transferAccountID,
+      envelopeID: schedule.envelopeID, kind: schedule.kind,
+      amountMinor: schedule.amountMinor, payee: schedule.payee,
+      notes: schedule.notes, date: selectedDate
+    )
   }
 
   private func moveMonth(by offset: Int) {
@@ -378,97 +460,36 @@ private enum CalendarGridMetrics {
   static let rowHeight: CGFloat = 56
 }
 
-private struct CalendarScheduleRow: View {
+private struct CalendarScheduleEntry: Identifiable {
   var schedule: BudgetSchedule
-  var selectedDate: Date
   var occurrence: BudgetScheduleOccurrence?
-  var transactions: [BudgetTransaction]
-  var snapshot: BudgetSnapshot
-  var currencyCode: String
-  var onEdit: () -> Void
-  var onRecord: (ScheduledTransactionDraft) -> Void
-  var onRestore: (BudgetScheduleOccurrence) -> Void
-  var onSkip: (BudgetScheduleOccurrence) -> Void
-  var onSelectTransaction: (UUID) -> Void
-  var showsDivider = true
+  /// Recorded on another day, so it isn't among the selected day's transactions.
+  var recorded: BudgetTransaction?
 
-  private var recordedTransaction: BudgetTransaction? {
-    transactions.first {
-      $0.scheduleID == schedule.id
-        && $0.scheduledFor.map { Calendar.current.isDate($0, inSameDayAs: selectedDate) } == true
-    }
-  }
+  var id: UUID { schedule.id }
+}
+
+/// One row of the day's card: the Spending row with its status tint, tappable, with a long-press menu.
+private struct CalendarAgendaRow<MenuItems: View>: View {
+  var model: TransactionRowModel
+  var currencyCode: String
+  var showsDivider: Bool
+  var accessibilityHint: String = ""
+  var action: () -> Void
+  @ViewBuilder var menuItems: () -> MenuItems
 
   var body: some View {
-    let available = schedule.envelopeID.map { snapshot.available(for: $0) } ?? 0
-    let shortfall = max(0, schedule.amountMinor - max(0, available))
-    VStack(alignment: .leading, spacing: 8) {
-      Button(action: onEdit) {
-        HStack {
-          VStack(alignment: .leading, spacing: 3) {
-            Text(schedule.payee)
-              .font(.bowBody)
-              .foregroundStyle(Bow.ink)
-            Text(schedule.frequency.title + (recordedTransaction != nil
-              ? " · Recorded" : occurrence?.isSkipped == true ? " · Skipped" : " · Expected"))
-              .font(.bowFootnote).foregroundStyle(Bow.inkSoft)
-          }
-          Spacer()
-          MoneyText(minor: schedule.amountMinor, currencyCode: currencyCode)
-            .font(.bowAmount)
-            .monospacedDigit()
-            .foregroundStyle(Bow.ink)
-        }
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      if recordedTransaction == nil {
-        if let occurrence, occurrence.isSkipped {
-          Button("Restore Reminder", systemImage: "arrow.uturn.backward") {
-            onRestore(occurrence)
-          }
-          .font(.subheadline)
-        }
-        if schedule.kind == .transfer && schedule.envelopeID == nil {
-          Text("This transfer does not spend an envelope")
-            .font(.subheadline).foregroundStyle(Bow.inkSoft)
-        } else if schedule.envelopeID == nil {
-          Text("Choose an envelope to check funding")
-            .font(.subheadline).foregroundStyle(Bow.needsInk)
-        } else if shortfall > 0 {
-          Text("Envelope short by \(BudgetMoney.formatted(shortfall, currencyCode: currencyCode))")
-            .font(.subheadline).foregroundStyle(Bow.needsInk)
-        }
-        if selectedDate <= Date(), schedule.accountID != nil {
-          HStack(spacing: Bow.Space.s2) {
-            Spacer()
-            if let occurrence, !occurrence.isSkipped {
-              Button("Skip") { onSkip(occurrence) }
-                .bowSecondaryButton(size: .regular)
-            }
-            Button("Record") {
-              onRecord(ScheduledTransactionDraft(
-                scheduleID: schedule.id, scheduledFor: selectedDate,
-                accountID: schedule.accountID, transferAccountID: schedule.transferAccountID,
-                envelopeID: schedule.envelopeID, kind: schedule.kind,
-                amountMinor: schedule.amountMinor, payee: schedule.payee,
-                notes: schedule.notes, date: selectedDate
-              ))
-            }
-            .bowPrimaryButton(size: .regular)
-            .accessibilityLabel(schedule.kind == .transfer ? "Record transfer" : "Record transaction")
-          }
-        }
-      } else if let recordedTransaction {
-        Button("View Recorded Transaction", systemImage: "arrow.up.right") {
-          onSelectTransaction(recordedTransaction.id)
-        }
-        .font(.subheadline)
-      }
+    Button(action: action) {
+      TransactionRowView(model: model, currencyCode: currencyCode)
+        .padding(.horizontal, Bow.Space.s4)
+        .padding(.vertical, Bow.Space.s2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(model.state.rowStatus?.rowBackground ?? Bow.card)
+        .contentShape(.rect)
     }
-    .padding(.horizontal, Bow.Space.s4)
-    .padding(.vertical, Bow.Space.s3)
-    .frame(maxWidth: .infinity, alignment: .leading)
+    .buttonStyle(.plain)
+    .contextMenu(menuItems: menuItems)
+    .accessibilityHint(accessibilityHint)
     .overlay(alignment: .bottom) {
       if showsDivider {
         Rectangle().fill(Bow.line).frame(height: 0.5).padding(.leading, Bow.Space.s4)

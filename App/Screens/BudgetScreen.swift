@@ -336,8 +336,6 @@ enum BudgetRoute: Hashable {
 /// something to act on.
 private struct BudgetOverviewSection: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   var summary: BudgetSummary
   var notices: [BudgetNotice]
   var currencyCode: String
@@ -395,42 +393,11 @@ private struct BudgetOverviewSection: View {
   }
 
   private var metrics: some View {
-    // Three columns stop fitting at accessibility text sizes; stack them as label–value rows.
-    let layout = dynamicTypeSize.isAccessibilitySize
-      ? AnyLayout(VStackLayout(alignment: .leading, spacing: Bow.Space.s2))
-      : AnyLayout(HStackLayout(spacing: Bow.Space.s2))
-    return layout {
-      metric("Assigned", amount: summary.assignedThisMonthMinor)
-      metric("Spent", amount: summary.spentThisMonthMinor)
-      metric("Available", amount: summary.availableMinor)
-    }
-    .padding(.vertical, Bow.Space.s3)
-    .padding(.horizontal, Bow.Space.s2)
-    .background {
-      if reduceTransparency {
-        RoundedRectangle(cornerRadius: Bow.Radius.lg, style: .continuous).fill(Bow.card)
-      }
-    }
-    .glassEffect(reduceTransparency ? .identity : .regular, in: .rect(cornerRadius: Bow.Radius.lg))
-  }
-
-  private func metric(_ title: String, amount: Int64) -> some View {
-    let layout = dynamicTypeSize.isAccessibilitySize
-      ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
-      : AnyLayout(VStackLayout(spacing: 2))
-    return layout {
-      Text(title)
-        .font(.bowFootnote)
-        .foregroundStyle(Bow.inkSoft)
-      MoneyText(minor: amount, currencyCode: currencyCode)
-        .font(.bowAmount)
-        .foregroundStyle(Bow.ink)
-        .lineLimit(1)
-        .minimumScaleFactor(0.7)
-    }
-    .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .center)
-    .padding(.horizontal, dynamicTypeSize.isAccessibilitySize ? Bow.Space.s2 : 0)
-    .accessibilityElement(children: .combine)
+    BowStatStrip(stats: [
+      .money("Assigned", summary.assignedThisMonthMinor),
+      .money("Spent", summary.spentThisMonthMinor),
+      .money("Available", summary.availableMinor)
+    ], currencyCode: currencyCode)
   }
 }
 

@@ -217,10 +217,23 @@ struct StatusPill: View {
     }
 }
 
+// Transaction states for identity blocks and context cards.
+extension StatusPill {
+    static var cleared: StatusPill { StatusPill(text: "Cleared", state: .funded, symbol: "checkmark") }
+    static var pendingAtBank: StatusPill { StatusPill(text: "Pending at bank", state: .empty, symbol: "clock") }
+    static var needsReview: StatusPill { StatusPill(text: "Needs review", state: .needs) }
+}
+
 // MARK: - Sky background (atmosphere)
 
 enum SkyMood {
     case dawn, mint, amber, coral
+    /// Something needs money or review.
+    static let review = SkyMood.amber
+    /// Something is over or short.
+    static let short = SkyMood.coral
+    /// Reconciling.
+    static let reconcile = SkyMood.mint
     var top: Color {
         switch self {
         case .dawn:  Color(light: 0xD6E0FF, dark: 0x1D2750)
@@ -397,6 +410,10 @@ extension View {
             .scrollContentBackground(.hidden)
             .background { background().ignoresSafeArea() }
     }
+    /// Put on a List or Form (screen or sheet) so the sky shows behind it, under the native toolbar.
+    func bowSkyList(mood: SkyMood = .dawn, height: CGFloat = 520) -> some View {
+        self.bowListBackground { Bow.mist.overlay(alignment: .top) { SkyBackground(mood: mood, height: height) } }
+    }
     /// Put on the app root once: system controls pick up the brand tint.
     func bowAppTint() -> some View { self.tint(Bow.bow) }
 }
@@ -410,5 +427,24 @@ extension View {
     func bowCard(radius: CGFloat = Bow.Radius.lg) -> some View {
         self.background(Bow.card, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .shadow(color: .black.opacity(0.05), radius: 10, y: 6)
+    }
+
+    /// Liquid Glass card for content (stat strip, context card). Solid card when Reduce Transparency is on.
+    func bowGlassCard(radius: CGFloat = Bow.Radius.lg) -> some View {
+        modifier(BowGlassCard(radius: radius))
+    }
+}
+
+private struct BowGlassCard: ViewModifier {
+    var radius: CGFloat
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    func body(content: Content) -> some View {
+        content
+            .background {
+                if reduceTransparency {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous).fill(Bow.card)
+                }
+            }
+            .glassEffect(reduceTransparency ? .identity : .regular, in: .rect(cornerRadius: radius))
     }
 }

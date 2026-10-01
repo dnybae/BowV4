@@ -8,7 +8,15 @@ struct MerchantLogoView: View {
   var envelopeName: String? = nil
   var appearanceOverride: PayeeLogoAppearance? = nil
   var size: CGFloat = 38
+  var style: Style = .plain
   @ScaledMetric private var scale: CGFloat = 1
+
+  enum Style {
+    /// A grey well, for list rows.
+    case plain
+    /// The white glossy tile used by identity blocks and context cards.
+    case glossy
+  }
 
   /// The logo grows with Dynamic Type, capped so rows stay proportionate.
   private var side: CGFloat { size * min(scale, Bow.maxGraphicScale) }
@@ -18,6 +26,21 @@ struct MerchantLogoView: View {
   }
 
   var body: some View {
+    switch style {
+    case .plain:
+      logo
+        .background(Bow.well,
+                    in: RoundedRectangle(cornerRadius: side * 0.26))
+        .clipShape(RoundedRectangle(cornerRadius: side * 0.26))
+        .accessibilityHidden(true)
+    case .glossy:
+      logo
+        .bowGlossyTileBackground(side: side)
+        .accessibilityHidden(true)
+    }
+  }
+
+  private var logo: some View {
     Group {
       if kind == .transfer {
         systemIcon
@@ -46,10 +69,6 @@ struct MerchantLogoView: View {
       }
     }
     .frame(width: side, height: side)
-    .background(Bow.well,
-                in: RoundedRectangle(cornerRadius: side * 0.26))
-    .clipShape(RoundedRectangle(cornerRadius: side * 0.26))
-    .accessibilityHidden(true)
   }
 
   private var systemIcon: some View {

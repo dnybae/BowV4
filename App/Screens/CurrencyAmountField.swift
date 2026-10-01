@@ -14,6 +14,16 @@ struct CurrencyAmountField: View {
     case row
     /// A large, centered amount that serves as a screen's hero number.
     case hero
+    /// The editor sheet's amount hero: the title above a 50pt centered amount.
+    case editorHero
+
+    fileprivate var heroSize: CGFloat? {
+      switch self {
+      case .row: nil
+      case .hero: 44
+      case .editorHero: 50
+      }
+    }
   }
 
   init(_ title: String, minor: Binding<Int64>, currencyCode: String, allowsNegative: Bool = false,
@@ -31,13 +41,22 @@ struct CurrencyAmountField: View {
       LabeledContent(title) { field }
     case .hero:
       field
+    case .editorHero:
+      VStack(spacing: Bow.Space.s1) {
+        Text(title)
+          .font(.bowSubhead)
+          .foregroundStyle(Bow.inkSoft)
+          .accessibilityHidden(true)
+        field
+      }
+      .frame(maxWidth: .infinity)
     }
   }
 
   private var field: some View {
     CurrencyTextFieldRepresentable(
       title: title, minor: $minor, currencyCode: currencyCode, allowsNegative: allowsNegative,
-      isHero: style == .hero
+      heroSize: style.heroSize
     )
   }
 }
@@ -47,7 +66,9 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
   @Binding var minor: Int64
   var currencyCode: String
   var allowsNegative: Bool
-  var isHero: Bool
+  /// Point size of a hero amount; nil for a form row.
+  var heroSize: CGFloat?
+  private var isHero: Bool { heroSize != nil }
   @Environment(\.isEnabled) private var isEnabled
 
   func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
@@ -55,8 +76,8 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
   /// Body-size SF Pro Rounded with tabular digits, scaled for Dynamic Type.
   private static var moneyFont: UIFont { roundedMoneyFont(size: 17, weight: .regular, textStyle: .body) }
 
-  /// Bow's hero number: 44pt SF Pro Rounded Semibold, scaled for Dynamic Type.
-  private static var heroFont: UIFont { roundedMoneyFont(size: 44, weight: .semibold, textStyle: .largeTitle) }
+  /// Bow's hero number: SF Pro Rounded Semibold (44pt, or 50pt in editor sheets), scaled for Dynamic Type.
+  private static func heroFont(size: CGFloat) -> UIFont { roundedMoneyFont(size: size, weight: .semibold, textStyle: .largeTitle) }
 
   private static func roundedMoneyFont(size: CGFloat, weight: UIFont.Weight, textStyle: UIFont.TextStyle) -> UIFont {
     let base = UIFont.systemFont(ofSize: size, weight: weight)
@@ -73,7 +94,7 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
     field.delegate = context.coordinator
     field.keyboardType = .numberPad
     field.textAlignment = isHero ? .center : .right
-    field.font = isHero ? Self.heroFont : Self.moneyFont
+    field.font = heroSize.map(Self.heroFont(size:)) ?? Self.moneyFont
     if isHero {
       field.adjustsFontSizeToFitWidth = true
       field.minimumFontSize = 24

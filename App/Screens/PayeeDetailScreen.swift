@@ -71,26 +71,80 @@ struct PayeeDetailScreen: View {
     )
   }
 
-  var body: some View {
-    List {
-      if let entry {
-        Section("Icon") {
-          HStack(spacing: 12) {
-            MerchantLogoView(merchantName: entry.name,
-                             domain: payee?.merchantDomain,
-                             size: 52)
-            VStack(alignment: .leading, spacing: 3) {
-              Text(entry.name).font(.headline)
-              Text(payee?.logoSource.title ?? "Default icon")
-                .font(.subheadline).foregroundStyle(Bow.inkSoft)
+  /// Default envelope, bank names, notes and links out.
+  @ViewBuilder
+  private func aboutSection(_ entry: PayeeDirectory.Entry) -> some View {
+    let bankNames = payee?.bankNames ?? []
+    let defaultEnvelope = payee.flatMap { payee in envelopes.first { $0.id == payee.defaultEnvelopeID } }
+    let notes = payee?.notes ?? ""
+    if defaultEnvelope != nil || !bankNames.isEmpty || !notes.isEmpty || websiteURL != nil || webSearchURL != nil {
+      Section {
+        if let defaultEnvelope {
+          BowTileValueRow("Default envelope", systemImage: "square.grid.2x2", value: defaultEnvelope.name)
+        }
+        if !bankNames.isEmpty {
+          NavigationLink {
+            PayeeBankNamesScreen(payeeName: entry.name, bankNames: bankNames)
+          } label: {
+            BowTileValueRow(title: "Bank names", systemImage: "building.columns") {
+              Text(bankNames.count == 1 ? bankNames[0] : "\(bankNames[0]) +\(bankNames.count - 1)")
+                .lineLimit(1)
             }
           }
         }
-        .listRowBackground(Bow.card)
+        if !notes.isEmpty {
+          Label {
+            Text(notes)
+              .foregroundStyle(Bow.ink)
+              .textSelection(.enabled)
+          } icon: {
+            Image(systemName: "note.text")
+          }
+          .labelStyle(.bowTile)
+        }
+        if let websiteURL {
+          Link(destination: websiteURL) {
+            Label("Visit \(websiteURL.host() ?? "website")", systemImage: "safari").labelStyle(.bowTile)
+          }
+        }
+        if let webSearchURL {
+          Link(destination: webSearchURL) {
+            Label("Search this payee on the web", systemImage: "globe").labelStyle(.bowTile)
+          }
+        }
+      } header: {
+        Text("About")
+      } footer: {
+        if !bankNames.isEmpty {
+          Text("Imported transactions with these descriptions are filed under \(entry.name).")
+        }
+      }
+      .listRowBackground(Bow.card)
+    }
+  }
+
+  var body: some View {
+    List {
+      if let entry {
+        Section {
+          VStack(spacing: Bow.Space.s4) {
+            BowIdentityHeader(
+              name: entry.name,
+              context: usualAccountName.map { "Usually paid with \($0)" }
+            ) {
+              MerchantLogoView(merchantName: entry.name, domain: payee?.merchantDomain,
+                               size: 64, style: .glossy)
+            }
+            if let activity {
+              BowStatStrip(stats: activity.stats(currencyCode: currencyCode), currencyCode: currencyCode)
+            }
+          }
+          .listRowBackground(Color.clear)
+          .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: Bow.Space.s2, trailing: 0))
+        }
+        aboutSection(entry)
         if let activity {
-          PayeeActivitySection(
-            activity: activity, usualAccountName: usualAccountName, currencyCode: currencyCode
-          )
+          PayeeActivitySection(activity: activity)
           if let recurrence = activity.recurrence {
             PayeeRecurrenceSection(
               recurrence: recurrence,
@@ -125,45 +179,6 @@ struct PayeeDetailScreen: View {
           }
           .listRowBackground(Bow.card)
         }
-        if let payee,
-           let envelope = envelopes.first(where: { $0.id == payee.defaultEnvelopeID }) {
-          Section("Default envelope") {
-            LabeledContent("Envelope", value: envelope.name)
-          }
-          .listRowBackground(Bow.card)
-        }
-        Section("About") {
-          if let notes = payee?.notes, !notes.isEmpty {
-            Text(notes)
-              .foregroundStyle(Bow.ink)
-              .textSelection(.enabled)
-          }
-          if let websiteURL {
-            Link(destination: websiteURL) {
-              Label("Visit \(websiteURL.host() ?? "website")", systemImage: "safari")
-            }
-          }
-          if let webSearchURL {
-            Link(destination: webSearchURL) {
-              Label("Search this payee on the web", systemImage: "magnifyingglass")
-            }
-          }
-        }
-        .listRowBackground(Bow.card)
-        if let bankNames = payee?.bankNames, !bankNames.isEmpty {
-          Section {
-            ForEach(bankNames, id: \.self) { bankName in
-              Text(bankName)
-                .foregroundStyle(Bow.ink)
-                .textSelection(.enabled)
-            }
-          } header: {
-            Text("Bank names")
-          } footer: {
-            Text("Imported transactions with these descriptions are filed under \(entry.name).")
-          }
-          .listRowBackground(Bow.card)
-        }
         if !entry.isTransferOnly {
           Section {
             Button("Merge a duplicate payee…", systemImage: "arrow.triangle.merge") {
@@ -181,8 +196,8 @@ struct PayeeDetailScreen: View {
             description: Text("Transactions for this payee will appear here.")
           )
         } else {
-          ForEach(TransactionDateGroup.make(feed.items)) { group in
-            Section(group.title) {
+          ForEach(Array(TransactionDateGroup.make(feed.items).enumerated()), id: \.element.id) { index, group in
+            Section {
               ForEach(group.items) { transaction in
                 Button {
                   let id = transaction.id
@@ -195,6 +210,16 @@ struct PayeeDetailScreen: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityHint("Opens transaction details")
+              }
+            } header: {
+              // The first day sits under an Activity heading.
+              if index == 0 {
+                VStack(alignment: .leading, spacing: Bow.Space.s2) {
+                  Text("Activity")
+                  Text(group.title)
+                }
+              } else {
+                Text(group.title)
               }
             }
             .listRowBackground(Bow.card)
@@ -217,8 +242,8 @@ struct PayeeDetailScreen: View {
           .listRowBackground(Color.clear)
       }
     }
-    .bowListBackground()
-    .navigationTitle(entry?.name ?? "Payee")
+    .bowSkyList(mood: .dawn, height: 460)
+    .navigationTitle("Payee")
     .task(id: "\(payeeKey)|\(reloadVersion)") {
       let repository = PayeeDirectoryRepository(modelContainer: modelContext.container)
       entry = (try? await repository.entries())?.first { $0.key == payeeKey }
@@ -277,5 +302,29 @@ struct PayeeDetailScreen: View {
         currencyCode: currencyCode
       )
     }
+  }
+}
+
+/// Every bank description filed under a payee, selectable for copying.
+private struct PayeeBankNamesScreen: View {
+  var payeeName: String
+  var bankNames: [String]
+
+  var body: some View {
+    List {
+      Section {
+        ForEach(bankNames, id: \.self) { bankName in
+          Text(bankName)
+            .foregroundStyle(Bow.ink)
+            .textSelection(.enabled)
+        }
+      } footer: {
+        Text("Imported transactions with these descriptions are filed under \(payeeName).")
+      }
+      .listRowBackground(Bow.card)
+    }
+    .bowListBackground()
+    .navigationTitle("Bank names")
+    .navigationBarTitleDisplayMode(.inline)
   }
 }

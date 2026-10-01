@@ -1,24 +1,17 @@
 import SwiftUI
 import Charts
 
+/// The last six months of a payee's activity as a bar chart. The totals sit in the stat strip above.
 struct PayeeActivitySection: View {
   var activity: PayeeActivity
-  var usualAccountName: String?
-  var currencyCode: String
 
   private var hasRecentMonths: Bool {
     activity.months.contains { $0.totalMinor > 0 }
   }
 
   var body: some View {
-    Section {
-      ViewThatFits(in: .horizontal) {
-        HStack(alignment: .top, spacing: Bow.Space.s3) { stats }
-        VStack(alignment: .leading, spacing: Bow.Space.s3) { stats }
-      }
-      .padding(.vertical, Bow.Space.s1)
-
-      if hasRecentMonths {
+    if hasRecentMonths {
+      Section("Last 6 months") {
         Chart(activity.months) { month in
           BarMark(
             x: .value("Month", month.start, unit: .month),
@@ -37,43 +30,18 @@ struct PayeeActivitySection: View {
         .padding(.vertical, Bow.Space.s1)
         .accessibilityLabel("Last 6 months")
       }
-
-      if let usualAccountName {
-        Label("Usually paid with \(usualAccountName)", systemImage: "creditcard")
-          .font(.subheadline)
-          .foregroundStyle(Bow.inkSoft)
-      }
-    } header: {
-      Text("Activity")
-    }
-    .listRowBackground(Bow.card)
-  }
-
-  @ViewBuilder
-  private var stats: some View {
-    stat(activity.yearToDateTitle,
-         value: BudgetMoney.formatted(activity.yearToDateMinor, currencyCode: currencyCode))
-    stat("Average",
-         value: BudgetMoney.formatted(activity.averageMinor, currencyCode: currencyCode))
-    if let frequency = activity.frequencyDescription {
-      stat("How often", value: frequency)
-    } else {
-      stat("Payments", value: activity.transactionCount.formatted())
+      .listRowBackground(Bow.card)
     }
   }
+}
 
-  private func stat(_ title: String, value: String) -> some View {
-    VStack(alignment: .leading, spacing: 2) {
-      Text(title)
-        .font(.subheadline)
-        .foregroundStyle(Bow.inkSoft)
-      Text(value)
-        .font(.headline)
-        .fontDesign(.rounded)
-        .monospacedDigit()
-        .foregroundStyle(Bow.ink)
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .accessibilityElement(children: .combine)
+extension PayeeActivity {
+  /// This year, Average and How often (or Payments), for the payee's stat strip.
+  func stats(currencyCode: String) -> [BowStat] {
+    [
+      .money(yearToDateTitle, yearToDateMinor),
+      .money("Average", averageMinor),
+      frequencyDescription.map { .text("How often", $0) } ?? .text("Payments", transactionCount.formatted())
+    ]
   }
 }

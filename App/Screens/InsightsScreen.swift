@@ -14,11 +14,16 @@ struct InsightsScreen: View {
   var currencyCode: String
   @State private var selectedBarMonth: Date?
   @State private var selectedSpendingAngle: Double?
+  /// The month and group last scrubbed to; they stay highlighted after the finger lifts.
+  @State private var pinnedBarMonth: Date?
+  @State private var pinnedGroupID: UUID?
   @State private var detail: InsightsDetail?
   @State private var editingTransaction: BudgetTransaction?
   @State private var transactions: [BudgetTransaction] = []
   @State private var monthlyNetWorth: [Date: Int64] = [:]
   @State private var refreshVersion = 0
+  @State private var hasLoaded = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   private var calendar: Calendar { .current }
   private var months: [Date] {
@@ -168,6 +173,84 @@ struct InsightsScreen: View {
     .shadow(color: .black.opacity(0.05), radius: 10, y: 6)
   }
 
+  private var selectedItem: InsightsMonth? {
+    let month = selectedBarMonth ?? pinnedBarMonth
+    return month.flatMap { month in
+      monthItems.first { calendar.isDate($0.month, equalTo: month, toGranularity: .month) }
+    }
+  }
+
+  private func barOpacity(for month: Date) -> Double {
+    guard let selectedItem else { return 1 }
+    return calendar.isDate(selectedItem.month, equalTo: month, toGranularity: .month) ? 1 : 0.4
+  }
+
+  /// The scrubbed month's totals and a button to open its transactions.
+  @ViewBuilder
+  private var monthSelectionFooter: some View {
+    if let item = selectedItem {
+      HStack(alignment: .firstTextBaseline, spacing: Bow.Space.s3) {
+        VStack(alignment: .leading, spacing: 2) {
+          Text(item.month.formatted(.dateTime.month(.wide).year()))
+            .font(.bowSubhead.weight(.semibold))
+            .foregroundStyle(Bow.ink)
+          HStack(spacing: Bow.Space.s1) {
+            Text("In")
+            MoneyText(minor: item.incomeMinor, currencyCode: currencyCode)
+            Text("· Out")
+            MoneyText(minor: item.expenseMinor, currencyCode: currencyCode)
+          }
+          .font(.bowFootnote)
+          .foregroundStyle(Bow.inkSoft)
+        }
+        Spacer(minLength: Bow.Space.s2)
+        Button("See transactions") {
+          let matching = transactions.filter { calendar.isDate($0.date, equalTo: item.month, toGranularity: .month) }
+          detail = InsightsDetail(title: item.month.formatted(.dateTime.month(.wide).year()), transactions: matching)
+        }
+        .bowSecondaryButton(size: .small)
+      }
+      .accessibilityElement(children: .combine)
+      .transition(.opacity)
+    } else {
+      Text("Drag across the chart to compare months.")
+        .font(.bowFootnote)
+        .foregroundStyle(Bow.inkSoft)
+        .transition(.opacity)
+    }
+  }
+
+  private var selectedGroup: InsightsGroup? {
+    if let selectedSpendingAngle { return group(atAngle: selectedSpendingAngle) }
+    return spendingGroups.first { $0.id == pinnedGroupID }
+  }
+
+  private func group(atAngle value: Double) -> InsightsGroup? {
+    var boundary = 0.0
+    for group in spendingGroups {
+      boundary += Double(group.totalMinor)
+      if value <= boundary { return group }
+    }
+    return nil
+  }
+
+  /// The donut's middle: the touched group, or this month's total.
+  private var donutCenter: some View {
+    VStack(spacing: 2) {
+      Text(selectedGroup?.name ?? "Spent")
+        .font(.bowFootnote)
+        .foregroundStyle(Bow.inkSoft)
+        .lineLimit(1)
+      MoneyText(minor: selectedGroup?.totalMinor ?? spendingGroups.reduce(0) { $0 + $1.totalMinor },
+                currencyCode: currencyCode)
+        .font(.bowAmount)
+        .foregroundStyle(Bow.ink)
+        .lineLimit(1)
+        .minimumScaleFactor(0.6)
+    }
+    .multilineTextAlignment(.center)
+  }
+
   /// Calm categorical colors for envelope groups. Coral is left out because it means overspent.
   private static let groupPalette: [Color] = [
     Bow.bow, Bow.funded, Bow.needs, Bow.bowInk, Bow.fundedInk, Bow.needsInk, Bow.inkSoft
@@ -185,7 +268,7 @@ struct InsightsScreen: View {
       VStack(alignment: .leading, spacing: Bow.Space.s4) {
         arrowCard
 
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Bow.Space.s3) {
           Text("Income and spending").font(.bowHeadline).foregroundStyle(Bow.ink)
           Chart {
             ForEach(monthItems) { item in
@@ -193,42 +276,66 @@ struct InsightsScreen: View {
                 .foregroundStyle(by: .value("Flow", "Income"))
                 .position(by: .value("Flow", "Income"))
                 .clipShape(Capsule())
+                .opacity(barOpacity(for: item.month))
               BarMark(x: .value("Month", item.month, unit: .month), y: .value("Amount", Double(item.expenseMinor) / 100))
                 .foregroundStyle(by: .value("Flow", "Spending"))
                 .position(by: .value("Flow", "Spending"))
                 .clipShape(Capsule())
+                .opacity(barOpacity(for: item.month))
+            }
+            if let selectedItem {
+              RuleMark(x: .value("Month", selectedItem.month, unit: .month))
+                .foregroundStyle(Bow.line)
+                .zIndex(-1)
             }
           }
-          .chartForegroundStyleScale([
-            "Income": LinearGradient(colors: [Bow.funded.opacity(0.6), Bow.funded], startPoint: .top, endPoint: .bottom),
-            "Spending": LinearGradient(colors: [Bow.bow.opacity(0.6), Bow.bow], startPoint: .top, endPoint: .bottom)
-          ])
+          .chartForegroundStyleScale(["Income": Bow.funded, "Spending": Bow.bow])
           .chartXSelection(value: $selectedBarMonth)
           .frame(height: 220)
           .chartYAxis { currencyAxis }
-          .shadow(color: Bow.bow.opacity(0.18), radius: 8, y: 4)
-          Text("Tap a month to see its transactions.")
-            .font(.bowFootnote)
-            .foregroundStyle(Bow.inkSoft)
+          .redacted(reason: hasLoaded ? [] : .placeholder)
+          .sensoryFeedback(.selection, trigger: selectedItem?.month)
+          monthSelectionFooter
         }
         .insightCard()
+        .bowAnimation(value: pinnedBarMonth)
 
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Bow.Space.s3) {
           Text("Spending by group").font(.bowHeadline).foregroundStyle(Bow.ink)
           Text((months.last ?? Date()).formatted(.dateTime.month(.wide).year()))
             .font(.bowSubhead)
             .foregroundStyle(Bow.inkSoft)
-          if spendingGroups.isEmpty {
+          if !hasLoaded {
+            Circle()
+              .stroke(Bow.well, lineWidth: 28)
+              .frame(height: 182)
+              .frame(maxWidth: .infinity)
+              .padding(.vertical, Bow.Space.s3)
+              .bowShimmer()
+              .accessibilityHidden(true)
+          } else if spendingGroups.isEmpty {
             ContentUnavailableView("No spending yet", systemImage: "chart.pie", description: Text("Expenses with an envelope will appear here."))
           } else {
             Chart(spendingGroups) { group in
               SectorMark(angle: .value("Spending", Double(group.totalMinor)), innerRadius: .ratio(0.65), angularInset: 2)
                 .cornerRadius(4)
                 .foregroundStyle(by: .value("Group", group.name))
+                .opacity(selectedGroup == nil || selectedGroup?.id == group.id ? 1 : 0.35)
             }
             .chartForegroundStyleScale(domain: spendingGroups.map(\.name), range: Self.groupPalette)
             .chartAngleSelection(value: $selectedSpendingAngle)
+            .chartBackground { proxy in
+              GeometryReader { geometry in
+                if let frame = proxy.plotFrame {
+                  let rect = geometry[frame]
+                  donutCenter
+                    .frame(width: rect.width * 0.55)
+                    .position(x: rect.midX, y: rect.midY)
+                }
+              }
+            }
             .frame(height: 210)
+            .sensoryFeedback(.selection, trigger: selectedGroup?.id)
             .accessibilityLabel("Spending by envelope group")
             ForEach(spendingGroups) { group in
               Button {
@@ -241,22 +348,25 @@ struct InsightsScreen: View {
                   Spacer()
                   MoneyText(minor: group.totalMinor, currencyCode: currencyCode)
                     .font(.bowAmountSm)
-                    .monospacedDigit()
                     .foregroundStyle(Bow.ink)
                   Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
+                    .font(.bowFootnote.weight(.semibold))
                     .foregroundStyle(Bow.inkFaint)
                     .accessibilityHidden(true)
                 }
+                .padding(.vertical, Bow.Space.s2)
+                .padding(.horizontal, Bow.Space.s2)
                 .contentShape(Rectangle())
               }
-              .buttonStyle(.plain)
+              .buttonStyle(.bowRowPress)
+              .clipShape(RoundedRectangle(cornerRadius: Bow.Radius.sm, style: .continuous))
+              .padding(.horizontal, -Bow.Space.s2)
             }
           }
         }
         .insightCard()
 
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Bow.Space.s3) {
           Text("Net worth").font(.bowHeadline).foregroundStyle(Bow.ink)
           if let value = currentNetWorth.netWorthMinor {
             MoneyText(minor: value, currencyCode: currencyCode)
@@ -283,29 +393,37 @@ struct InsightsScreen: View {
           }
           .frame(height: 190)
           .chartYAxis { currencyAxis }
-          .shadow(color: Bow.bow.opacity(0.3), radius: 6)
+          .redacted(reason: hasLoaded ? [] : .placeholder)
           Text("Includes tracking accounts and credit balances.")
             .font(.bowFootnote)
             .foregroundStyle(Bow.inkSoft)
         }
         .insightCard()
       }
-      .padding(16)
-      .padding(.bottom, 24)
+      .scenePadding(.horizontal)
+      .padding(.top, Bow.Space.s4)
+      .padding(.bottom, Bow.Space.s6)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
+    .bowSoftScrollEdge()
     .task(id: refreshVersion) {
       let first = months.first ?? Date()
       let next = Calendar.current.date(byAdding: .month, value: 1, to: months.last ?? Date()) ?? Date()
       let predicate = #Predicate<BudgetTransaction> { $0.date >= first && $0.date < next }
-      transactions = (try? modelContext.fetch(FetchDescriptor(predicate: predicate))) ?? []
+      let fetched = (try? modelContext.fetch(FetchDescriptor(predicate: predicate))) ?? []
       var values: [Date: Int64] = [:]
       for month in months.dropLast() {
         if let value = try? await snapshotRepository.snapshot(month: month).netWorthMinor {
           values[month] = value
         }
       }
-      monthlyNetWorth = values
+      guard !Task.isCancelled else { return }
+      // Everything lands at once, so the charts draw one time instead of twice.
+      withAnimation(Bow.motion(reduceMotion: reduceMotion)) {
+        transactions = fetched
+        monthlyNetWorth = values
+        hasLoaded = true
+      }
     }
     .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
       Task { await snapshotRepository.invalidate() }
@@ -318,22 +436,11 @@ struct InsightsScreen: View {
     .navigationTitle("Insights")
     .navigationBarTitleDisplayMode(.inline)
     .onChange(of: selectedBarMonth) { _, value in
-      guard let value else { return }
-      let matching = transactions.filter { calendar.isDate($0.date, equalTo: value, toGranularity: .month) }
-      detail = InsightsDetail(title: value.formatted(.dateTime.month(.wide).year()), transactions: matching)
-      selectedBarMonth = nil
+      // Scrubbing pins the last month touched, so its button stays to open.
+      if let value { pinnedBarMonth = value }
     }
     .onChange(of: selectedSpendingAngle) { _, value in
-      guard let value else { return }
-      var boundary = 0.0
-      for group in spendingGroups {
-        boundary += Double(group.totalMinor)
-        if value <= boundary {
-          detail = InsightsDetail(title: group.name, transactions: group.transactions)
-          break
-        }
-      }
-      selectedSpendingAngle = nil
+      if let value { pinnedGroupID = group(atAngle: value)?.id }
     }
     .sheet(item: $detail) { value in
       NavigationStack {
@@ -360,10 +467,8 @@ struct InsightsScreen: View {
               Spacer()
               MoneyText(minor: transaction.amountMinor, currencyCode: currencyCode)
                 .foregroundStyle(Bow.ink)
-                .fontDesign(.rounded).monospacedDigit()
             }
           }
-          .buttonStyle(.plain)
           .listRowBackground(Bow.card)
         }
         .bowListBackground()

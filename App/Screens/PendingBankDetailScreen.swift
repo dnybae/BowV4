@@ -16,47 +16,23 @@ struct PendingBankDetailScreen: View {
   var body: some View {
     Form {
       Section {
-        HStack(spacing: Bow.Space.s3) {
+        BowIdentityHeader(
+          name: record.payee.isEmpty ? "Bank item" : record.payee,
+          context: [account?.name, record.date.formatted(.dateTime.month(.abbreviated).day())]
+            .compactMap { $0 }.joined(separator: ", "),
+          amountMinor: record.amountMinor,
+          currencyCode: account?.currencyCode ?? "USD",
+          pill: .pendingAtBank
+        ) {
           MerchantLogoView(
             merchantName: record.payee,
-            kind: record.amountMinor < 0 ? .expense : .inflow
+            kind: record.amountMinor < 0 ? .expense : .inflow,
+            size: 64, style: .glossy
           )
-          VStack(alignment: .leading, spacing: 2) {
-            Text(record.payee.isEmpty ? "Bank item" : record.payee)
-              .font(.bowHeadline)
-              .foregroundStyle(Bow.ink)
-            Text("\(account?.name ?? "Account") · \(record.date.formatted(date: .abbreviated, time: .omitted))")
-              .font(.bowFootnote)
-              .foregroundStyle(Bow.inkSoft)
-          }
-          Spacer(minLength: Bow.Space.s2)
-          MoneyText(minor: record.amountMinor, currencyCode: account?.currencyCode ?? "USD")
-            .font(.bowTitle)
-            .monospacedDigit()
-            .foregroundStyle(Bow.inkSoft)
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
         }
-        .padding(.vertical, Bow.Space.s2)
-        .accessibilityElement(children: .combine)
-      } header: {
-        Text("Pending at bank")
-      } footer: {
-        Text("The final posted amount and date may differ. Bow will check for a match when it posts.")
       }
-      .listRowBackground(Bow.card)
-
-      if !record.payee.isEmpty {
-        Section {
-          NavigationLink {
-            PayeeDetailScreen(payeeKey: PayeeDirectory.canonicalKey(for: record.payee, payees: payees))
-          } label: {
-            LabeledContent("Payee", value: record.payee)
-          }
-          .accessibilityHint("Opens payee details")
-        }
-        .listRowBackground(Bow.card)
-      }
+      .listRowBackground(Color.clear)
+      .listRowInsets(EdgeInsets())
 
       if let transactionID = record.transactionID {
         Section {
@@ -72,17 +48,33 @@ struct PendingBankDetailScreen: View {
           if record.amountMinor < 0 {
             EnvelopeSelectionField(
               title: "Envelope", selection: $envelopeID,
-              envelopes: envelopes, noneTitle: "Choose an envelope"
+              envelopes: envelopes, noneTitle: "Choose an envelope", systemImage: "square.grid.2x2"
             )
           }
         } footer: {
-          Text("Record now creates a manual transaction and affects your budget immediately. Choose an envelope for an expense.")
+          Text("The final posted amount and date may differ. Bow will check for a match when it posts. Record now adds it to your budget right away.")
+        }
+        .listRowBackground(Bow.card)
+      }
+
+      if !record.payee.isEmpty {
+        Section {
+          NavigationLink {
+            PayeeDetailScreen(payeeKey: PayeeDirectory.canonicalKey(for: record.payee, payees: payees))
+          } label: {
+            LabeledContent {
+              Text(record.payee)
+            } label: {
+              Label("Payee", systemImage: "person").labelStyle(.bowTile)
+            }
+          }
+          .accessibilityHint("Opens payee details")
         }
         .listRowBackground(Bow.card)
       }
     }
-    .bowListBackground()
-    .navigationTitle("Pending at bank")
+    .bowSkyList(mood: .dawn, height: 420)
+    .navigationTitle("Pending")
     .navigationBarTitleDisplayMode(.inline)
     .safeAreaInset(edge: .bottom) {
       if record.transactionID == nil {

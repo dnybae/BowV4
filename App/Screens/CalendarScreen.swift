@@ -15,12 +15,18 @@ struct CalendarScreen: View {
   var onRecord: (ScheduledTransactionDraft) -> Void
   var onSelectTransaction: (UUID) -> Void
   @State private var displayedMonth = Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
+  /// Which way the last month change went, so the title and grid slide the same way.
+  @State private var monthDirection: Edge = .trailing
   @State private var editingSchedule: BudgetSchedule?
   @State private var monthTransactions: [BudgetTransaction] = []
   @State private var selectedSnapshot: BudgetSnapshot?
   @State private var snapshotRepository: BudgetSnapshotRepository?
+  /// The month `monthTransactions` belongs to. A refresh of the same month keeps showing it.
+  @State private var loadedMonth: Date?
   @State private var refreshVersion = 0
   @State private var isLoadingMonth = false
+  @State private var monthSwipeOffset: CGFloat = 0
+  @Namespace private var selectionNamespace
 
   private var monthPage: CalendarMonthPage {
     CalendarMonthPage(containing: displayedMonth, calendar: calendar)
@@ -48,46 +54,56 @@ struct CalendarScreen: View {
       return total - transaction.amountMinor
     }
   }
+  private var isShowingToday: Bool {
+    calendar.isDateInToday(selectedDate)
+  }
+
   var body: some View {
-    VStack(spacing: 0) {
-      CalendarMonthHeader(
-        month: displayedMonth,
-        onPrevious: { moveMonth(by: -1) },
-        onNext: { moveMonth(by: 1) }
-      )
-      VStack(spacing: 0) {
-        CalendarWeekdayHeader(calendar: calendar)
-        CalendarMonthGrid(
-          days: monthPage.days,
-          selectedDate: $selectedDate,
-          schedules: schedules,
-          recordedDays: recordedDays,
-          calendar: calendar
-        )
+    ScrollView {
+      VStack(alignment: .leading, spacing: Bow.Space.s4) {
+        monthCard
+        selectedDayHeader
+        agenda
       }
-      .padding(.vertical, Bow.Space.s2)
-      .bowCard()
-      .padding(.horizontal, Bow.Space.s4)
-      selectedDayAgenda
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .scenePadding(.horizontal)
+      .padding(.top, Bow.Space.s2)
+      .padding(.bottom, Bow.Space.s6)
     }
+    .scrollsToTopOnReselect(of: .calendar)
     .background {
       Bow.mist.overlay(alignment: .top) { SkyBackground(mood: .dawn) }
         .ignoresSafeArea()
     }
-    .navigationTitle("Calendar")
+    .bowSoftScrollEdge()
+    // One title: the month, in the bar, sliding the way the user moved (like Budget).
+    .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
-      ToolbarItem(placement: .topBarTrailing) {
-        Button("Today") { returnToToday() }
+      ToolbarItem(placement: .principal) {
+        BowMonthTitle(month: displayedMonth, direction: monthDirection)
+      }
+      if !isShowingToday {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button("Today") { returnToToday() }
+        }
+      }
+      ToolbarItemGroup(placement: .topBarTrailing) {
+        Button("Previous Month", systemImage: "chevron.left") { moveMonth(by: -1) }
+          .labelStyle(.iconOnly)
+        Button("Next Month", systemImage: "chevron.right") { moveMonth(by: 1) }
+          .labelStyle(.iconOnly)
       }
     }
+    .sensoryFeedback(.selection, trigger: calendar.startOfDay(for: selectedDate))
     .onAppear {
       displayedMonth = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
     }
     .onChange(of: selectedDate) { _, date in
       let month = calendar.dateInterval(of: .month, for: date)?.start ?? date
-      if month != displayedMonth { displayedMonth = month }
+      if month != displayedMonth {
+        monthDirection = month > displayedMonth ? .trailing : .leading
+        withAnimation(Bow.motion(reduceMotion: reduceMotion)) { displayedMonth = month }
+      }
     }
     .onChange(of: returnToTodayRequest) { _, _ in
       returnToToday()
@@ -104,6 +120,39 @@ struct CalendarScreen: View {
     }
   }
 
+  /// The month grid on one card. Swipe sideways to change months.
+  private var monthCard: some View {
+    VStack(spacing: 0) {
+      CalendarWeekdayHeader(calendar: calendar)
+      CalendarMonthGrid(
+        days: monthPage.days,
+        selectedDate: $selectedDate,
+        schedules: schedules,
+        recordedDays: recordedDays,
+        calendar: calendar,
+        selectionNamespace: selectionNamespace
+      )
+      .id(displayedMonth)
+      .transition(reduceMotion ? .opacity : .push(from: monthDirection))
+    }
+    .padding(.vertical, Bow.Space.s2)
+    .clipped()
+    .offset(x: monthSwipeOffset)
+    .bowCard()
+    .bowAnimation(value: selectedDate)
+    .gesture(DragGesture(minimumDistance: 24)
+      .onChanged { value in
+        guard !reduceMotion, abs(value.translation.width) > abs(value.translation.height) else { return }
+        monthSwipeOffset = max(-16, min(16, value.translation.width * 0.15))
+      }
+      .onEnded { value in
+        withAnimation(Bow.motion(reduceMotion: reduceMotion)) { monthSwipeOffset = 0 }
+        guard abs(value.translation.width) > 60,
+              abs(value.translation.width) > abs(value.translation.height) * 1.5 else { return }
+        moveMonth(by: value.translation.width < 0 ? 1 : -1)
+      })
+  }
+
   private var daySummary: String {
     let scheduled = selectedSchedules.count
     let recorded = dayTransactions.count
@@ -112,73 +161,78 @@ struct CalendarScreen: View {
     return "\(scheduledText), \(recordedText)"
   }
 
-  private var selectedDayAgenda: some View {
-    ScrollView {
-      LazyVStack(alignment: .leading, spacing: 0) {
-        HStack(alignment: .firstTextBaseline) {
-          VStack(alignment: .leading, spacing: 4) {
-            Text(selectedDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-              .font(.bowHeadline)
-              .foregroundStyle(Bow.ink)
-            Text(daySummary)
-              .font(.bowSubhead)
-              .foregroundStyle(Bow.inkSoft)
-          }
-          Spacer()
-          VStack(alignment: .trailing, spacing: 2) {
-            Text("Spent")
-              .font(.bowFootnote)
-              .foregroundStyle(Bow.inkSoft)
-            MoneyText(minor: spentMinor, currencyCode: currencyCode)
-              .font(.bowAmount)
-              .monospacedDigit()
-              .foregroundStyle(Bow.ink)
-          }
-          .accessibilityElement(children: .combine)
+  private var selectedDayHeader: some View {
+    HStack(alignment: .firstTextBaseline) {
+      VStack(alignment: .leading, spacing: Bow.Space.s1) {
+        Text(selectedDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+          .font(.bowHeadline)
+          .foregroundStyle(Bow.ink)
+          .accessibilityAddTraits(.isHeader)
+        Text(daySummary)
+          .font(.bowSubhead)
+          .foregroundStyle(Bow.inkSoft)
+      }
+      Spacer()
+      VStack(alignment: .trailing, spacing: 2) {
+        Text("Spent")
+          .font(.bowFootnote)
+          .foregroundStyle(Bow.inkSoft)
+        MoneyText(minor: spentMinor, currencyCode: currencyCode)
+          .font(.bowAmount)
+          .foregroundStyle(Bow.ink)
+      }
+      .accessibilityElement(children: .combine)
+    }
+    .padding(.horizontal, Bow.Space.s1)
+  }
+
+  @ViewBuilder
+  private var agenda: some View {
+    if selectedSchedules.isEmpty && dayTransactions.isEmpty {
+      if isLoadingMonth && loadedMonth == nil {
+        VStack(spacing: 0) {
+          BowTransactionSkeletonRows(count: 2)
+            .padding(.horizontal, Bow.Space.s4)
+            .padding(.vertical, Bow.Space.s2)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
+        .bowCard(radius: Bow.Radius.lg)
+      } else {
+        ContentUnavailableView(
+          "Nothing on this day",
+          systemImage: "calendar",
+          description: Text(schedules.isEmpty
+            ? "Recurring bills you schedule appear here on the days they’re due."
+            : "Scheduled bills and recorded transactions will appear here.")
+        )
         .frame(maxWidth: .infinity)
-
-        if selectedSchedules.isEmpty && dayTransactions.isEmpty && !isLoadingMonth {
-          ContentUnavailableView(
-            "Nothing on this day",
-            systemImage: "calendar",
-            description: Text("Scheduled bills and recorded transactions will appear here.")
-          )
-          .frame(maxWidth: .infinity)
+      }
+    } else {
+      // The same rows and status lines as Spending, in one card.
+      LazyVStack(spacing: 0) {
+        ForEach(scheduleEntries) { entry in
+          scheduleRow(entry, showsDivider: entry.id != scheduleEntries.last?.id || !dayTransactions.isEmpty)
         }
-
-        if !scheduleEntries.isEmpty || !dayTransactions.isEmpty {
-          // The same rows and status lines as Spending, in one card.
-          VStack(spacing: 0) {
-            ForEach(scheduleEntries) { entry in
-              scheduleRow(entry, showsDivider: entry.id != scheduleEntries.last?.id || !dayTransactions.isEmpty)
-            }
-            ForEach(dayTransactions) { transaction in
-              CalendarAgendaRow(
-                model: TransactionRowModel(
-                  transaction,
-                  accountName: accounts.first { $0.id == transaction.accountID }?.name ?? "Account",
-                  envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name
-                ),
-                currencyCode: currencyCode,
-                showsDivider: transaction.id != dayTransactions.last?.id,
-                action: { onSelectTransaction(transaction.id) }
-              ) {
-                EmptyView()
-              }
-            }
+        ForEach(dayTransactions) { transaction in
+          CalendarAgendaRow(
+            model: TransactionRowModel(
+              transaction,
+              accountName: accounts.first { $0.id == transaction.accountID }?.name ?? "Account",
+              envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name
+            ),
+            currencyCode: currencyCode,
+            showsDivider: transaction.id != dayTransactions.last?.id,
+            action: { onSelectTransaction(transaction.id) }
+          ) {
+            EmptyView()
           }
-          .clipShape(RoundedRectangle(cornerRadius: Bow.Radius.lg, style: .continuous))
-          .bowCard()
-          .padding(.horizontal, Bow.Space.s4)
         }
       }
-      .frame(maxWidth: .infinity)
-      .padding(.bottom, 88)
+      .bowSwipeActionsContainer()
+      .clipShape(RoundedRectangle(cornerRadius: Bow.Radius.lg, style: .continuous))
+      .bowCard(radius: Bow.Radius.lg)
+      .bowAnimation(value: scheduleEntries.map(\.id))
+      .bowAnimation(value: dayTransactions.map(\.id))
     }
-    .scrollsToTopOnReselect(of: .calendar)
   }
 
   /// The selected day's bills, except ones already recorded and listed among the day's transactions.
@@ -207,7 +261,8 @@ struct CalendarScreen: View {
   private func scheduleRow(_ entry: CalendarScheduleEntry, showsDivider: Bool) -> some View {
     let schedule = entry.schedule
     let isSkipped = entry.occurrence?.isSkipped == true
-    let canRecordBill = canRecord(schedule) && !isSkipped
+    let canRecordBill = canRecord(schedule) && !isSkipped && entry.recorded == nil
+    let skippable = canRecordBill ? entry.occurrence : nil
     return CalendarAgendaRow(
       model: scheduleModel(entry),
       currencyCode: currencyCode,
@@ -222,27 +277,28 @@ struct CalendarScreen: View {
         } else {
           editingSchedule = schedule
         }
-      }
+      },
+      onRecord: canRecordBill ? { onRecord(draft(for: schedule)) } : nil,
+      onSkip: skippable.map { occurrence in { setSkipped(occurrence, true) } }
     ) {
       if entry.recorded == nil {
         if canRecordBill {
           Button("Record", systemImage: "plus") { onRecord(draft(for: schedule)) }
           if let occurrence = entry.occurrence {
-            Button("Skip This Date", systemImage: "forward") {
-              occurrence.isSkipped = true
-              try? modelContext.save()
-            }
+            Button("Skip This Date", systemImage: "forward") { setSkipped(occurrence, true) }
           }
         }
         if isSkipped, let occurrence = entry.occurrence {
-          Button("Restore Reminder", systemImage: "arrow.uturn.backward") {
-            occurrence.isSkipped = false
-            try? modelContext.save()
-          }
+          Button("Restore Reminder", systemImage: "arrow.uturn.backward") { setSkipped(occurrence, false) }
         }
       }
       Button("Edit Schedule", systemImage: "calendar") { editingSchedule = schedule }
     }
+  }
+
+  private func setSkipped(_ occurrence: BudgetScheduleOccurrence, _ skipped: Bool) {
+    withAnimation(Bow.motion(reduceMotion: reduceMotion)) { occurrence.isSkipped = skipped }
+    try? modelContext.save()
   }
 
   /// A bill as a Spending row. The status line carries what the old row said: skipped,
@@ -291,6 +347,7 @@ struct CalendarScreen: View {
 
   private func moveMonth(by offset: Int) {
     guard let nextDate = monthPage.adjacentSelection(from: selectedDate, by: offset) else { return }
+    monthDirection = offset > 0 ? .trailing : .leading
     withAnimation(Bow.motion(reduceMotion: reduceMotion)) {
       selectedDate = nextDate
       displayedMonth = calendar.dateInterval(of: .month, for: nextDate)?.start ?? nextDate
@@ -299,22 +356,29 @@ struct CalendarScreen: View {
 
   private func returnToToday() {
     let today = Date()
+    let month = calendar.dateInterval(of: .month, for: today)?.start ?? today
+    monthDirection = month < displayedMonth ? .leading : .trailing
     withAnimation(Bow.motion(reduceMotion: reduceMotion)) {
       selectedDate = today
-      displayedMonth = calendar.dateInterval(of: .month, for: today)?.start ?? today
+      displayedMonth = month
     }
   }
 
   private func loadSelectedMonth() async {
-    isLoadingMonth = true
-    monthTransactions = []
-    selectedSnapshot = nil
     let month = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
+    // A refresh of the month on screen keeps its rows until the new ones arrive, so nothing flashes.
+    if loadedMonth != month {
+      monthTransactions = []
+      selectedSnapshot = nil
+      loadedMonth = nil
+    }
+    isLoadingMonth = true
     let next = calendar.date(byAdding: .month, value: 1, to: month) ?? .distantFuture
     let predicate = #Predicate<BudgetTransaction> { $0.date >= month && $0.date < next }
     let transactions = (try? modelContext.fetch(FetchDescriptor(predicate: predicate))) ?? []
     guard !Task.isCancelled else { return }
     monthTransactions = transactions
+    loadedMonth = month
     if snapshotRepository == nil {
       snapshotRepository = BudgetSnapshotRepository(modelContainer: modelContext.container)
     }
@@ -334,33 +398,6 @@ private struct CalendarLoadKey: Hashable {
   var refreshVersion: Int
 }
 
-private struct CalendarMonthHeader: View {
-  var month: Date
-  var onPrevious: () -> Void
-  var onNext: () -> Void
-
-  var body: some View {
-    HStack(spacing: 12) {
-      Text(month, format: .dateTime.month(.wide).year())
-        .font(.bowLargeTitle)
-        .foregroundStyle(Bow.ink)
-        .lineLimit(1)
-        .minimumScaleFactor(0.75)
-        .accessibilityAddTraits(.isHeader)
-      Spacer(minLength: 0)
-      Button("Previous Month", systemImage: "chevron.left") { onPrevious() }
-        .labelStyle(.iconOnly)
-        .bowSecondaryButton()
-      Button("Next Month", systemImage: "chevron.right") { onNext() }
-        .labelStyle(.iconOnly)
-        .bowSecondaryButton()
-    }
-    .padding(.horizontal, 20)
-    .padding(.top, 12)
-    .padding(.bottom, 8)
-  }
-}
-
 private struct CalendarWeekdayHeader: View {
   var calendar: Calendar
 
@@ -370,14 +407,14 @@ private struct CalendarWeekdayHeader: View {
         Text(calendar.veryShortStandaloneWeekdaySymbols[
           (calendar.firstWeekday - 1 + index) % 7
         ])
-        .font(.caption2.weight(.semibold))
+        .font(.bowCaption.weight(.semibold))
         .foregroundStyle(Bow.inkSoft)
         .frame(maxWidth: .infinity)
         .accessibilityHidden(true)
       }
     }
-    .padding(.horizontal, 16)
-    .frame(height: 30)
+    .padding(.horizontal, Bow.Space.s4)
+    .padding(.vertical, Bow.Space.s2)
   }
 }
 
@@ -387,6 +424,8 @@ private struct CalendarMonthGrid: View {
   var schedules: [BudgetSchedule]
   var recordedDays: Set<Date>
   var calendar: Calendar
+  var selectionNamespace: Namespace.ID
+  @ScaledMetric(relativeTo: .title3) private var rowHeight: CGFloat = 56
 
   var body: some View {
     let recurrence = ScheduleRecurrence(calendar: calendar)
@@ -403,14 +442,16 @@ private struct CalendarMonthGrid: View {
             selectedDate: $selectedDate,
             scheduledCount: scheduled,
             recorded: recordedDays.contains(day),
-            calendar: calendar
+            calendar: calendar,
+            selectionNamespace: selectionNamespace,
+            rowHeight: rowHeight
           )
         } else {
-          Color.clear.frame(height: CalendarGridMetrics.rowHeight).accessibilityHidden(true)
+          Color.clear.frame(height: rowHeight).accessibilityHidden(true)
         }
       }
     }
-    .padding(.horizontal, 16)
+    .padding(.horizontal, Bow.Space.s4)
     .frame(maxWidth: .infinity)
   }
 }
@@ -421,6 +462,10 @@ private struct CalendarMonthDayButton: View {
   var scheduledCount: Int
   var recorded: Bool
   var calendar: Calendar
+  var selectionNamespace: Namespace.ID
+  var rowHeight: CGFloat
+  @ScaledMetric(relativeTo: .title3) private var circle: CGFloat = 36
+  @ScaledMetric(relativeTo: .title3) private var dot: CGFloat = 5
 
   var body: some View {
     let isSelected = calendar.isDate(day, inSameDayAs: selectedDate)
@@ -432,32 +477,31 @@ private struct CalendarMonthDayButton: View {
         Text(day.formatted(.dateTime.day()))
           .font(.system(.title3, design: .rounded, weight: isSelected || isToday ? .bold : .medium))
           .foregroundStyle(isSelected ? Bow.onBow : (isToday ? Bow.bowInk : Bow.ink))
-          .frame(width: 36, height: 36)
+          .minimumScaleFactor(0.6)
+          .frame(width: circle, height: circle)
           .background {
+            // One selection circle that glides between days.
             if isSelected {
               Circle().fill(Bow.bowSolid)
+                .matchedGeometryEffect(id: "selection", in: selectionNamespace)
             } else if isToday {
               Circle().fill(Bow.bowTint)
             }
           }
         HStack(spacing: 3) {
-          if recorded { Circle().fill(Bow.bow).frame(width: 5, height: 5) }
-          if scheduledCount > 0 { Circle().fill(Bow.needs).frame(width: 5, height: 5) }
+          if recorded { Circle().fill(Bow.bow).frame(width: dot, height: dot) }
+          if scheduledCount > 0 { Circle().fill(Bow.needs).frame(width: dot, height: dot) }
         }
-        .frame(height: 5)
+        .frame(height: dot)
       }
       .frame(maxWidth: .infinity)
-      .frame(height: CalendarGridMetrics.rowHeight)
+      .frame(height: rowHeight)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .accessibilityLabel("\(day.formatted(date: .complete, time: .omitted)), \(scheduledCount) scheduled bills\(recorded ? ", recorded transactions" : "")")
     .accessibilityAddTraits(isSelected ? .isSelected : [])
   }
-}
-
-private enum CalendarGridMetrics {
-  static let rowHeight: CGFloat = 56
 }
 
 private struct CalendarScheduleEntry: Identifiable {
@@ -469,13 +513,16 @@ private struct CalendarScheduleEntry: Identifiable {
   var id: UUID { schedule.id }
 }
 
-/// One row of the day's card: the Spending row with its status tint, tappable, with a long-press menu.
+/// One row of the day's card: the Spending row with its status tint, tappable, with a long-press
+/// menu and (for bills) the same swipe actions as Spending.
 private struct CalendarAgendaRow<MenuItems: View>: View {
   var model: TransactionRowModel
   var currencyCode: String
   var showsDivider: Bool
   var accessibilityHint: String = ""
   var action: () -> Void
+  var onRecord: (() -> Void)? = nil
+  var onSkip: (() -> Void)? = nil
   @ViewBuilder var menuItems: () -> MenuItems
 
   var body: some View {
@@ -487,8 +534,20 @@ private struct CalendarAgendaRow<MenuItems: View>: View {
         .background(model.state.rowStatus?.rowBackground ?? Bow.card)
         .contentShape(.rect)
     }
-    .buttonStyle(.plain)
+    .buttonStyle(.bowRowPress)
+    .contentShape(.contextMenuPreview, .rect(cornerRadius: Bow.Radius.md))
     .contextMenu(menuItems: menuItems)
+    .swipeActions(edge: .leading) {
+      if let onRecord {
+        Button("Record", systemImage: "plus", action: onRecord)
+          .tint(Bow.bowSolid)
+      }
+    }
+    .swipeActions(edge: .trailing) {
+      if let onSkip {
+        Button("Skip", systemImage: "forward", action: onSkip)
+      }
+    }
     .accessibilityHint(accessibilityHint)
     .overlay(alignment: .bottom) {
       if showsDivider {

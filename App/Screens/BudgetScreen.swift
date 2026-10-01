@@ -152,7 +152,7 @@ struct BudgetScreen: View {
     .sensoryFeedback(trigger: readyToAssignState, readyToAssignFeedback)
     .toolbar {
       ToolbarItem(placement: .principal) {
-        BudgetMonthTitle(
+        BowMonthTitle(
           month: displayedMonth, direction: monthDirection, isLoading: showsMonthLoading
         )
       }
@@ -399,38 +399,6 @@ struct BudgetScreen: View {
 private struct ReadyToAssignState: Equatable {
   var month: Date
   var minor: Int64
-}
-
-/// Month and year in the navigation bar. The month slides in from the direction the user moved.
-private struct BudgetMonthTitle: View {
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  var month: Date
-  var direction: Edge
-  var isLoading: Bool
-
-  var body: some View {
-    HStack(spacing: Bow.Space.s2) {
-      VStack(spacing: 0) {
-        Text(month.formatted(.dateTime.month(.wide)))
-          .font(.bowHeadline)
-          .foregroundStyle(Bow.ink)
-        Text(month.formatted(.dateTime.year()))
-          .font(.bowSubhead)
-          .foregroundStyle(Bow.inkSoft)
-      }
-      .id(month)
-      .transition(reduceMotion ? .opacity : .push(from: direction))
-      if isLoading {
-        ProgressView()
-          .controlSize(.small)
-          .accessibilityLabel("Loading month")
-      }
-    }
-    .clipped()
-    .bowAnimation(value: month)
-    .accessibilityElement(children: .combine)
-    .accessibilityAddTraits(.isHeader)
-  }
 }
 
 private extension View {

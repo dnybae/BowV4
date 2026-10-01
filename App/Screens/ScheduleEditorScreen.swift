@@ -21,6 +21,9 @@ struct ScheduleEditorScreen: View {
   @State private var isActive: Bool
   @State private var errorMessage: String?
   @State private var showingDelete = false
+  @State private var showingPayeeSelection = false
+  @State private var initialFields: ScheduleFields?
+  @Environment(\.bowToasts) private var toasts
 
   init(
     schedule: BudgetSchedule?, draft: ScheduleDraft? = nil,
@@ -40,6 +43,17 @@ struct ScheduleEditorScreen: View {
     _frequency = State(initialValue: schedule?.frequency ?? draft?.frequency ?? .monthly)
     _notes = State(initialValue: schedule?.notes ?? "")
     _isActive = State(initialValue: schedule?.isActive ?? true)
+  }
+
+  private var fields: ScheduleFields {
+    ScheduleFields(payee: payee, amountMinor: amountMinor, accountID: accountID, destinationID: destinationID,
+                   kind: kind, envelopeID: envelopeID, startDate: startDate, frequency: frequency,
+                   notes: notes, isActive: isActive)
+  }
+
+  private var hasChanges: Bool {
+    guard let initialFields else { return false }
+    return fields != initialFields
   }
 
   /// Expenses and inflows use an envelope; a transfer only does when it moves cash to a tracking account.
@@ -67,13 +81,24 @@ struct ScheduleEditorScreen: View {
         }
         Section {
           if kind != .transfer {
-            LabeledContent {
-              TextField("Payee", text: $payee)
-                .multilineTextAlignment(.trailing)
-                .textInputAutocapitalization(.words)
+            // The same payee picker as a transaction, with logos and payee rules.
+            Button {
+              showingPayeeSelection = true
             } label: {
-              Label("Payee", systemImage: "person").labelStyle(.bowTile)
+              HStack(spacing: Bow.Space.s3) {
+                BowFieldTitle(title: kind == .expense ? "Payee" : "Source", systemImage: "person")
+                Spacer(minLength: Bow.Space.s3)
+                Text(payee.isEmpty ? "Choose a payee" : payee)
+                  .foregroundStyle(payee.isEmpty ? Bow.inkSoft : Bow.ink)
+                  .lineLimit(1)
+                Image(systemName: "chevron.right")
+                  .font(.bowFootnote.weight(.semibold))
+                  .foregroundStyle(Bow.inkFaint)
+                  .accessibilityHidden(true)
+              }
+              .contentShape(Rectangle())
             }
+            .accessibilityLabel("Payee, \(payee.isEmpty ? "Choose a payee" : payee)")
           }
           if needsEnvelope {
             EnvelopeSelectionField(
@@ -121,25 +146,32 @@ struct ScheduleEditorScreen: View {
         }
       }
       .bowSkyList(mood: .dawn, height: 420)
+      .bowEditorSheet(hasChanges: hasChanges)
+      .onAppear { if initialFields == nil { initialFields = fields } }
       .navigationTitle(schedule == nil ? "New schedule" : "Schedule")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-        ToolbarItem(placement: .confirmationAction) { Button("Save") { save() } }
+        BowCancelButton(hasChanges: hasChanges) { dismiss() }
+      }
+      .safeAreaInset(edge: .bottom) {
+        BowBottomAction(schedule == nil ? "Add schedule" : "Save changes",
+                        isEnabled: amountMinor > 0) { save() }
+      }
+      .sheet(isPresented: $showingPayeeSelection) {
+        PayeeSelectionSheet(selectedName: payee) { selected in
+          payee = selected.name
+          if envelopeID == nil, let defaultEnvelopeID = selected.defaultEnvelopeID {
+            envelopeID = defaultEnvelopeID
+          }
+          showingPayeeSelection = false
+        }
       }
       .confirmationDialog("Delete this schedule?", isPresented: $showingDelete) {
         Button("Delete schedule", role: .destructive) { delete() }
       } message: {
         Text("Previously recorded transactions will remain in your ledger.")
       }
-      .alert("Couldn’t save schedule", isPresented: Binding(
-        get: { errorMessage != nil },
-        set: { if !$0 { errorMessage = nil } }
-      )) {
-        Button("OK") { errorMessage = nil }
-      } message: {
-        Text(errorMessage ?? "")
-      }
+      .bowErrorAlert("Couldn’t save schedule", message: $errorMessage)
     }
   }
 
@@ -208,6 +240,7 @@ struct ScheduleEditorScreen: View {
       try modelContext.save()
       try? ScheduleReviewPlanner().refresh(in: modelContext)
       try? ScheduleTargetSynchronizer().refresh(in: modelContext)
+      toasts?.show(.saved("\(schedule == nil ? "Scheduled" : "Saved") · \(item.payee) · \(frequency.title)"))
       dismiss()
     } catch { errorMessage = error.localizedDescription }
   }
@@ -234,4 +267,18 @@ struct ScheduleDraft: Identifiable {
   var envelopeID: UUID?
   var startDate: Date
   var frequency: ScheduleFrequency
+}
+
+/// The editable fields, compared to what the sheet opened with.
+private struct ScheduleFields: Equatable {
+  var payee: String
+  var amountMinor: Int64
+  var accountID: UUID?
+  var destinationID: UUID?
+  var kind: BudgetTransactionKind
+  var envelopeID: UUID?
+  var startDate: Date
+  var frequency: ScheduleFrequency
+  var notes: String
+  var isActive: Bool
 }

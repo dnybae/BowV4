@@ -32,6 +32,12 @@ struct AccountEditorScreen: View {
     _note = State(initialValue: account?.note ?? "")
   }
 
+  /// Name, type or note changed. The balance loads after opening, so it isn't compared.
+  private var hasChanges: Bool {
+    name != (account?.name ?? "") || note != (account?.note ?? "")
+      || (account != nil && type != account?.accountType)
+  }
+
   private var parsedOpeningBalance: Int64? {
     openingBalanceMinor
   }
@@ -128,29 +134,16 @@ struct AccountEditorScreen: View {
       loadedCurrentBalance = true
     }
     .navigationBarTitleDisplayMode(.inline)
+    .bowEditorSheet(hasChanges: hasChanges)
     .toolbar {
       if account != nil {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }
-        }
-        ToolbarItem(placement: .confirmationAction) {
-          Button("Save") { Task { await save() } }
-            .disabled(!canSave)
-        }
+        BowCancelButton(hasChanges: hasChanges) { dismiss() }
       }
     }
+    // One primary action at the bottom, creating or editing.
     .safeAreaInset(edge: .bottom) {
-      if account == nil {
-        Button { Task { await save() } } label: {
-          Text("Create account")
-            .fontWeight(.semibold)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 4)
-        }
-        .bowPrimaryButton()
-        .disabled(!canSave)
-        .padding(.horizontal, Bow.Space.s4)
-        .padding(.bottom, Bow.Space.s2)
+      BowBottomAction(account == nil ? "Create account" : "Save changes", isEnabled: canSave) {
+        Task { await save() }
       }
     }
     .alert("Couldn’t save account", isPresented: Binding(

@@ -26,13 +26,30 @@ struct CardDebtGoalEditorScreen: View {
     NavigationStack {
       Form {
         Section {
-          LabeledContent("Debt today") {
+          BowContextCard(name: card.name, systemImage: "creditcard", context: "Debt today") {
             MoneyText(minor: currentDebtMinor, currencyCode: currencyCode)
+              .font(.bowTitle)
+              .foregroundStyle(Bow.ink)
+              .lineLimit(1)
+              .minimumScaleFactor(0.7)
           }
-          CurrencyAmountField("Monthly funding target", minor: $monthlyMinor, currencyCode: currencyCode)
-          Toggle("Set payoff date", isOn: $hasDate)
+        }
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets())
+
+        Section {
+          CurrencyAmountField("Fund each month", minor: $monthlyMinor, currencyCode: currencyCode,
+                              systemImage: "calendar.badge.clock")
+          Toggle(isOn: $hasDate) {
+            Label("Set a payoff date", systemImage: "flag").labelStyle(.bowTile)
+          }
           if hasDate {
-            DatePicker("Pay off by", selection: $targetDate, in: Date()..., displayedComponents: .date)
+            NavigationLink {
+              BowDatePickerScreen(title: "Pay off by", date: $targetDate, range: Date()...Date.distantFuture)
+            } label: {
+              BowTileValueRow("Pay off by", systemImage: "calendar",
+                              value: targetDate.formatted(date: .abbreviated, time: .omitted))
+            }
           }
         } footer: {
           Text("A target guides your plan. It does not move money into the card payment envelope.")
@@ -51,11 +68,13 @@ struct CardDebtGoalEditorScreen: View {
           .listRowBackground(Bow.card)
         }
       }
-      .bowListBackground()
+      .bowSkyList(mood: .dawn, height: 420)
+      .bowAnimation(value: hasDate)
+      .bowEditorSheet(hasChanges: hasChanges)
       .navigationTitle("Payoff goal")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+        BowCancelButton(hasChanges: hasChanges) { dismiss() }
         ToolbarItem(placement: .confirmationAction) { Button("Save") { save() } }
       }
       .alert("Couldn’t save goal", isPresented: Binding(
@@ -66,6 +85,10 @@ struct CardDebtGoalEditorScreen: View {
         Text(message ?? "")
       }
     }
+  }
+
+  private var hasChanges: Bool {
+    monthlyMinor != (card.debtMonthlyTargetMinor ?? 0) || hasDate != (card.debtGoalDate != nil) || resetBaseline
   }
 
   private func save() {

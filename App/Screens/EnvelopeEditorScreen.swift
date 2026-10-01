@@ -38,6 +38,12 @@ struct EnvelopeEditorScreen: View {
     targetAmountMinor + scheduledContributions.reduce(0) { $0 + $1.totalMinor }
   }
 
+  private var hasChanges: Bool {
+    name != (envelope?.name ?? "") || targetAmountMinor != (envelope?.targetMinor ?? 0)
+      || hasTargetDate != (envelope?.targetDate != nil)
+      || (envelope != nil && groupID != envelope?.groupID)
+  }
+
   private var tileSymbol: String {
     TransactionIconSymbol.name(for: .expense, payee: "", envelope: name)
   }
@@ -63,26 +69,18 @@ struct EnvelopeEditorScreen: View {
         }
       }
       .bowSkyList(mood: .dawn, height: 420)
+      .bowEditorSheet(hasChanges: hasChanges)
       .navigationTitle(envelope == nil ? "New envelope" : layout == .target ? "Target" : "Envelope")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }
-        }
+        BowCancelButton(hasChanges: hasChanges) { dismiss() }
         ToolbarItem(placement: .confirmationAction) {
           Button(envelope == nil ? "Add" : "Save") { save() }
             .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
               || groupID == nil)
         }
       }
-      .alert("Couldn’t save envelope", isPresented: Binding(
-        get: { errorMessage != nil },
-        set: { if !$0 { errorMessage = nil } }
-      )) {
-        Button("OK") { errorMessage = nil }
-      } message: {
-        Text(errorMessage ?? "")
-      }
+      .bowErrorAlert("Couldn’t save envelope", message: $errorMessage)
     }
   }
 

@@ -19,24 +19,25 @@ struct GroupEditorScreen: View {
   var body: some View {
     NavigationStack {
       Form {
-        Section("Group name") {
-          TextField("For example, Food & Home", text: $name)
+        Section {
+          BowNameHeader("For example, Food & Home", name: $name, systemImage: "folder")
+        } footer: {
+          Text("Groups hold related envelopes on the Budget screen, like bills or everyday spending.")
+            .frame(maxWidth: .infinity)
+            .multilineTextAlignment(.center)
         }
-        .listRowBackground(Bow.card)
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets())
         if group != nil {
-          Section {
-            Button("Delete group", role: .destructive) { showingDelete = true }
-          }
-          .listRowBackground(Bow.card)
+          BowDestructiveSection("Delete group") { showingDelete = true }
         }
       }
-      .bowListBackground()
+      .bowSkyList(mood: .dawn, height: 420)
+      .bowEditorSheet(hasChanges: name != (group?.name ?? ""))
       .navigationTitle(group == nil ? "New group" : "Edit group")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }
-        }
+        BowCancelButton(hasChanges: name != (group?.name ?? "")) { dismiss() }
         ToolbarItem(placement: .confirmationAction) {
           Button(group == nil ? "Add" : "Save") { save() }
             .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

@@ -26,6 +26,7 @@ struct PayeeEditorScreen: View {
   @State private var isImportingLogo = false
   @State private var showingFiles = false
   @State private var showingFindLogo = false
+  @State private var initialFields: PayeeFields?
 
   init(entry: PayeeDirectory.Entry?, payee: BudgetPayee? = nil, onSaved: @escaping () -> Void = {}) {
     self.entry = entry
@@ -37,6 +38,16 @@ struct PayeeEditorScreen: View {
     _customLogoData = State(initialValue: payee?.customLogoData)
     _defaultEnvelopeID = State(initialValue: payee?.defaultEnvelopeID)
     _notes = State(initialValue: payee?.notes ?? "")
+  }
+
+  private var fields: PayeeFields {
+    PayeeFields(name: name, bankNames: bankNames, merchantDomain: merchantDomain, logoSource: logoSource,
+                customLogoData: customLogoData, defaultEnvelopeID: defaultEnvelopeID, notes: notes)
+  }
+
+  private var hasChanges: Bool {
+    guard let initialFields else { return false }
+    return fields != initialFields
   }
 
   private var trimmedName: String {
@@ -148,12 +159,12 @@ struct PayeeEditorScreen: View {
         }
       }
       .bowSkyList(mood: .dawn, height: 420)
+      .bowEditorSheet(hasChanges: hasChanges)
+      .onAppear { if initialFields == nil { initialFields = fields } }
       .navigationTitle(entry == nil ? "New payee" : "Payee")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }
-        }
+        BowCancelButton(hasChanges: hasChanges) { dismiss() }
         ToolbarItem(placement: .confirmationAction) {
           Button("Save") { Task { await save() } }
             .disabled(trimmedName.isEmpty || isSaving || isImportingLogo)
@@ -293,4 +304,15 @@ struct PayeeEditorScreen: View {
       errorMessage = error.localizedDescription
     }
   }
+}
+
+/// The editable fields, compared to what the sheet opened with.
+private struct PayeeFields: Equatable {
+  var name: String
+  var bankNames: [String]
+  var merchantDomain: String
+  var logoSource: PayeeLogoSource
+  var customLogoData: Data?
+  var defaultEnvelopeID: UUID?
+  var notes: String
 }

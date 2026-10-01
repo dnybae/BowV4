@@ -74,6 +74,7 @@ struct AccountsScreen: View {
         .ignoresSafeArea()
     }
     .navigationTitle("Accounts")
+    .navigationBarTitleDisplayMode(.inline)
     .navigationDestination(for: AccountRoute.self) { route in
       if let account = accounts.first(where: { $0.id == route.id }) {
         AccountDetailScreen(

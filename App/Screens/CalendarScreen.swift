@@ -5,6 +5,7 @@ struct CalendarScreen: View {
   @Environment(\.modelContext) private var modelContext
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.calendar) private var calendar
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   var schedules: [BudgetSchedule]
   var occurrences: [BudgetScheduleOccurrence]
   var accounts: [BudgetAccount]
@@ -61,7 +62,21 @@ struct CalendarScreen: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: Bow.Space.s4) {
-        monthCard
+        if dynamicTypeSize.isAccessibilitySize {
+          VStack(alignment: .leading, spacing: Bow.Space.s2) {
+            Text("Choose a day")
+              .font(.bowHeadline)
+              .foregroundStyle(Bow.ink)
+            DatePicker("Choose a day", selection: $selectedDate, displayedComponents: .date)
+              .datePickerStyle(.compact)
+              .labelsHidden()
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(Bow.Space.s4)
+          .bowCard()
+        } else {
+          monthCard
+        }
         selectedDayHeader
         agenda
       }
@@ -162,7 +177,10 @@ struct CalendarScreen: View {
   }
 
   private var selectedDayHeader: some View {
-    HStack(alignment: .firstTextBaseline) {
+    let layout = dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: Bow.Space.s3))
+      : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
+    return layout {
       VStack(alignment: .leading, spacing: Bow.Space.s1) {
         Text(selectedDate.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
           .font(.bowHeadline)
@@ -172,14 +190,16 @@ struct CalendarScreen: View {
           .font(.bowSubhead)
           .foregroundStyle(Bow.inkSoft)
       }
-      Spacer()
-      VStack(alignment: .trailing, spacing: 2) {
+      if !dynamicTypeSize.isAccessibilitySize { Spacer() }
+      VStack(alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing, spacing: 2) {
         Text("Spent")
           .font(.bowFootnote)
           .foregroundStyle(Bow.inkSoft)
         MoneyText(minor: spentMinor, currencyCode: currencyCode)
           .font(.bowAmount)
           .foregroundStyle(Bow.ink)
+          .lineLimit(1)
+          .minimumScaleFactor(0.5)
       }
       .accessibilityElement(children: .combine)
     }

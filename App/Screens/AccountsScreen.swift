@@ -3,6 +3,7 @@ import SwiftData
 
 struct AccountsScreen: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   var accounts: [BudgetAccount]
   var balanceReport: AccountBalanceReport
   var currencyCode: String
@@ -128,7 +129,7 @@ struct AccountsScreen: View {
           MoneyText(minor: total, currencyCode: currencyCode)
             .fontWeight(.semibold)
             .lineLimit(1)
-            .minimumScaleFactor(0.85)
+            .minimumScaleFactor(0.5)
         }
         .padding(.leading, Bow.Space.s1)
 
@@ -199,14 +200,19 @@ struct AccountsScreen: View {
     let balanceText = BudgetMoney.formatted(balance, currencyCode: currencyCode)
     let syncText = syncDescription(for: account)
     let route = AccountRoute(id: account.id)
+    let layout = dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: Bow.Space.s2))
+      : AnyLayout(HStackLayout(spacing: Bow.Space.s3))
     return NavigationLink(value: route) {
       BowItemCard {
-        HStack(spacing: Bow.Space.s3) {
-          Image(systemName: account.kind.systemImage)
-            .bowScaledIcon(frame: 36, glyph: 15, weight: .semibold)
-            .foregroundStyle(Bow.bowInk)
-            .background(Bow.bowTint, in: Circle())
-            .accessibilityHidden(true)
+        layout {
+          if !dynamicTypeSize.isAccessibilitySize {
+            Image(systemName: account.kind.systemImage)
+              .bowScaledIcon(frame: 36, glyph: 15, weight: .semibold)
+              .foregroundStyle(Bow.bowInk)
+              .background(Bow.bowTint, in: Circle())
+              .accessibilityHidden(true)
+          }
           VStack(alignment: .leading, spacing: 2) {
             Text(account.name)
               .font(.bowHeadline)
@@ -221,7 +227,7 @@ struct AccountsScreen: View {
             .font(.bowAmount)
             .foregroundStyle(Bow.ink)
             .lineLimit(1)
-            .minimumScaleFactor(0.85)
+            .minimumScaleFactor(0.5)
         }
         .padding(.vertical, Bow.Space.s3)
       }

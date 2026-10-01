@@ -3,14 +3,18 @@ import SwiftUI
 /// A collapsible group's header, on Budget and Accounts: the group name, a trailing detail
 /// ("4 envelopes", a group total) and a glass chevron that collapses or expands the group.
 struct BowGroupHeader<Detail: View>: View {
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   var name: String
   var isCollapsed: Bool
   var onToggle: () -> Void
   @ViewBuilder var detail: () -> Detail
 
   var body: some View {
+    let layout = dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: Bow.Space.s1))
+      : AnyLayout(HStackLayout(spacing: Bow.Space.s2))
     HStack(spacing: Bow.Space.s2) {
-      HStack(spacing: Bow.Space.s2) {
+      layout {
         Text(name)
           .font(.bowHeadline)
           .foregroundStyle(Bow.inkSoft)

@@ -27,6 +27,9 @@ struct BudgetScreen: View {
   /// A small, damped follow of a horizontal swipe before it commits a month change.
   @State private var swipeOffset: CGFloat = 0
   @State private var showsMonthLoading = false
+  /// Set while a horizontal swipe is changing months, so lifting a finger over a card doesn't open it.
+  @State private var isSwipingMonth = false
+  @Namespace private var zoomNamespace
   @AppStorage("budgetCollapsedGroups") private var collapseState = BudgetGroupCollapseState()
 
   /// Everything on screen describes the loaded snapshot's month. `selectedMonth` can briefly be
@@ -110,87 +113,23 @@ struct BudgetScreen: View {
     snapshot.readyToAssignMinor < 0 ? .coral : .dawn
   }
 
+  private var hasBudgetEnvelopes: Bool {
+    envelopes.contains { !$0.isHidden && $0.paymentAccountID == nil }
+  }
+
+  /// Ready to Assign for the month on screen. The month is part of the value, so switching
+  /// months never counts as reaching zero.
+  private var readyToAssignState: ReadyToAssignState {
+    ReadyToAssignState(month: snapshot.month, minor: snapshot.readyToAssignMinor)
+  }
+
   private var creditCards: [BudgetAccount] {
     accounts.filter { $0.kind == .credit }.sorted { $0.name < $1.name }
   }
 
   var body: some View {
     List {
-      BudgetOverviewSection(
-        summary: summary,
-        notices: notices,
-        currencyCode: currencyCode,
-        isPastMonth: isPastMonth,
-        onSelectNotice: handle
-      )
-
-      let scheduled = scheduledTargets
-      ForEach(orderedGroups) { group in
-        let matching = visibleEnvelopes(in: group)
-        if !matching.isEmpty {
-          let key = group.id.uuidString
-          Section {
-            BudgetCardStack(
-              groupName: group.name, items: matching,
-              isCollapsed: collapseState.isCollapsed(key),
-              onExpand: { toggleGroup(key) },
-              route: { .envelope($0.id) },
-              onOpen: open
-            ) { envelope in
-              EnvelopeBudgetRow(
-                name: envelope.name,
-                availableMinor: snapshot.available(for: envelope.id),
-                cashOverspentMinor: snapshot.cashShortfall[envelope.id, default: 0],
-                creditOverspentMinor: snapshot.creditShortfall[envelope.id, default: 0],
-                assignedMinor: snapshot.assigned[envelope.id, default: 0],
-                activityMinor: snapshot.activity[envelope.id, default: 0],
-                monthlyTargetMinor: monthlyTarget(for: envelope, scheduled: scheduled),
-                currencyCode: currencyCode
-              )
-            }
-            .budgetCardStackRow()
-          } header: {
-            BudgetGroupHeader(
-              name: group.name, count: matching.count,
-              isCollapsed: collapseState.isCollapsed(key),
-              onToggle: { toggleGroup(key) }
-            )
-          }
-        }
-      }
-
-      if !creditCards.isEmpty {
-        let key = BudgetGroupCollapseState.creditCardsKey
-        Section {
-          BudgetCardStack(
-            groupName: "Credit card payments", items: creditCards,
-            isCollapsed: collapseState.isCollapsed(key),
-            onExpand: { toggleGroup(key) },
-            route: { .cardPayment($0.id) },
-            onOpen: open
-          ) { card in
-            CardPaymentRow(card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode)
-          }
-          .budgetCardStackRow()
-        } header: {
-          BudgetGroupHeader(
-            name: "Credit card payments", count: creditCards.count,
-            isCollapsed: collapseState.isCollapsed(key),
-            onToggle: { toggleGroup(key) }
-          )
-        }
-        .id(key)
-      }
-
-      if !isPastMonth {
-        Section {
-          Button("Add Envelope", systemImage: "plus", action: onAddEnvelope)
-            .disabled(orderedGroups.isEmpty)
-          Button("Add Group", systemImage: "folder.badge.plus", action: onAddGroup)
-          Button("Import YNAB Categories", systemImage: "square.and.arrow.down", action: onImportYNAB)
-        }
-        .listRowBackground(Bow.card)
-      }
+      listContent
     }
     .offset(x: swipeOffset)
     .scrollsToTopOnReselect(of: .budget)
@@ -204,10 +143,13 @@ struct BudgetScreen: View {
         .bowAnimation(value: skyMood)
       }
     }
+    .bowSoftScrollEdge()
     .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))
     .navigationBarTitleDisplayMode(.inline)
-    .sensoryFeedback(.selection, trigger: displayedMonth)
+    // Ticks when the user changes months, not later when the month finishes loading.
+    .sensoryFeedback(.selection, trigger: selectedMonth)
     .sensoryFeedback(.selection, trigger: collapseState)
+    .sensoryFeedback(trigger: readyToAssignState, readyToAssignFeedback)
     .toolbar {
       ToolbarItem(placement: .principal) {
         BudgetMonthTitle(
@@ -225,12 +167,18 @@ struct BudgetScreen: View {
     }
     .simultaneousGesture(DragGesture(minimumDistance: 30)
       .onChanged { value in
-        guard !reduceMotion else { return }
         let isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.6
+        if isHorizontal { isSwipingMonth = true }
+        guard !reduceMotion else { return }
         swipeOffset = isHorizontal ? max(-16, min(16, value.translation.width * 0.15)) : 0
       }
       .onEnded { value in
         withAnimation(Bow.motion(reduceMotion: reduceMotion)) { swipeOffset = 0 }
+        // Let a card's release (which can land just after this) see the swipe, then clear it.
+        Task {
+          try? await Task.sleep(for: .milliseconds(250))
+          isSwipingMonth = false
+        }
         guard abs(value.translation.width) > 90,
               abs(value.translation.width) > abs(value.translation.height) * 1.6 else { return }
         changeMonth(value.translation.width < 0 ? 1 : -1)
@@ -243,38 +191,7 @@ struct BudgetScreen: View {
       if !Task.isCancelled { showsMonthLoading = true }
     }
     .navigationDestination(for: BudgetRoute.self) { route in
-      switch route {
-      case .envelope(let id):
-        if let envelope = envelopes.first(where: { $0.id == id }) {
-          EnvelopeDetailScreen(
-            envelope: envelope, currencyCode: currencyCode, snapshot: snapshot,
-            isPastMonth: isPastMonth,
-            accounts: accounts, envelopes: envelopes,
-            allocations: allocations, schedules: schedules,
-            onEdit: { onEditEnvelope(envelope.id) },
-            onEditTarget: { onEditEnvelopeTarget(envelope.id) },
-            onMoveMoney: onMoveMoney,
-            onCoverOverspending: { onCoverOverspending(.envelope(envelope.id)) },
-            onSelectTransaction: onSelectTransaction,
-            onEditSchedule: onEditSchedule
-          )
-        }
-      case .cardPayment(let id):
-        if let card = accounts.first(where: { $0.id == id }) {
-          CardPaymentDetailScreen(
-            card: card, currencyCode: currencyCode, snapshot: snapshot,
-            previousSnapshot: previousSnapshot,
-            isPastMonth: isPastMonth,
-            accounts: accounts,
-            envelopes: envelopes,
-            allocations: allocations, schedules: schedules,
-            onMoveMoney: onMoveMoney,
-            onCoverOverspending: { onCoverOverspending(.card(card.id)) },
-            onSelectTransaction: onSelectTransaction,
-            onEditSchedule: onEditSchedule
-          )
-        }
-      }
+      destination(for: route)
     }
     .onChange(of: returnToPresentRequest) { _, _ in
       let current = Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
@@ -287,6 +204,152 @@ struct BudgetScreen: View {
     .onAppear { enforceMonthAccess() }
   }
 
+  /// Success when Ready to Assign reaches zero within the month on screen.
+  private func readyToAssignFeedback(old: ReadyToAssignState, new: ReadyToAssignState) -> SensoryFeedback? {
+    guard old.month == new.month, old.minor != 0, new.minor == 0, !isPastMonth else { return nil }
+    return .success
+  }
+
+  @ViewBuilder
+  private func destination(for route: BudgetRoute) -> some View {
+    switch route {
+    case .envelope(let id):
+      if let envelope = envelopes.first(where: { $0.id == id }) {
+        EnvelopeDetailScreen(
+          envelope: envelope, currencyCode: currencyCode, snapshot: snapshot,
+          isPastMonth: isPastMonth,
+          accounts: accounts, envelopes: envelopes,
+          allocations: allocations, schedules: schedules,
+          onEdit: { onEditEnvelope(envelope.id) },
+          onEditTarget: { onEditEnvelopeTarget(envelope.id) },
+          onMoveMoney: onMoveMoney,
+          onCoverOverspending: { onCoverOverspending(.envelope(envelope.id)) },
+          onSelectTransaction: onSelectTransaction,
+          onEditSchedule: onEditSchedule
+        )
+        .navigationTransition(.zoom(sourceID: route, in: zoomNamespace))
+      }
+    case .cardPayment(let id):
+      if let card = accounts.first(where: { $0.id == id }) {
+        CardPaymentDetailScreen(
+          card: card, currencyCode: currencyCode, snapshot: snapshot,
+          previousSnapshot: previousSnapshot,
+          isPastMonth: isPastMonth,
+          accounts: accounts,
+          envelopes: envelopes,
+          allocations: allocations, schedules: schedules,
+          onMoveMoney: onMoveMoney,
+          onCoverOverspending: { onCoverOverspending(.card(card.id)) },
+          onSelectTransaction: onSelectTransaction,
+          onEditSchedule: onEditSchedule
+        )
+        .navigationTransition(.zoom(sourceID: route, in: zoomNamespace))
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var listContent: some View {
+    BudgetOverviewSection(
+      summary: summary,
+      notices: notices,
+      currencyCode: currencyCode,
+      isPastMonth: isPastMonth,
+      onSelectNotice: handle
+    )
+
+    if !hasBudgetEnvelopes && !isPastMonth {
+      Section {
+        ContentUnavailableView {
+          Label("Give your money somewhere to go", systemImage: "square.grid.2x2")
+        } description: {
+          Text("Create envelopes for bills, groceries and goals, or bring them over from YNAB.")
+        } actions: {
+          if orderedGroups.isEmpty {
+            Button("Add Group", systemImage: "folder.badge.plus", action: onAddGroup)
+              .bowPrimaryButton(size: .regular)
+          } else {
+            Button("Add Envelope", systemImage: "plus", action: onAddEnvelope)
+              .bowPrimaryButton(size: .regular)
+          }
+          Button("Import from YNAB", action: onImportYNAB)
+            .bowSecondaryButton(size: .regular)
+        }
+      }
+      .listRowBackground(Bow.card)
+    }
+
+    let scheduled = scheduledTargets
+    ForEach(orderedGroups) { group in
+      let matching = visibleEnvelopes(in: group)
+      if !matching.isEmpty {
+        let key = group.id.uuidString
+        Section {
+          BudgetCardStack(
+            groupName: group.name, items: matching,
+            isCollapsed: collapseState.isCollapsed(key),
+            onExpand: { toggleGroup(key) },
+            route: { .envelope($0.id) },
+            onOpen: open,
+            zoomNamespace: zoomNamespace
+          ) { envelope in
+            EnvelopeBudgetRow(
+              name: envelope.name,
+              availableMinor: snapshot.available(for: envelope.id),
+              cashOverspentMinor: snapshot.cashShortfall[envelope.id, default: 0],
+              creditOverspentMinor: snapshot.creditShortfall[envelope.id, default: 0],
+              assignedMinor: snapshot.assigned[envelope.id, default: 0],
+              activityMinor: snapshot.activity[envelope.id, default: 0],
+              monthlyTargetMinor: monthlyTarget(for: envelope, scheduled: scheduled),
+              currencyCode: currencyCode
+            )
+          }
+          .budgetCardStackRow()
+        } header: {
+          BudgetGroupHeader(
+            name: group.name, count: matching.count,
+            isCollapsed: collapseState.isCollapsed(key),
+            onToggle: { toggleGroup(key) }
+          )
+        }
+      }
+    }
+
+    if !creditCards.isEmpty {
+      let key = BudgetGroupCollapseState.creditCardsKey
+      Section {
+        BudgetCardStack(
+          groupName: "Credit card payments", items: creditCards,
+          isCollapsed: collapseState.isCollapsed(key),
+          onExpand: { toggleGroup(key) },
+          route: { .cardPayment($0.id) },
+          onOpen: open,
+          zoomNamespace: zoomNamespace
+        ) { card in
+          CardPaymentRow(card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode)
+        }
+        .budgetCardStackRow()
+      } header: {
+        BudgetGroupHeader(
+          name: "Credit card payments", count: creditCards.count,
+          isCollapsed: collapseState.isCollapsed(key),
+          onToggle: { toggleGroup(key) }
+        )
+      }
+      .id(key)
+    }
+
+    if !isPastMonth && hasBudgetEnvelopes {
+      Section {
+        Button("Add Envelope", systemImage: "plus", action: onAddEnvelope)
+          .disabled(orderedGroups.isEmpty)
+        Button("Add Group", systemImage: "folder.badge.plus", action: onAddGroup)
+        Button("Import YNAB Categories", systemImage: "square.and.arrow.down", action: onImportYNAB)
+      }
+      .listRowBackground(Bow.card)
+    }
+  }
+
   private func visibleEnvelopes(in group: BudgetGroup) -> [BudgetEnvelope] {
     envelopes.filter {
       !$0.isHidden && $0.paymentAccountID == nil && $0.groupID == group.id
@@ -294,8 +357,8 @@ struct BudgetScreen: View {
   }
 
   private func open(_ route: BudgetRoute) {
-    // Ignore a second tap while a push is already underway.
-    guard path.isEmpty else { return }
+    // Ignore a second tap while a push is already underway, and a finger lifted after a month swipe.
+    guard path.isEmpty, !isSwipingMonth else { return }
     path.append(route)
   }
 
@@ -332,6 +395,12 @@ struct BudgetScreen: View {
   }
 }
 
+/// Ready to Assign tied to its month, so the success haptic only fires within one month.
+private struct ReadyToAssignState: Equatable {
+  var month: Date
+  var minor: Int64
+}
+
 /// Month and year in the navigation bar. The month slides in from the direction the user moved.
 private struct BudgetMonthTitle: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -365,6 +434,14 @@ private struct BudgetMonthTitle: View {
 }
 
 private extension View {
+  /// A row at the top of the Budget screen: edge to edge, no background or separators.
+  func budgetOverviewRow() -> some View {
+    self
+      .listRowBackground(Color.clear)
+      .listRowSeparator(.hidden)
+      .listRowInsets(EdgeInsets(top: Bow.Space.s1, leading: 0, bottom: Bow.Space.s1, trailing: 0))
+  }
+
   /// A group's card stack fills its List row edge to edge, with no row background or separators.
   func budgetCardStackRow() -> some View {
     self
@@ -389,8 +466,37 @@ private struct BudgetOverviewSection: View {
   var isPastMonth: Bool
   var onSelectNotice: (BudgetNotice) -> Void
 
+  /// Nothing waiting and something assigned: the month's money all has a job.
+  private var isFullyAssigned: Bool {
+    !isPastMonth && summary.readyToAssignMinor == 0 && summary.assignedThisMonthMinor > 0
+  }
+
   var body: some View {
     Section {
+      // Most urgent first, above the totals: Ready to Assign is the screen's focal point.
+      ForEach(notices) { notice in
+        Group {
+          if notice.isActionable {
+            Button { onSelectNotice(notice) } label: {
+              banner(notice)
+            }
+            .buttonStyle(.bowPress)
+            .accessibilityHint(notice.accessibilityHint)
+          } else {
+            // Informational only (past months, nothing to move): full contrast, not a dimmed button.
+            banner(notice)
+          }
+        }
+        .budgetOverviewRow()
+        .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+      }
+
+      if isFullyAssigned {
+        BudgetAllAssignedBanner()
+          .budgetOverviewRow()
+          .transition(.opacity)
+      }
+
       VStack(spacing: Bow.Space.s3) {
         metrics
         if isPastMonth {
@@ -401,42 +507,31 @@ private struct BudgetOverviewSection: View {
         }
       }
       .frame(maxWidth: .infinity)
-      .listRowBackground(Color.clear)
-      .listRowSeparator(.hidden)
-      .listRowInsets(EdgeInsets(top: Bow.Space.s2, leading: 0, bottom: Bow.Space.s1, trailing: 0))
-
-      ForEach(notices) { notice in
-        Group {
-          if notice.isActionable {
-            Button { onSelectNotice(notice) } label: {
-              BudgetBanner(notice: notice, currencyCode: currencyCode)
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint(notice.accessibilityHint)
-          } else {
-            // Informational only (past months, nothing to move): full contrast, not a dimmed button.
-            BudgetBanner(notice: notice, currencyCode: currencyCode)
-          }
-        }
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: Bow.Space.s1, leading: 0, bottom: Bow.Space.s1, trailing: 0))
-        .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
-      }
+      .budgetOverviewRow()
 
       if summary.assignedInFutureMinor != 0 {
-        Text("\(BudgetMoney.formatted(summary.assignedInFutureMinor, currencyCode: currencyCode)) assigned in future months")
-          .font(.bowFootnote)
-          .monospacedDigit()
-          .foregroundStyle(Bow.inkSoft)
-          .frame(maxWidth: .infinity)
-          .multilineTextAlignment(.center)
-          .listRowBackground(Color.clear)
-          .listRowSeparator(.hidden)
+        HStack(spacing: Bow.Space.s1) {
+          MoneyText(minor: summary.assignedInFutureMinor, currencyCode: currencyCode)
+          Text("assigned in future months")
+        }
+        .font(.bowFootnote)
+        .foregroundStyle(Bow.inkSoft)
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
       }
     }
     .bowAnimation(value: notices.map(\.kind))
+    .bowAnimation(value: isFullyAssigned)
     .bowAnimation(value: isPastMonth)
+  }
+
+  private func banner(_ notice: BudgetNotice) -> some View {
+    BudgetBanner(
+      notice: notice, currencyCode: currencyCode,
+      assignedShare: notice.kind == .readyToAssign ? summary.assignedShare : nil
+    )
   }
 
   private var metrics: some View {
@@ -445,6 +540,34 @@ private struct BudgetOverviewSection: View {
       .money("Spent", summary.spentThisMonthMinor),
       .money("Available", summary.availableMinor)
     ], currencyCode: currencyCode)
+  }
+}
+
+/// Shown when Ready to Assign reaches zero: calm, green, and not a button.
+private struct BudgetAllAssignedBanner: View {
+  @State private var bounce = 0
+
+  var body: some View {
+    HStack(spacing: Bow.Space.s3) {
+      Image(systemName: "checkmark.seal.fill")
+        .bowScaledIcon(frame: 34, glyph: 18)
+        .foregroundStyle(Bow.fundedInk)
+        .symbolEffect(.bounce, value: bounce)
+        .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: 2) {
+        Text("Every dollar has a job")
+          .font(.bowHeadline)
+          .foregroundStyle(Bow.ink)
+        Text("All of this month’s money is assigned.")
+          .font(.bowSubhead)
+          .foregroundStyle(Bow.inkSoft)
+      }
+      Spacer(minLength: 0)
+    }
+    .padding(Bow.Space.s4)
+    .background(Bow.fundedTint, in: RoundedRectangle(cornerRadius: Bow.Radius.lg, style: .continuous))
+    .accessibilityElement(children: .combine)
+    .onAppear { bounce += 1 }
   }
 }
 

@@ -12,9 +12,11 @@ struct BudgetCardStack<Item: Identifiable, Row: View>: View {
   /// Opens a card's route. Cards use buttons, not NavigationLinks: several links in one List row
   /// make the List treat the whole row as one link, so taps open the wrong (or several) envelopes.
   var onOpen: (BudgetRoute) -> Void
+  /// Cards become zoom sources for the detail screen they open.
+  var zoomNamespace: Namespace.ID
   @ViewBuilder var row: (Item) -> Row
+  @State private var isStackPressed = false
 
-  private static var cardRadius: CGFloat { 22 }
   /// Each sliver sits this much lower than the card in front of it.
   private static var sliverDrop: CGFloat { 10 }
 
@@ -25,9 +27,10 @@ struct BudgetCardStack<Item: Identifiable, Row: View>: View {
     VStack(spacing: Bow.Space.s2) {
       ForEach(visibleItems) { item in
         Button { onOpen(route(item)) } label: {
-          card { row(item) }
+          BowItemCard { row(item) }
         }
-        .buttonStyle(BudgetCardButtonStyle())
+        .buttonStyle(.bowPress)
+        .matchedTransitionSource(id: route(item), in: zoomNamespace)
         .allowsHitTesting(!isCollapsed)
         .accessibilityHidden(isCollapsed)
         .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
@@ -42,49 +45,37 @@ struct BudgetCardStack<Item: Identifiable, Row: View>: View {
       }
     }
     .padding(.bottom, CGFloat(sliverCount) * Self.sliverDrop)
+    // A collapsed stack presses as one object, slivers and all.
+    .bowPressEffect(isPressed: isCollapsed && isStackPressed)
     .overlay {
       if isCollapsed {
         Button(action: onExpand) {
           Color.clear.contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressReportingStyle(isPressed: $isStackPressed))
         .accessibilityLabel(Text("\(groupName), ^[\(items.count) envelope](inflect: true), collapsed"))
         .accessibilityHint("Expands the group")
       }
     }
   }
 
-  private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-    HStack(spacing: Bow.Space.s3) {
-      content()
-      Image(systemName: "chevron.right")
-        .font(.bowFootnote.weight(.semibold))
-        .foregroundStyle(Bow.inkFaint)
-        .accessibilityHidden(true)
-    }
-    .padding(.horizontal, Bow.Space.s4)
-    .frame(maxWidth: .infinity, minHeight: 68)
-    .contentShape(.rect(cornerRadius: Self.cardRadius))
-    .bowCard(radius: Self.cardRadius)
-  }
-
   /// A narrower card edge peeking out below the front card: 12pt inset per level, 10pt lower.
   private func sliver(depth: Int) -> some View {
-    RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous)
+    RoundedRectangle(cornerRadius: Bow.itemCardRadius, style: .continuous)
       .fill(Bow.card.opacity(depth == 1 ? 0.85 : 0.7))
       .shadow(color: .black.opacity(0.05), radius: 8, y: 4)
-      .padding(.horizontal, CGFloat(depth) * 12)
+      .padding(.horizontal, CGFloat(depth) * Bow.Space.s3)
       .offset(y: CGFloat(depth) * Self.sliverDrop)
       .accessibilityHidden(true)
   }
 }
 
-/// Envelope cards dim slightly while pressed.
-private struct BudgetCardButtonStyle: ButtonStyle {
+/// Reports the press state outward, so a transparent hit area can press the view beneath it.
+private struct PressReportingStyle: ButtonStyle {
+  @Binding var isPressed: Bool
+
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .opacity(configuration.isPressed ? 0.7 : 1)
-      .scaleEffect(configuration.isPressed ? 0.98 : 1)
-      .bowAnimation(value: configuration.isPressed)
+      .onChange(of: configuration.isPressed) { _, pressed in isPressed = pressed }
   }
 }

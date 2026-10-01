@@ -64,7 +64,6 @@ private struct BowActionTileStyle: ButtonStyle {
         label.bowGlassCard(radius: Self.radius)
       }
     }
-    .scaleEffect(configuration.isPressed ? 0.96 : 1)
-    .bowAnimation(value: configuration.isPressed)
+    .bowPressEffect(isPressed: configuration.isPressed)
   }
 }

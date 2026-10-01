@@ -33,9 +33,12 @@ struct BudgetGroupHeader: View {
             .rotationEffect(.degrees(isCollapsed ? 0 : 90))
         }
         .labelStyle(.iconOnly)
+        .frame(minWidth: 28, minHeight: 28)
       }
       .buttonStyle(.glass)
       .buttonBorderShape(.circle)
+      // The glass circle stays small; the tap area meets the 44pt minimum.
+      .contentShape(.rect.inset(by: -Bow.Space.s2))
       .foregroundStyle(Bow.inkSoft)
       .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
     }

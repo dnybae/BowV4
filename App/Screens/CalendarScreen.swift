@@ -444,7 +444,7 @@ private struct CalendarScheduleRow: View {
             Spacer()
             if let occurrence, !occurrence.isSkipped {
               Button("Skip") { onSkip(occurrence) }
-                .bowSecondaryButton(size: .small)
+                .bowSecondaryButton(size: .regular)
             }
             Button("Record") {
               onRecord(ScheduledTransactionDraft(
@@ -455,7 +455,7 @@ private struct CalendarScheduleRow: View {
                 notes: schedule.notes, date: selectedDate
               ))
             }
-            .bowPrimaryButton(size: .small)
+            .bowPrimaryButton(size: .regular)
             .accessibilityLabel(schedule.kind == .transfer ? "Record transfer" : "Record transaction")
           }
         }

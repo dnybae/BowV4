@@ -11,9 +11,14 @@ import UIKit
 // MARK: - Color tokens (light / dark)
 
 extension Color {
-    fileprivate init(light: UInt32, dark: UInt32, lightAlpha: Double = 1, darkAlpha: Double = 1) {
+    /// `highContrastLight` / `highContrastDark` are used when Increase Contrast is on.
+    fileprivate init(light: UInt32, dark: UInt32, lightAlpha: Double = 1, darkAlpha: Double = 1,
+                     highContrastLight: UInt32? = nil, highContrastDark: UInt32? = nil) {
         self.init(uiColor: UIColor { trait in
-            let hex = trait.userInterfaceStyle == .dark ? dark : light
+            let isHigh = trait.accessibilityContrast == .high
+            let hex = trait.userInterfaceStyle == .dark
+                ? (isHigh ? highContrastDark ?? dark : dark)
+                : (isHigh ? highContrastLight ?? light : light)
             let a = trait.userInterfaceStyle == .dark ? darkAlpha : lightAlpha
             return UIColor(red: CGFloat((hex >> 16) & 0xFF) / 255,
                            green: CGFloat((hex >> 8) & 0xFF) / 255,
@@ -27,16 +32,16 @@ enum Bow {
     static let mist       = Color(light: 0xF1F3F7, dark: 0x0C0E13)   // screen background
     static let card       = Color(light: 0xFFFFFF, dark: 0x181B22)   // cards, list groups
     static let well       = Color(light: 0xE9ECF2, dark: 0x232731)   // ring tracks, inputs, icon discs
-    static let line       = Color(light: 0xE2E5EC, dark: 0x2B303B)   // separators
+    static let line       = Color(light: 0xE2E5EC, dark: 0x2B303B, highContrastLight: 0xB9BECA, highContrastDark: 0x4A5161)   // separators
     static let ink        = Color(light: 0x141821, dark: 0xF1F3F8)   // primary text, money
-    static let inkSoft    = Color(light: 0x596071, dark: 0xA3AAB9)   // secondary text
-    static let inkFaint   = Color(light: 0x8B92A2, dark: 0x6E7585)   // chevrons, disabled (not for text)
+    static let inkSoft    = Color(light: 0x596071, dark: 0xA3AAB9, highContrastLight: 0x3A404D, highContrastDark: 0xCDD2DC)   // secondary text
+    static let inkFaint   = Color(light: 0x8B92A2, dark: 0x6E7585, highContrastLight: 0x5E6575, highContrastDark: 0x9AA1B0)   // chevrons, disabled (not for text)
 
     // Brand
     static let bow        = Color(light: 0x5B7FEA, dark: 0x7F9CF5)   // rings, selected tab, mark
     static let bowSolid   = Color(light: 0x4263D6, dark: 0x7F9CF5)   // toggles, selected chips, add button
     static let onBow      = Color(light: 0xFFFFFF, dark: 0x0C0E13)
-    static let bowInk     = Color(light: 0x3D5FD0, dark: 0x9DB3FF)   // links, tappable text
+    static let bowInk     = Color(light: 0x3D5FD0, dark: 0x9DB3FF, highContrastLight: 0x2A47A8, highContrastDark: 0xBFCDFF)   // links, tappable text
     static let bowTint    = Color(light: 0xE6ECFD, dark: 0x1D2744)   // selected rows, icon tiles
 
     // Primary button tint: .buttonStyle(.glassProminent).tint(Bow.button)
@@ -45,13 +50,13 @@ enum Bow {
 
     // Status: funded / needs / over
     static let funded     = Color(light: 0x3FA37A, dark: 0x5CC495)
-    static let fundedInk  = Color(light: 0x1F7A53, dark: 0x6FD3A4)
+    static let fundedInk  = Color(light: 0x1F7A53, dark: 0x6FD3A4, highContrastLight: 0x115C3B, highContrastDark: 0x97E5C0)
     static let fundedTint = Color(light: 0xE2F3EA, dark: 0x16302A)
     static let needs      = Color(light: 0xE6A23C, dark: 0xF0B45A)
-    static let needsInk   = Color(light: 0x9A5F08, dark: 0xF3C27A)
+    static let needsInk   = Color(light: 0x9A5F08, dark: 0xF3C27A, highContrastLight: 0x6F4300, highContrastDark: 0xF8D7A6)
     static let needsTint  = Color(light: 0xFBF0DC, dark: 0x33291A)
     static let over       = Color(light: 0xE5645A, dark: 0xF07C72)
-    static let overInk    = Color(light: 0xBF3A30, dark: 0xFF9A91)
+    static let overInk    = Color(light: 0xBF3A30, dark: 0xFF9A91, highContrastLight: 0x952218, highContrastDark: 0xFFBDB7)
     static let overTint   = Color(light: 0xFCE6E3, dark: 0x3A1F1E)
 
     // Spacing and radii
@@ -151,6 +156,8 @@ enum EnvelopeState {
     var ring: Color { switch self { case .funded: Bow.funded; case .needs: Bow.needs; case .over: Bow.over; case .empty: Bow.well } }
     var ink: Color  { switch self { case .funded: Bow.fundedInk; case .needs: Bow.needsInk; case .over: Bow.overInk; case .empty: Bow.inkSoft } }
     var tint: Color { switch self { case .funded: Bow.fundedTint; case .needs: Bow.needsTint; case .over: Bow.overTint; case .empty: Bow.well } }
+    /// Shown inside rings when Differentiate Without Color is on.
+    var glyph: String? { switch self { case .funded: "checkmark"; case .needs: "minus"; case .over: "exclamationmark"; case .empty: nil } }
     var sky: SkyMood { switch self { case .funded: .mint; case .needs: .amber; case .over: .coral; case .empty: .dawn } }
 }
 
@@ -161,6 +168,7 @@ struct StatusRing: View {
     var state: EnvelopeState
     var size: CGFloat = 28
     @ScaledMetric private var scale: CGFloat = 1
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     var body: some View {
         let side = size * min(scale, Bow.maxGraphicScale)
         ZStack {
@@ -168,6 +176,12 @@ struct StatusRing: View {
             Circle().trim(from: 0, to: state == .over ? 1 : fraction)
                 .stroke(state.ring, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                 .rotationEffect(.degrees(-90))
+            // With Differentiate Without Color, the ring's state also reads as a shape.
+            if differentiateWithoutColor, let glyph = state.glyph {
+                Image(systemName: glyph)
+                    .font(.system(size: side * 0.4, weight: .bold))
+                    .foregroundStyle(state.ink)
+            }
         }
         .frame(width: side, height: side)
         .bowAnimation(Bow.ringMotion, value: fraction)

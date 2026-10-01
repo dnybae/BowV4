@@ -45,9 +45,9 @@ struct SpendingTimelineEntryView: View {
           if showsInlineActions {
             HStack(spacing: Bow.Space.s2) {
               Button("Skip") { skip(occurrence) }
-                .bowSecondaryButton(size: .small)
+                .bowSecondaryButton(size: .regular)
               Button("Record") { record(occurrence, schedule) }
-                .bowPrimaryButton(size: .small)
+                .bowPrimaryButton(size: .regular)
             }
             .padding(.bottom, Bow.Space.s1)
           }

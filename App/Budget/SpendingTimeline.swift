@@ -1,12 +1,11 @@
 import Foundation
 
 struct SpendingTimeline {
-  /// Bank items to review and scheduled bills that are due, shown ahead of the ledger.
-  var needsAttention: [SpendingTimelineItem]
-  /// Everything else, grouped by day.
+  /// Everything grouped by day. Bank items to review, due bills and pending items sit in their
+  /// day alongside the ledger, ahead of that day's other rows.
   var days: [SpendingTimelineDay]
 
-  var isEmpty: Bool { needsAttention.isEmpty && days.isEmpty }
+  var isEmpty: Bool { days.isEmpty }
 
   init(
     transactions: [TransactionListItem],
@@ -195,11 +194,7 @@ struct SpendingTimeline {
       visibleIDs.insert(id)
     }
 
-    needsAttention = items.filter { $0.status?.needsAttention == true }
-      .sorted { $0.date == $1.date ? $0.id < $1.id : $0.date > $1.date }
-    days = SpendingTimelineDay.make(
-      items.filter { $0.status?.needsAttention != true }, calendar: calendar, now: now
-    )
+    days = SpendingTimelineDay.make(items, calendar: calendar, now: now)
   }
 }
 
@@ -244,15 +239,15 @@ enum SpendingTimelineStatus {
     }
   }
 
-  /// Short label for a transaction row, where the section already says it needs attention.
+  /// Short status line under a transaction row's title.
   var rowLabel: String {
     switch self {
     case .bankReview: "Needs review"
     case .transactionReview: "Needs approval"
     case .chooseEnvelope: "Choose an envelope"
-    case .pending: "Pending at bank"
+    case .pending: "Pending"
     case .pendingEntered: "Pending · Entered"
-    case .scheduled: "Scheduled bill"
+    case .scheduled: "Scheduled"
     }
   }
 

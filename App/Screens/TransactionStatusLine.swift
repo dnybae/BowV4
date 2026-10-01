@@ -21,6 +21,26 @@ struct TransactionStatusLine: View {
   }
 }
 
+extension TransactionRowModel.State {
+  /// The status line and row tint for this state; nil for a normal row.
+  var rowStatus: TransactionRowStatus? {
+    switch self {
+    case .normal: nil
+    case .attention: .needsReview
+    case .scheduled: .scheduled
+    case .pending: .pending
+    }
+  }
+
+  /// The status line's wording.
+  var label: String? {
+    switch self {
+    case .normal: nil
+    case .attention(let label, _), .scheduled(let label), .pending(let label): label
+    }
+  }
+}
+
 enum TransactionRowStatus: Equatable {
   case needsReview, scheduled, pending
 

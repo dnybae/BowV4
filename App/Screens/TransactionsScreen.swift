@@ -80,26 +80,7 @@ struct TransactionsScreen: View {
           }
           .listRowBackground(Bow.card)
         }
-        if !timeline.needsAttention.isEmpty {
-          Section {
-            ForEach(timeline.needsAttention) { item in
-              SpendingTimelineEntryView(
-                item: item, accounts: accounts, envelopes: envelopes,
-                schedules: schedules, onSelect: onSelect,
-                onRecord: onRecord, onEditSchedule: onEditSchedule,
-                showsInlineActions: true
-              )
-            }
-          } header: {
-            HStack {
-              Text("Needs attention")
-              Spacer()
-              Text(timeline.needsAttention.count, format: .number)
-                .monospacedDigit()
-            }
-          }
-          .listRowBackground(Bow.card)
-        }
+        // Items to review, due bills and pending items sit in their day; each row sets its own tint.
         ForEach(timeline.days) { group in
           Section(group.title) {
             ForEach(group.items) { item in
@@ -110,7 +91,6 @@ struct TransactionsScreen: View {
               )
             }
           }
-          .listRowBackground(Bow.card)
         }
         if feed.hasMore {
           ProgressView("Loading more…")

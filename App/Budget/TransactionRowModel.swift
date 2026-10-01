@@ -18,8 +18,10 @@ struct TransactionRowModel: Identifiable, Equatable {
     case normal
     /// At the bank but not settled. The row is dimmed.
     case pending(String)
-    /// The user needs to do something. Shown in amber with a badge on the logo.
+    /// The user needs to do something. Shown with an amber status line.
     case attention(String, symbol: String)
+    /// A scheduled bill that's due. Shown with a blue status line.
+    case scheduled(String)
   }
 
   var isInflow: Bool { amountMinor > 0 }
@@ -94,6 +96,7 @@ extension TransactionRowModel {
     switch item.status {
     case .none: state = .normal
     case .pending, .pendingEntered: state = .pending(item.status?.rowLabel ?? "Pending")
+    case .scheduled: state = .scheduled(SpendingTimelineStatus.scheduled.rowLabel)
     case .some(let status): state = .attention(status.rowLabel, symbol: status.systemImage)
     }
     self.init(

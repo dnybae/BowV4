@@ -13,9 +13,12 @@ struct TransactionRowView: View {
     return false
   }
 
-  private var needsAttention: Bool {
-    if case .attention = model.state { return true }
-    return false
+  /// Review and scheduled rows sit on a tinted background, so their logo uses the white tile.
+  private var isHighlighted: Bool {
+    switch model.state {
+    case .attention, .scheduled: true
+    case .normal, .pending: false
+    }
   }
 
   private var amountText: String {
@@ -27,7 +30,7 @@ struct TransactionRowView: View {
     let subtitle = model.subtitle(hiding: options)
     switch model.state {
     case .normal: return subtitle ?? ""
-    case .pending(let label), .attention(let label, _):
+    case .pending(let label), .attention(let label, _), .scheduled(let label):
       return [subtitle, label].compactMap { $0 }.joined(separator: ", ")
     }
   }
@@ -67,40 +70,22 @@ struct TransactionRowView: View {
       domain: model.merchantDomain,
       kind: model.kind,
       envelopeName: model.envelopeName,
-      size: 40
+      size: 40,
+      style: isHighlighted ? .glossy : .plain
     )
     .opacity(isPending ? 0.6 : 1)
-    .overlay(alignment: .bottomTrailing) {
-      if needsAttention {
-        Image(systemName: "exclamationmark.circle.fill")
-          .font(.caption.weight(.bold))
-          .foregroundStyle(Bow.needs)
-          .background(Circle().fill(Bow.card).padding(-2))
-          .offset(x: 4, y: 4)
-      }
-    }
   }
 
-  /// One line only: an attention or pending state replaces the subtitle rather than adding a line.
+  /// One line only: a status line replaces the subtitle rather than adding a line.
   @ViewBuilder
   private var secondaryLine: some View {
-    switch model.state {
-    case .normal:
-      if let subtitle = model.subtitle(hiding: options) {
-        Text(subtitle)
-          .font(.bowSubhead)
-          .foregroundStyle(Bow.inkSoft)
-          .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-      }
-    case .pending(let label):
-      Label(label, systemImage: "clock")
+    if let status = model.state.rowStatus {
+      TransactionStatusLine(status: status, text: model.state.label)
+        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+    } else if let subtitle = model.subtitle(hiding: options) {
+      Text(subtitle)
         .font(.bowSubhead)
         .foregroundStyle(Bow.inkSoft)
-        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-    case .attention(let label, let symbol):
-      Label(label, systemImage: symbol)
-        .font(.bowSubhead.weight(.medium))
-        .foregroundStyle(Bow.needsInk)
         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
     }
   }

@@ -127,6 +127,7 @@ struct TransactionsScreen: View {
         }
       }
     }
+    .scrollsToTopOnReselect(of: .transactions)
     .bowListBackground {
       Bow.mist.overlay(alignment: .top) { SkyBackground(mood: .dawn, height: 320, showsTrail: false) }
     }

@@ -112,153 +112,152 @@ struct BudgetScreen: View {
   }
 
   var body: some View {
-    ScrollViewReader { _ in
-      List {
-        BudgetOverviewSection(
-          summary: summary,
-          notices: notices,
-          currencyCode: currencyCode,
-          isPastMonth: isPastMonth,
-          onSelectNotice: handle
+    List {
+      BudgetOverviewSection(
+        summary: summary,
+        notices: notices,
+        currencyCode: currencyCode,
+        isPastMonth: isPastMonth,
+        onSelectNotice: handle
+      )
+
+      let scheduled = scheduledTargets
+      ForEach(orderedGroups) { group in
+        let matching = visibleEnvelopes(in: group)
+        if !matching.isEmpty {
+          Section(group.name) {
+            ForEach(matching) { envelope in
+              NavigationLink(value: BudgetRoute.envelope(envelope.id)) {
+                EnvelopeBudgetRow(
+                  name: envelope.name,
+                  availableMinor: snapshot.available(for: envelope.id),
+                  cashOverspentMinor: snapshot.cashShortfall[envelope.id, default: 0],
+                  creditOverspentMinor: snapshot.creditShortfall[envelope.id, default: 0],
+                  assignedMinor: snapshot.assigned[envelope.id, default: 0],
+                  activityMinor: snapshot.activity[envelope.id, default: 0],
+                  monthlyTargetMinor: monthlyTarget(for: envelope, scheduled: scheduled),
+                  currencyCode: currencyCode
+                )
+              }
+            }
+          }
+          .listRowBackground(Bow.card)
+        }
+      }
+
+      if !creditCards.isEmpty {
+        Section("Credit card payments") {
+          ForEach(creditCards) { card in
+            NavigationLink(value: BudgetRoute.cardPayment(card.id)) {
+              CardPaymentRow(card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode)
+            }
+          }
+        }
+        .listRowBackground(Bow.card)
+        .id("credit-card-payments")
+      }
+
+      if !isPastMonth {
+        Section {
+          Button("Add Envelope", systemImage: "plus", action: onAddEnvelope)
+            .disabled(orderedGroups.isEmpty)
+          Button("Add Group", systemImage: "folder.badge.plus", action: onAddGroup)
+          Button("Import YNAB Categories", systemImage: "square.and.arrow.down", action: onImportYNAB)
+        }
+        .listRowBackground(Bow.card)
+      }
+    }
+    .offset(x: swipeOffset)
+    .scrollsToTopOnReselect(of: .budget)
+    .bowListBackground {
+      Bow.mist.overlay(alignment: .top) {
+        ZStack {
+          SkyBackground(mood: skyMood)
+            .id(skyMood)
+            .transition(.opacity)
+        }
+        .bowAnimation(value: skyMood)
+      }
+    }
+    .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))
+    .navigationBarTitleDisplayMode(.inline)
+    .sensoryFeedback(.selection, trigger: displayedMonth)
+    .toolbar {
+      ToolbarItem(placement: .principal) {
+        BudgetMonthTitle(
+          month: displayedMonth, direction: monthDirection, isLoading: showsMonthLoading
         )
-
-        let scheduled = scheduledTargets
-        ForEach(orderedGroups) { group in
-          let matching = visibleEnvelopes(in: group)
-          if !matching.isEmpty {
-            Section(group.name) {
-              ForEach(matching) { envelope in
-                NavigationLink(value: BudgetRoute.envelope(envelope.id)) {
-                  EnvelopeBudgetRow(
-                    name: envelope.name,
-                    availableMinor: snapshot.available(for: envelope.id),
-                    cashOverspentMinor: snapshot.cashShortfall[envelope.id, default: 0],
-                    creditOverspentMinor: snapshot.creditShortfall[envelope.id, default: 0],
-                    assignedMinor: snapshot.assigned[envelope.id, default: 0],
-                    activityMinor: snapshot.activity[envelope.id, default: 0],
-                    monthlyTargetMinor: monthlyTarget(for: envelope, scheduled: scheduled),
-                    currencyCode: currencyCode
-                  )
-                }
-              }
-            }
-            .listRowBackground(Bow.card)
-          }
-        }
-
-        if !creditCards.isEmpty {
-          Section("Credit card payments") {
-            ForEach(creditCards) { card in
-              NavigationLink(value: BudgetRoute.cardPayment(card.id)) {
-                CardPaymentRow(card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode)
-              }
-            }
-          }
-          .listRowBackground(Bow.card)
-          .id("credit-card-payments")
-        }
-
-        if !isPastMonth {
-          Section {
-            Button("Add Envelope", systemImage: "plus", action: onAddEnvelope)
-              .disabled(orderedGroups.isEmpty)
-            Button("Add Group", systemImage: "folder.badge.plus", action: onAddGroup)
-            Button("Import YNAB Categories", systemImage: "square.and.arrow.down", action: onImportYNAB)
-          }
-          .listRowBackground(Bow.card)
-        }
       }
-      .offset(x: swipeOffset)
-      .bowListBackground {
-        Bow.mist.overlay(alignment: .top) {
-          ZStack {
-            SkyBackground(mood: skyMood)
-              .id(skyMood)
-              .transition(.opacity)
-          }
-          .bowAnimation(value: skyMood)
-        }
+      ToolbarItemGroup(placement: .topBarTrailing) {
+        Button("Previous Month", systemImage: "chevron.left") { changeMonth(-1) }
+          .labelStyle(.iconOnly)
+        Button("Next Month", systemImage: "chevron.right") { changeMonth(1) }
+          .labelStyle(.iconOnly)
+          .disabled(!canAdvance)
+          .accessibilityHint(canAdvance ? "" : "Assign money in this month to plan the next month")
       }
-      .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))
-      .navigationBarTitleDisplayMode(.inline)
-      .sensoryFeedback(.selection, trigger: displayedMonth)
-      .toolbar {
-        ToolbarItem(placement: .principal) {
-          BudgetMonthTitle(
-            month: displayedMonth, direction: monthDirection, isLoading: showsMonthLoading
+    }
+    .simultaneousGesture(DragGesture(minimumDistance: 30)
+      .onChanged { value in
+        guard !reduceMotion else { return }
+        let isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.6
+        swipeOffset = isHorizontal ? max(-16, min(16, value.translation.width * 0.15)) : 0
+      }
+      .onEnded { value in
+        withAnimation(Bow.motion(reduceMotion: reduceMotion)) { swipeOffset = 0 }
+        guard abs(value.translation.width) > 90,
+              abs(value.translation.width) > abs(value.translation.height) * 1.6 else { return }
+        changeMonth(value.translation.width < 0 ? 1 : -1)
+      })
+    .task(id: isShowingSelectedMonth) {
+      // Only show a spinner if the next month takes long enough to notice.
+      showsMonthLoading = false
+      guard !isShowingSelectedMonth else { return }
+      try? await Task.sleep(for: .milliseconds(300))
+      if !Task.isCancelled { showsMonthLoading = true }
+    }
+    .navigationDestination(for: BudgetRoute.self) { route in
+      switch route {
+      case .envelope(let id):
+        if let envelope = envelopes.first(where: { $0.id == id }) {
+          EnvelopeDetailScreen(
+            envelope: envelope, currencyCode: currencyCode, snapshot: snapshot,
+            isPastMonth: isPastMonth,
+            accounts: accounts, envelopes: envelopes,
+            allocations: allocations, schedules: schedules,
+            onEdit: { onEditEnvelope(envelope.id) },
+            onMoveMoney: onMoveMoney,
+            onCoverOverspending: { onCoverOverspending(.envelope(envelope.id)) },
+            onSelectTransaction: onSelectTransaction,
+            onEditSchedule: onEditSchedule
           )
         }
-        ToolbarItemGroup(placement: .topBarTrailing) {
-          Button("Previous Month", systemImage: "chevron.left") { changeMonth(-1) }
-            .labelStyle(.iconOnly)
-          Button("Next Month", systemImage: "chevron.right") { changeMonth(1) }
-            .labelStyle(.iconOnly)
-            .disabled(!canAdvance)
-            .accessibilityHint(canAdvance ? "" : "Assign money in this month to plan the next month")
+      case .cardPayment(let id):
+        if let card = accounts.first(where: { $0.id == id }) {
+          CardPaymentDetailScreen(
+            card: card, currencyCode: currencyCode, snapshot: snapshot,
+            previousSnapshot: previousSnapshot,
+            isPastMonth: isPastMonth,
+            accounts: accounts,
+            envelopes: envelopes,
+            allocations: allocations, schedules: schedules,
+            onMoveMoney: onMoveMoney,
+            onCoverOverspending: { onCoverOverspending(.card(card.id)) },
+            onSelectTransaction: onSelectTransaction,
+            onEditSchedule: onEditSchedule
+          )
         }
       }
-      .simultaneousGesture(DragGesture(minimumDistance: 30)
-        .onChanged { value in
-          guard !reduceMotion else { return }
-          let isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.6
-          swipeOffset = isHorizontal ? max(-16, min(16, value.translation.width * 0.15)) : 0
-        }
-        .onEnded { value in
-          withAnimation(Bow.motion(reduceMotion: reduceMotion)) { swipeOffset = 0 }
-          guard abs(value.translation.width) > 90,
-                abs(value.translation.width) > abs(value.translation.height) * 1.6 else { return }
-          changeMonth(value.translation.width < 0 ? 1 : -1)
-        })
-      .task(id: isShowingSelectedMonth) {
-        // Only show a spinner if the next month takes long enough to notice.
-        showsMonthLoading = false
-        guard !isShowingSelectedMonth else { return }
-        try? await Task.sleep(for: .milliseconds(300))
-        if !Task.isCancelled { showsMonthLoading = true }
-      }
-      .navigationDestination(for: BudgetRoute.self) { route in
-        switch route {
-        case .envelope(let id):
-          if let envelope = envelopes.first(where: { $0.id == id }) {
-            EnvelopeDetailScreen(
-              envelope: envelope, currencyCode: currencyCode, snapshot: snapshot,
-              isPastMonth: isPastMonth,
-              accounts: accounts, envelopes: envelopes,
-              allocations: allocations, schedules: schedules,
-              onEdit: { onEditEnvelope(envelope.id) },
-              onMoveMoney: onMoveMoney,
-              onCoverOverspending: { onCoverOverspending(.envelope(envelope.id)) },
-              onSelectTransaction: onSelectTransaction,
-              onEditSchedule: onEditSchedule
-            )
-          }
-        case .cardPayment(let id):
-          if let card = accounts.first(where: { $0.id == id }) {
-            CardPaymentDetailScreen(
-              card: card, currencyCode: currencyCode, snapshot: snapshot,
-              previousSnapshot: previousSnapshot,
-              isPastMonth: isPastMonth,
-              accounts: accounts,
-              envelopes: envelopes,
-              allocations: allocations, schedules: schedules,
-              onMoveMoney: onMoveMoney,
-              onCoverOverspending: { onCoverOverspending(.card(card.id)) },
-              onSelectTransaction: onSelectTransaction,
-              onEditSchedule: onEditSchedule
-            )
-          }
-        }
-      }
-      .onChange(of: returnToPresentRequest) { _, _ in
-        let current = Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
-        monthDirection = current < selectedMonth ? .leading : .trailing
-        withAnimation(Bow.motion(reduceMotion: reduceMotion)) { selectedMonth = current }
-      }
-      .onChange(of: lastAccessibleMonth) { _, _ in
-        enforceMonthAccess()
-      }
-      .onAppear { enforceMonthAccess() }
     }
+    .onChange(of: returnToPresentRequest) { _, _ in
+      let current = Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
+      monthDirection = current < selectedMonth ? .leading : .trailing
+      withAnimation(Bow.motion(reduceMotion: reduceMotion)) { selectedMonth = current }
+    }
+    .onChange(of: lastAccessibleMonth) { _, _ in
+      enforceMonthAccess()
+    }
+    .onAppear { enforceMonthAccess() }
   }
 
   private func visibleEnvelopes(in group: BudgetGroup) -> [BudgetEnvelope] {

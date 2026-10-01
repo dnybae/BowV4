@@ -204,6 +204,7 @@ struct CalendarScreen: View {
       .frame(maxWidth: .infinity)
       .padding(.bottom, 88)
     }
+    .scrollsToTopOnReselect(of: .calendar)
   }
 
   private func moveMonth(by offset: Int) {

@@ -68,6 +68,7 @@ struct AccountsScreen: View {
         .padding(.bottom, 32)
       }
     }
+    .scrollsToTopOnReselect(of: .accounts)
     .background {
       Bow.mist.overlay(alignment: .top) { SkyBackground(mood: .mint) }
         .ignoresSafeArea()

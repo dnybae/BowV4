@@ -88,6 +88,7 @@ private struct BudgetHomeView: View {
   @State private var budgetReturnToPresentRequest = 0
   @State private var calendarReturnToTodayRequest = 0
   @State private var activeSheet: BowSheet?
+  @State private var tabReselect = TabReselectCenter()
   @State private var showingSettings = false
   @State private var showingInsights = false
   @State private var lastKnownCurrentMonth = Date()
@@ -122,15 +123,7 @@ private struct BudgetHomeView: View {
             if tab == .addTransaction {
               activeSheet = .newTransaction
             } else if tab == selectedTab {
-              switch tab {
-              case .budget:
-                budgetPath.removeAll()
-                budgetReturnToPresentRequest += 1
-              case .calendar:
-                calendarReturnToTodayRequest += 1
-              case .transactions, .accounts, .addTransaction:
-                break
-              }
+              reselect(tab)
             } else {
               selectedTab = tab
             }
@@ -355,6 +348,7 @@ private struct BudgetHomeView: View {
       }
     }
     .environment(\.budgetSnapshotRepository, snapshotRepository)
+    .environment(tabReselect)
     .environment(\.payeeLogoDirectory, PayeeLogoDirectory(payees: payees))
     .task {
       try? BudgetCommands.ensureCardPaymentEnvelopes(in: modelContext)
@@ -390,6 +384,30 @@ private struct BudgetHomeView: View {
         calendarReturnToTodayRequest += 1
       }
       lastKnownCurrentMonth = Date()
+    }
+  }
+
+  /// Tapping the current tab does one thing at a time, like the system apps: pop back to the
+  /// tab's root, then scroll to the top, then the tab's own action (current month, today).
+  private func reselect(_ tab: HomeTab) {
+    switch tab {
+    case .budget where !budgetPath.isEmpty:
+      budgetPath.removeAll()
+      return
+    case .accounts where !accountsPath.isEmpty:
+      accountsPath.removeAll()
+      return
+    default:
+      break
+    }
+    if tabReselect.isScrolled(tab) {
+      tabReselect.requestScrollToTop(tab)
+      return
+    }
+    switch tab {
+    case .budget: budgetReturnToPresentRequest += 1
+    case .calendar: calendarReturnToTodayRequest += 1
+    case .transactions, .accounts, .addTransaction: break
     }
   }
 
@@ -479,12 +497,4 @@ private enum BowSheet: Identifiable {
     case .coverOverspending: "coverOverspending"
     }
   }
-}
-
-private enum HomeTab: Hashable {
-  case budget
-  case transactions
-  case calendar
-  case accounts
-  case addTransaction
 }

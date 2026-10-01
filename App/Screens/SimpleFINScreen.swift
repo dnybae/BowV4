@@ -10,6 +10,8 @@ struct SimpleFINScreen: View {
   @State private var coordinator = SimpleFINSyncCoordinator.shared
   @State private var message: String?
   @State private var showingDisconnect = false
+  @State private var showingSetup = false
+  @Environment(\.bowToasts) private var toasts
 
   private var connection: SimpleFINConnection? { connections.first }
   private var linkedAccounts: [SimpleFINAccountLink] {
@@ -17,18 +19,18 @@ struct SimpleFINScreen: View {
       .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
   }
   private var availableCount: Int { links.filter { $0.localAccountID == nil }.count }
-  private var connectionStatus: String {
-    if isDemoMode { return "Sample connection" }
-    if linkedAccounts.isEmpty { return "No accounts syncing" }
+  private var connectionStatus: ConnectionStatus {
+    if isDemoMode { return .sample }
+    if linkedAccounts.isEmpty { return .noAccounts }
     if let connection, let attempted = connection.lastAttemptAt,
        attempted > (connection.lastSuccessfulAt ?? .distantPast),
        connection.lastMessage != nil {
-      return "Sync needs attention"
+      return .needsAttention
     }
-    return "Connected"
+    return .connected
   }
 
-  private var needsAttention: Bool { connectionStatus == "Sync needs attention" }
+  private var needsAttention: Bool { connectionStatus == .needsAttention }
 
   var body: some View {
     Form {
@@ -37,18 +39,23 @@ struct SimpleFINScreen: View {
           VStack(spacing: Bow.Space.s4) {
             BowIdentityHeader(
               name: "SimpleFIN",
-              context: connection.lastSuccessfulAt.map {
+              context: coordinator.isSyncing ? nil : connection.lastSuccessfulAt.map {
                 "Last synced \($0.formatted(.dateTime.month(.abbreviated).day().hour().minute()))"
-              } ?? connectionStatus,
+              } ?? connectionStatus.title,
               pill: needsAttention ? StatusPill(text: "Sync needs attention", state: .needs)
                 : isDemoMode ? StatusPill(text: "Sample connection", state: .empty) : nil
             ) {
               BowGlossyTile(systemImage: needsAttention ? "exclamationmark.triangle" : "link")
             }
+            if coordinator.isSyncing {
+              BowLoadingLabel("Syncing with your bank…")
+                .transition(.opacity)
+            }
             if !isDemoMode {
-              Button("Sync now") {
+              Button(coordinator.isSyncing ? "Syncing…" : "Sync now", systemImage: "arrow.triangle.2.circlepath") {
                 Task { await sync() }
               }
+              .symbolEffect(.rotate, isActive: coordinator.isSyncing)
               .fontWeight(.semibold)
               .bowSecondaryButton()
               .disabled(coordinator.isSyncing)
@@ -153,35 +160,29 @@ struct SimpleFINScreen: View {
           description: Text("Choose Sample Budget in Settings to explore bank sync examples.")
         )
       } else {
-        Section {
-          Text("Connect SimpleFIN, then choose the bank accounts to add to Bow.")
-            .foregroundStyle(Bow.inkSoft)
-          NavigationLink {
-            SimpleFINAccountSetupScreen()
-          } label: {
-            Label("Connect a bank", systemImage: "link")
-          }
+        BowFeatureIntro(
+          systemImage: "building.columns",
+          title: "Bring in transactions automatically",
+          points: [
+            .init(systemImage: "arrow.triangle.2.circlepath", text: "Bow checks your bank about once a day."),
+            .init(systemImage: "tray", text: "New items wait in Spending for you to approve."),
+            .init(systemImage: "lock", text: "Your bank login stays with SimpleFIN, never with Bow.")
+          ],
+          actionTitle: "Connect a bank"
+        ) {
+          showingSetup = true
         }
-        .listRowBackground(Bow.card)
+        .listRowBackground(Color.clear)
       }
     }
     .bowSkyList(mood: needsAttention ? .review : .dawn, height: 460)
     .navigationTitle("Bank sync")
     .navigationBarTitleDisplayMode(.inline)
-    .overlay {
-      if coordinator.isSyncing {
-        ProgressView("Contacting SimpleFIN…")
-          .padding()
-          .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-      }
+    .bowAnimation(value: coordinator.isSyncing)
+    .navigationDestination(isPresented: $showingSetup) {
+      SimpleFINAccountSetupScreen()
     }
-    .alert("SimpleFIN", isPresented: Binding(
-      get: { message != nil }, set: { if !$0 { message = nil } }
-    )) {
-      Button("OK") { message = nil }
-    } message: {
-      Text(message ?? "")
-    }
+    .bowErrorAlert("SimpleFIN", message: $message)
     .confirmationDialog("Disconnect SimpleFIN?", isPresented: $showingDisconnect) {
       Button("Disconnect", role: .destructive) {
         do { try coordinator.disconnect(in: modelContext) }
@@ -195,10 +196,28 @@ struct SimpleFINScreen: View {
   private func sync() async {
     do {
       let result = try await coordinator.sync(in: modelContext, manual: true)
-      message = "Added \(result.imported), matched \(result.linked), and sent \(result.needsReview) to Bank Review. \(result.pending) new pending bank items were reported."
+      toasts?.show(BowToast(
+        message: result.imported + result.linked + result.needsReview == 0
+          ? "Up to date. Nothing new from your bank."
+          : "Added \(result.imported) · Matched \(result.linked) · \(result.needsReview) to review",
+        systemImage: "checkmark.circle.fill"
+      ))
       SimpleFINBackgroundRefresh.schedule(in: modelContext)
     } catch {
       message = error.localizedDescription
+    }
+  }
+}
+
+private enum ConnectionStatus {
+  case sample, noAccounts, needsAttention, connected
+
+  var title: String {
+    switch self {
+    case .sample: "Sample connection"
+    case .noAccounts: "No accounts syncing"
+    case .needsAttention: "Sync needs attention"
+    case .connected: "Connected"
     }
   }
 }

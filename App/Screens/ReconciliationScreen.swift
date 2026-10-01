@@ -15,6 +15,9 @@ struct ReconciliationScreen: View {
   @State private var visibleEntryCount = 300
   @State private var isFinishing = false
   @State private var errorMessage: String?
+  @State private var hasLoaded = false
+  @AppStorage(BowIntroKey.reconcile) private var hasSeenIntro = false
+  @Environment(\.bowToasts) private var toasts
 
   private var calculator: ReconciliationCalculator { ReconciliationCalculator() }
   private var enteredBalance: Int64? { statementBalanceMinor }
@@ -42,11 +45,44 @@ struct ReconciliationScreen: View {
 
   var body: some View {
     NavigationStack {
+      Group {
+        if hasSeenIntro {
+          reconcileList
+        } else {
+          List {
+            BowFeatureIntro(
+              systemImage: "checkmark.seal",
+              title: "Check Bow against your statement",
+              points: [
+                .init(systemImage: "doc.text", text: "Enter the balance your bank statement shows."),
+                .init(systemImage: "checkmark.circle", text: "Tick off the transactions that cleared."),
+                .init(systemImage: "equal.circle", text: "When it’s $0 off, you’re done. Nothing moves money.")
+              ],
+              actionTitle: "Start"
+            ) {
+              hasSeenIntro = true
+            }
+            .listRowBackground(Color.clear)
+          }
+          .bowSkyList(mood: .reconcile, height: 420)
+          .navigationTitle("Reconcile")
+          .navigationBarTitleDisplayMode(.inline)
+          .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+          }
+        }
+      }
+      .bowAnimation(value: hasSeenIntro)
+    }
+  }
+
+  private var reconcileList: some View {
       List {
         Section {
           VStack(spacing: Bow.Space.s1) {
             CurrencyAmountField("Statement balance", minor: $statementBalanceMinor,
-                                currencyCode: currencyCode, allowsNegative: true, style: .editorHero)
+                                currencyCode: currencyCode, allowsNegative: true, style: .editorHero,
+                                focusOnAppear: statementBalanceMinor == 0)
             Text(account.name)
               .font(.bowFootnote)
               .foregroundStyle(Bow.inkSoft)
@@ -80,8 +116,14 @@ struct ReconciliationScreen: View {
         .listRowBackground(Bow.card)
 
         Section {
-          if entries.isEmpty {
-            ContentUnavailableView("No entries by this date", systemImage: "list.bullet.rectangle")
+          if !hasLoaded {
+            BowTransactionSkeletonRows(count: 3)
+          } else if entries.isEmpty {
+            ContentUnavailableView(
+              "Nothing to reconcile before \(statementDate.formatted(.dateTime.month(.abbreviated).day()))",
+              systemImage: "list.bullet.rectangle",
+              description: Text("Try a later statement date.")
+            )
           } else {
             ForEach(entries.prefix(visibleEntryCount)) { entry in
               Button {
@@ -92,10 +134,12 @@ struct ReconciliationScreen: View {
                   clearedBalanceMinor -= entry.amountMinor
                 }
               } label: {
-                HStack(spacing: 12) {
+                HStack(spacing: Bow.Space.s3) {
                   Image(systemName: selectedIDs.contains(entry.id) ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(selectedIDs.contains(entry.id) ? Bow.bowSolid : Bow.inkFaint)
                     .font(.title2)
+                    .contentTransition(.symbolEffect(.replace))
+                    .accessibilityHidden(true)
                   VStack(alignment: .leading, spacing: 2) {
                     Text(payeeNames[entry.id].flatMap { $0.isEmpty ? nil : $0 } ?? "Transfer")
                       .font(.bowBody)
@@ -107,12 +151,10 @@ struct ReconciliationScreen: View {
                   Spacer()
                   MoneyText(minor: entry.amountMinor, currencyCode: currencyCode,
                             showsPlusSign: entry.amountMinor > 0)
-                    .monospacedDigit()
                     .foregroundStyle(Bow.ink)
                 }
                 .contentShape(Rectangle())
               }
-              .buttonStyle(.plain)
               .accessibilityLabel("\(payeeNames[entry.id] ?? "Transfer"), \(BudgetMoney.formatted(entry.amountMinor, currencyCode: currencyCode)), \(selectedIDs.contains(entry.id) ? "cleared" : "uncleared")")
             }
             if visibleEntryCount < entries.count {
@@ -135,27 +177,28 @@ struct ReconciliationScreen: View {
         .listRowBackground(Bow.card)
       }
       .bowSkyList(mood: .reconcile, height: 420)
+      .bowEditorSheet(hasChanges: statementBalanceMinor != 0)
+      .bowAnimation(value: hasLoaded)
+      .bowAnimation(value: selectedIDs)
+      .sensoryFeedback(.selection, trigger: selectedIDs)
+      .sensoryFeedback(.success, trigger: isBalanced) { wasBalanced, balanced in
+        !wasBalanced && balanced && statementBalanceMinor != 0
+      }
       .navigationTitle("Reconcile")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-        ToolbarItem(placement: .confirmationAction) {
-          Button("Finish") { Task { await finish() } }
-            .disabled(difference != 0 || isFinishing)
+        BowCancelButton(hasChanges: statementBalanceMinor != 0) { dismiss() }
+      }
+      .safeAreaInset(edge: .bottom) {
+        BowBottomAction(isBalanced ? "Finish reconciling" : "Off by \(BudgetMoney.formatted(abs(difference ?? 0), currencyCode: currencyCode))",
+                        isEnabled: difference == 0 && !isFinishing) {
+          Task { await finish() }
         }
       }
       .task(id: statementDate) {
         await loadEntries()
       }
-      .alert("Couldn’t reconcile", isPresented: Binding(
-        get: { errorMessage != nil },
-        set: { if !$0 { errorMessage = nil } }
-      )) {
-        Button("OK") { errorMessage = nil }
-      } message: {
-        Text(errorMessage ?? "")
-      }
-    }
+      .bowErrorAlert("Couldn’t reconcile", message: $errorMessage)
   }
 
   private func finish() async {
@@ -168,6 +211,7 @@ struct ReconciliationScreen: View {
         accountID: account.id, through: statementDate,
         balanceMinor: enteredBalance, selectedIDs: selectedIDs
       )
+      toasts?.show(.saved("\(account.name) reconciled · \(BudgetMoney.formatted(enteredBalance, currencyCode: currencyCode))"))
       dismiss()
     } catch { errorMessage = error.localizedDescription }
   }
@@ -187,6 +231,7 @@ struct ReconciliationScreen: View {
         openingBalanceMinor: account.openingBalanceMinor,
         entries: result.entries, selectedIDs: selectedIDs
       )
+      hasLoaded = true
     } catch {
       errorMessage = error.localizedDescription
     }

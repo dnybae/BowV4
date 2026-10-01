@@ -24,30 +24,23 @@ struct SimpleFINReviewScreen: View {
   var body: some View {
     Form {
       Section {
-        HStack(spacing: Bow.Space.s3) {
+        BowContextCard(
+          name: record.payee.isEmpty ? "Bank transaction" : record.payee,
+          context: "\(account?.name ?? "Account") · \(record.date.formatted(date: .abbreviated, time: .omitted))"
+        ) {
           MerchantLogoView(
             merchantName: record.payee,
             domain: PayeeDirectory.logoDomain(for: record.payee, transactionDomain: nil, payees: payees),
             kind: record.amountMinor < 0 ? .expense : .inflow,
-            envelopeName: nil
+            envelopeName: nil, size: 44, style: .glossy
           )
-          VStack(alignment: .leading, spacing: 2) {
-            Text(record.payee.isEmpty ? "Bank transaction" : record.payee)
-              .font(.bowHeadline)
-              .foregroundStyle(Bow.ink)
-            Text("\(account?.name ?? "Account") · \(record.date.formatted(date: .abbreviated, time: .omitted))")
-              .font(.bowFootnote)
-              .foregroundStyle(Bow.inkSoft)
-          }
-          Spacer(minLength: Bow.Space.s2)
+        } trailing: {
           MoneyText(minor: record.amountMinor, currencyCode: currencyCode)
             .font(.bowTitle)
-            .monospacedDigit()
             .foregroundStyle(Bow.ink)
             .lineLimit(1)
             .minimumScaleFactor(0.7)
         }
-        .padding(.vertical, Bow.Space.s2)
         .accessibilityElement(children: .combine)
       } header: {
         Text(record.origin == .bankFile ? "From a bank file" : "Posted at your bank")
@@ -56,7 +49,8 @@ struct SimpleFINReviewScreen: View {
           ? "Choose what this imported transaction represents. Your choice completes the review."
           : "This bank item is not in your budget yet. Choose what it represents to complete the review.")
       }
-      .listRowBackground(Bow.card)
+      .listRowBackground(Color.clear)
+      .listRowInsets(EdgeInsets())
 
       if relatedSchedule?.kind == .transfer,
          let relatedOccurrence, let relatedSchedule {
@@ -89,12 +83,13 @@ struct SimpleFINReviewScreen: View {
           Button {
             selected = .match(candidate.id)
           } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: Bow.Space.s3) {
               Image(systemName: selected == .match(candidate.id)
                 ? "largecircle.fill.circle" : "circle")
                 .foregroundStyle(.tint)
+                .contentTransition(.symbolEffect(.replace))
                 .accessibilityHidden(true)
-              VStack(alignment: .leading, spacing: 3) {
+              VStack(alignment: .leading, spacing: 2) {
                 Text(candidate.payee.isEmpty ? "Transfer" : candidate.payee)
                   .foregroundStyle(Bow.ink)
                 Text(candidate.date.formatted(date: .abbreviated, time: .omitted))
@@ -104,18 +99,16 @@ struct SimpleFINReviewScreen: View {
                     .font(.bowSubhead).foregroundStyle(Bow.needsInk)
                 }
               }
-              Spacer(minLength: 6)
-              Text(BudgetMoney.formatted(
-                candidate.transferAccountID == record.localAccountID
+              Spacer(minLength: Bow.Space.s2)
+              MoneyText(
+                minor: candidate.transferAccountID == record.localAccountID
                   ? -candidate.amountMinor : candidate.amountMinor,
                 currencyCode: currencyCode
-              ))
+              )
                 .foregroundStyle(Bow.ink)
-                .fontDesign(.rounded).monospacedDigit()
             }
             .contentShape(Rectangle())
           }
-          .buttonStyle(.plain)
           .accessibilityAddTraits(selected == .match(candidate.id) ? .isSelected : [])
         }
         if case .match(let id) = selected,
@@ -143,11 +136,12 @@ struct SimpleFINReviewScreen: View {
             Button {
               selected = .addNew
             } label: {
-              HStack(spacing: 12) {
+              HStack(spacing: Bow.Space.s3) {
                 Image(systemName: selected == .addNew ? "largecircle.fill.circle" : "circle")
                   .foregroundStyle(.tint)
+                  .contentTransition(.symbolEffect(.replace))
                   .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 2) {
                   Text("Add as new transaction")
                     .foregroundStyle(Bow.ink)
                   Text("Use this if you have not entered it before")
@@ -156,7 +150,6 @@ struct SimpleFINReviewScreen: View {
               }
               .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
             .accessibilityAddTraits(selected == .addNew ? .isSelected : [])
           } else if record.amountMinor >= 0 {
             Text("This income will go to Ready to Assign.")
@@ -183,20 +176,13 @@ struct SimpleFINReviewScreen: View {
       }
       .listRowBackground(Bow.card)
     }
-    .bowListBackground()
+    .bowSkyList(mood: .review, height: 420)
+    .bowAnimation(value: selected)
+    .sensoryFeedback(.selection, trigger: selected)
     .navigationTitle("Review")
     .navigationBarTitleDisplayMode(.inline)
     .safeAreaInset(edge: .bottom) {
-      Button {
-        confirm()
-      } label: {
-        Text(primaryTitle)
-          .frame(maxWidth: .infinity)
-      }
-        .bowPrimaryButton()
-        .disabled(selected == nil || needsEnvelope)
-        .padding(.horizontal, Bow.Space.s4)
-        .padding(.bottom, Bow.Space.s2)
+      BowBottomAction(primaryTitle, isEnabled: selected != nil && !needsEnvelope, action: confirm)
     }
     .task(id: record.id) { loadCandidates() }
     .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
@@ -207,13 +193,7 @@ struct SimpleFINReviewScreen: View {
     } message: {
       Text("It will not appear in Spending or affect your budget.")
     }
-    .alert("Couldn’t complete review", isPresented: Binding(
-      get: { message != nil }, set: { if !$0 { message = nil } }
-    )) {
-      Button("OK") { message = nil }
-    } message: {
-      Text(message ?? "")
-    }
+    .bowErrorAlert("Couldn’t complete review", message: $message)
   }
 
   private var primaryTitle: String {

@@ -147,13 +147,7 @@ struct TransactionDetailScreen: View {
     } message: {
       Text("The manual transaction stays in Spending. The posted bank item returns to Bank Review.")
     }
-    .alert("Couldn’t update transaction", isPresented: Binding(
-      get: { message != nil }, set: { if !$0 { message = nil } }
-    )) {
-      Button("OK") { message = nil }
-    } message: {
-      Text(message ?? "")
-    }
+    .bowErrorAlert("Couldn’t update transaction", message: $message)
     .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
       let id = transaction.id
       if (try? BudgetTransactionLookup.byID(id, in: modelContext)) == nil {

@@ -164,6 +164,7 @@ struct BudgetScreen: View {
           .disabled(!canAdvance)
           .accessibilityHint(canAdvance ? "" : "Assign money in this month to plan the next month")
       }
+      .bowHighVisibilityPriority()
     }
     .simultaneousGesture(DragGesture(minimumDistance: 30)
       .onChanged { value in

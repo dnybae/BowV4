@@ -87,14 +87,7 @@ struct YNABImportScreen: View {
           errorMessage = error.localizedDescription
         }
       }
-      .alert("Couldn’t import YNAB categories", isPresented: Binding(
-        get: { errorMessage != nil },
-        set: { if !$0 { errorMessage = nil } }
-      )) {
-        Button("OK") { errorMessage = nil }
-      } message: {
-        Text(errorMessage ?? "")
-      }
+      .bowErrorAlert("Couldn’t import YNAB categories", message: $errorMessage)
     }
   }
 

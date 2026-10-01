@@ -89,14 +89,7 @@ struct WelcomeScreen: View {
         Bow.mist.overlay(alignment: .top) { SkyBackground(mood: .dawn, height: 700) }
       }
       .toolbar(.hidden, for: .navigationBar)
-      .alert("Couldn’t create budget", isPresented: Binding(
-        get: { errorMessage != nil },
-        set: { if !$0 { errorMessage = nil } }
-      )) {
-        Button("OK") { errorMessage = nil }
-      } message: {
-        Text(errorMessage ?? "")
-      }
+      .bowErrorAlert("Couldn’t create budget", message: $errorMessage)
     }
   }
 }

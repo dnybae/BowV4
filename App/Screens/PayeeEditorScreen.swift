@@ -175,14 +175,7 @@ struct PayeeEditorScreen: View {
       } message: {
         Text("This removes the saved payee and its matching settings.")
       }
-      .alert(errorTitle, isPresented: Binding(
-        get: { errorMessage != nil },
-        set: { if !$0 { errorMessage = nil } }
-      )) {
-        Button("OK") { errorMessage = nil }
-      } message: {
-        Text(errorMessage ?? "")
-      }
+      .bowErrorAlert(errorTitle, message: $errorMessage)
       .fileImporter(isPresented: $showingFiles, allowedContentTypes: [.image]) { result in
         do {
           let url = try result.get()

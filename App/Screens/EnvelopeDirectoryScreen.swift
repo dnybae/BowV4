@@ -80,13 +80,7 @@ struct EnvelopeDirectoryScreen: View {
         }
       }
     }
-    .alert("Couldn’t add envelope", isPresented: Binding(
-      get: { message != nil }, set: { if !$0 { message = nil } }
-    )) {
-      Button("OK") { message = nil }
-    } message: {
-      Text(message ?? "")
-    }
+    .bowErrorAlert("Couldn’t add envelope", message: $message)
   }
 
   private func add(_ suggestion: EnvelopeSuggestion) {

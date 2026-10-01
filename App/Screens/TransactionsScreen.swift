@@ -148,6 +148,7 @@ struct TransactionsScreen: View {
           ? "Filter Transactions, \(filter.activeCount) active"
           : "Filter Transactions")
       }
+      .bowHighVisibilityPriority()
     }
     .sheet(isPresented: $showingFilters) {
       TransactionFilterScreen(

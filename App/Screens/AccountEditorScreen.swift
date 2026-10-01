@@ -146,14 +146,7 @@ struct AccountEditorScreen: View {
         Task { await save() }
       }
     }
-    .alert("Couldn’t save account", isPresented: Binding(
-      get: { errorMessage != nil },
-      set: { if !$0 { errorMessage = nil } }
-    )) {
-      Button("OK") { errorMessage = nil }
-    } message: {
-      Text(errorMessage ?? "")
-    }
+    .bowErrorAlert("Couldn’t save account", message: $errorMessage)
     .sheet(isPresented: $showingBankLinkPicker) {
       if let account {
         SimpleFINLinkPickerScreen(account: account)

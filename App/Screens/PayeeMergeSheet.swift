@@ -92,14 +92,7 @@ struct PayeeMergeSheet: View {
       } message: { source in
         Text("^[\(source.transactionCount) transaction](inflect: true) and ^[\(source.scheduleCount) schedule](inflect: true) will move to \(target.name). \(target.name) keeps its own settings and picks up any it’s missing. This can’t be undone.")
       }
-      .alert("Couldn’t merge payees", isPresented: Binding(
-        get: { errorMessage != nil },
-        set: { if !$0 { errorMessage = nil } }
-      )) {
-        Button("OK") { errorMessage = nil }
-      } message: {
-        Text(errorMessage ?? "")
-      }
+      .bowErrorAlert("Couldn’t merge payees", message: $errorMessage)
     }
   }
 

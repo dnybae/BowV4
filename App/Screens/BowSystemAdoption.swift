@@ -61,3 +61,15 @@ enum BowImageSession {
     return URLSession(configuration: configuration)
   }()
 }
+
+extension ToolbarContent {
+  /// Keeps an item in the bar when space runs out (iOS 27), e.g. Budget's month arrows.
+  @ToolbarContentBuilder
+  func bowHighVisibilityPriority() -> some ToolbarContent {
+    if #available(iOS 27.0, *) {
+      visibilityPriority(.high)
+    } else {
+      self
+    }
+  }
+}

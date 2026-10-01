@@ -77,13 +77,7 @@ struct CardDebtGoalEditorScreen: View {
         BowCancelButton(hasChanges: hasChanges) { dismiss() }
         ToolbarItem(placement: .confirmationAction) { Button("Save") { save() } }
       }
-      .alert("Couldn’t save goal", isPresented: Binding(
-        get: { message != nil }, set: { if !$0 { message = nil } }
-      )) {
-        Button("OK") { message = nil }
-      } message: {
-        Text(message ?? "")
-      }
+      .bowErrorAlert("Couldn’t save goal", message: $message)
     }
   }
 

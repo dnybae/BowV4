@@ -71,13 +71,7 @@ struct SimpleFINLinkPickerScreen: View {
           Button("Done") { dismiss() }
         }
       }
-      .alert("Bank sync", isPresented: Binding(
-        get: { message != nil }, set: { if !$0 { message = nil } }
-      )) {
-        Button("OK") { message = nil }
-      } message: {
-        Text(message ?? "")
-      }
+      .bowErrorAlert("Bank sync", message: $message)
     }
   }
 

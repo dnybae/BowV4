@@ -96,12 +96,6 @@ struct PendingBankDetailScreen: View {
         .padding(.bottom, Bow.Space.s2)
       }
     }
-    .alert("Couldn’t enter transaction", isPresented: Binding(
-      get: { message != nil }, set: { if !$0 { message = nil } }
-    )) {
-      Button("OK") { message = nil }
-    } message: {
-      Text(message ?? "")
-    }
+    .bowErrorAlert("Couldn’t enter transaction", message: $message)
   }
 }

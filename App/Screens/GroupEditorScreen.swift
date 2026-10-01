@@ -43,14 +43,7 @@ struct GroupEditorScreen: View {
             .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
       }
-      .alert("Couldn’t save group", isPresented: Binding(
-        get: { errorMessage != nil },
-        set: { if !$0 { errorMessage = nil } }
-      )) {
-        Button("OK") { errorMessage = nil }
-      } message: {
-        Text(errorMessage ?? "")
-      }
+      .bowErrorAlert("Couldn’t save group", message: $errorMessage)
       .confirmationDialog("Delete this empty group?", isPresented: $showingDelete) {
         Button("Delete group", role: .destructive) {
           guard let group else { return }

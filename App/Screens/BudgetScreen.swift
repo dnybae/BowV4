@@ -25,6 +25,7 @@ struct BudgetScreen: View {
   /// A small, damped follow of a horizontal swipe before it commits a month change.
   @State private var swipeOffset: CGFloat = 0
   @State private var showsMonthLoading = false
+  @AppStorage("budgetCollapsedGroups") private var collapseState = BudgetGroupCollapseState()
 
   /// Everything on screen describes the loaded snapshot's month. `selectedMonth` can briefly be
   /// ahead of it while the next month calculates.
@@ -125,36 +126,56 @@ struct BudgetScreen: View {
       ForEach(orderedGroups) { group in
         let matching = visibleEnvelopes(in: group)
         if !matching.isEmpty {
-          Section(group.name) {
-            ForEach(matching) { envelope in
-              NavigationLink(value: BudgetRoute.envelope(envelope.id)) {
-                EnvelopeBudgetRow(
-                  name: envelope.name,
-                  availableMinor: snapshot.available(for: envelope.id),
-                  cashOverspentMinor: snapshot.cashShortfall[envelope.id, default: 0],
-                  creditOverspentMinor: snapshot.creditShortfall[envelope.id, default: 0],
-                  assignedMinor: snapshot.assigned[envelope.id, default: 0],
-                  activityMinor: snapshot.activity[envelope.id, default: 0],
-                  monthlyTargetMinor: monthlyTarget(for: envelope, scheduled: scheduled),
-                  currencyCode: currencyCode
-                )
-              }
+          let key = group.id.uuidString
+          Section {
+            BudgetCardStack(
+              groupName: group.name, items: matching,
+              isCollapsed: collapseState.isCollapsed(key),
+              onExpand: { toggleGroup(key) },
+              route: { .envelope($0.id) }
+            ) { envelope in
+              EnvelopeBudgetRow(
+                name: envelope.name,
+                availableMinor: snapshot.available(for: envelope.id),
+                cashOverspentMinor: snapshot.cashShortfall[envelope.id, default: 0],
+                creditOverspentMinor: snapshot.creditShortfall[envelope.id, default: 0],
+                assignedMinor: snapshot.assigned[envelope.id, default: 0],
+                activityMinor: snapshot.activity[envelope.id, default: 0],
+                monthlyTargetMinor: monthlyTarget(for: envelope, scheduled: scheduled),
+                currencyCode: currencyCode
+              )
             }
+            .budgetCardStackRow()
+          } header: {
+            BudgetGroupHeader(
+              name: group.name, count: matching.count,
+              isCollapsed: collapseState.isCollapsed(key),
+              onToggle: { toggleGroup(key) }
+            )
           }
-          .listRowBackground(Bow.card)
         }
       }
 
       if !creditCards.isEmpty {
-        Section("Credit card payments") {
-          ForEach(creditCards) { card in
-            NavigationLink(value: BudgetRoute.cardPayment(card.id)) {
-              CardPaymentRow(card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode)
-            }
+        let key = BudgetGroupCollapseState.creditCardsKey
+        Section {
+          BudgetCardStack(
+            groupName: "Credit card payments", items: creditCards,
+            isCollapsed: collapseState.isCollapsed(key),
+            onExpand: { toggleGroup(key) },
+            route: { .cardPayment($0.id) }
+          ) { card in
+            CardPaymentRow(card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode)
           }
+          .budgetCardStackRow()
+        } header: {
+          BudgetGroupHeader(
+            name: "Credit card payments", count: creditCards.count,
+            isCollapsed: collapseState.isCollapsed(key),
+            onToggle: { toggleGroup(key) }
+          )
         }
-        .listRowBackground(Bow.card)
-        .id("credit-card-payments")
+        .id(key)
       }
 
       if !isPastMonth {
@@ -182,6 +203,7 @@ struct BudgetScreen: View {
     .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))
     .navigationBarTitleDisplayMode(.inline)
     .sensoryFeedback(.selection, trigger: displayedMonth)
+    .sensoryFeedback(.selection, trigger: collapseState)
     .toolbar {
       ToolbarItem(placement: .principal) {
         BudgetMonthTitle(
@@ -266,6 +288,10 @@ struct BudgetScreen: View {
     }.sorted { $0.sortOrder == $1.sortOrder ? $0.name < $1.name : $0.sortOrder < $1.sortOrder }
   }
 
+  private func toggleGroup(_ key: String) {
+    withAnimation(Bow.motion(reduceMotion: reduceMotion)) { collapseState.toggle(key) }
+  }
+
   private func handle(_ notice: BudgetNotice) {
     guard notice.isActionable else { return }
     switch notice.kind {
@@ -324,6 +350,18 @@ private struct BudgetMonthTitle: View {
     .bowAnimation(value: month)
     .accessibilityElement(children: .combine)
     .accessibilityAddTraits(.isHeader)
+  }
+}
+
+private extension View {
+  /// A group's card stack fills its List row edge to edge, with no row background or separators.
+  func budgetCardStackRow() -> some View {
+    self
+      .listRowBackground(Color.clear)
+      .listRowSeparator(.hidden)
+      .listRowInsets(EdgeInsets(top: Bow.Space.s1, leading: 0, bottom: Bow.Space.s1, trailing: 0))
+      // Each card draws its own chevron; the List's disclosure would sit outside the card.
+      .navigationLinkIndicatorVisibility(.hidden)
   }
 }
 

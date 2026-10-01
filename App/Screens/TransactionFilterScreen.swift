@@ -53,6 +53,12 @@ struct TransactionFilterScreen: View {
   var body: some View {
     NavigationStack {
       Form {
+        Section {
+          BowIdentityHeader(name: "Filter transactions", systemImage: "line.3.horizontal.decrease")
+        }
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets())
+
         Section("Show") {
           Picker("Show", selection: $draft.status) {
             ForEach(TransactionStatusScope.allCases, id: \.self) { status in
@@ -65,26 +71,27 @@ struct TransactionFilterScreen: View {
         .listRowBackground(Color.clear)
         .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
 
-        Section("Account") {
+        Section {
           AccountSelectionField(
             title: "Account", selection: $draft.accountID,
-            accounts: accounts, noneTitle: "All accounts"
+            accounts: accounts, noneTitle: "All accounts", systemImage: "building.columns"
           )
-        }
-        .listRowBackground(Bow.card)
-
-        Section("Envelopes") {
-          EnvelopeScopeSelectionField(selection: $draft.envelopeScope, envelopes: envelopes)
+          EnvelopeScopeSelectionField(selection: $draft.envelopeScope, envelopes: envelopes,
+                                      systemImage: "square.grid.2x2")
         }
         .listRowBackground(Bow.card)
 
         Section("Dates") {
-          Toggle("From a date", isOn: $usesStartDate)
+          Toggle(isOn: $usesStartDate) {
+            Label("From a date", systemImage: "calendar").labelStyle(.bowTile)
+          }
           if usesStartDate {
             DatePicker("From", selection: $startDate, displayedComponents: .date)
               .datePickerStyle(.compact)
           }
-          Toggle("Through a date", isOn: $usesEndDate)
+          Toggle(isOn: $usesEndDate) {
+            Label("Through a date", systemImage: "calendar").labelStyle(.bowTile)
+          }
           if usesEndDate {
             DatePicker("Through", selection: $endDate, displayedComponents: .date)
               .datePickerStyle(.compact)
@@ -93,8 +100,10 @@ struct TransactionFilterScreen: View {
         .listRowBackground(Bow.card)
 
         Section {
-          CurrencyAmountField("At least", minor: $minimumMinor, currencyCode: currencyCode)
-          CurrencyAmountField("At most", minor: $maximumMinor, currencyCode: currencyCode)
+          CurrencyAmountField("At least", minor: $minimumMinor, currencyCode: currencyCode,
+                              systemImage: "dollarsign")
+          CurrencyAmountField("At most", minor: $maximumMinor, currencyCode: currencyCode,
+                              systemImage: "dollarsign")
         } header: {
           Text("Amount")
         } footer: {
@@ -110,7 +119,7 @@ struct TransactionFilterScreen: View {
         }
         .listRowBackground(Bow.card)
       }
-      .bowListBackground()
+      .bowSkyList(mood: .dawn, height: 420)
       .navigationTitle("Filter")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

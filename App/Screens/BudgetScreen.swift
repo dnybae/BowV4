@@ -11,6 +11,7 @@ struct BudgetScreen: View {
   var snapshot: BudgetSnapshot
   var previousSnapshot: BudgetSnapshot? = nil
   @Binding var selectedMonth: Date
+  @Binding var path: [BudgetRoute]
   var returnToPresentRequest: Int = 0
   var onAddGroup: () -> Void
   var onAddEnvelope: () -> Void
@@ -132,7 +133,8 @@ struct BudgetScreen: View {
               groupName: group.name, items: matching,
               isCollapsed: collapseState.isCollapsed(key),
               onExpand: { toggleGroup(key) },
-              route: { .envelope($0.id) }
+              route: { .envelope($0.id) },
+              onOpen: open
             ) { envelope in
               EnvelopeBudgetRow(
                 name: envelope.name,
@@ -163,7 +165,8 @@ struct BudgetScreen: View {
             groupName: "Credit card payments", items: creditCards,
             isCollapsed: collapseState.isCollapsed(key),
             onExpand: { toggleGroup(key) },
-            route: { .cardPayment($0.id) }
+            route: { .cardPayment($0.id) },
+            onOpen: open
           ) { card in
             CardPaymentRow(card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode)
           }
@@ -288,6 +291,12 @@ struct BudgetScreen: View {
     }.sorted { $0.sortOrder == $1.sortOrder ? $0.name < $1.name : $0.sortOrder < $1.sortOrder }
   }
 
+  private func open(_ route: BudgetRoute) {
+    // Ignore a second tap while a push is already underway.
+    guard path.isEmpty else { return }
+    path.append(route)
+  }
+
   private func toggleGroup(_ key: String) {
     withAnimation(Bow.motion(reduceMotion: reduceMotion)) { collapseState.toggle(key) }
   }
@@ -360,8 +369,6 @@ private extension View {
       .listRowBackground(Color.clear)
       .listRowSeparator(.hidden)
       .listRowInsets(EdgeInsets(top: Bow.Space.s1, leading: 0, bottom: Bow.Space.s1, trailing: 0))
-      // Each card draws its own chevron; the List's disclosure would sit outside the card.
-      .navigationLinkIndicatorVisibility(.hidden)
   }
 }
 

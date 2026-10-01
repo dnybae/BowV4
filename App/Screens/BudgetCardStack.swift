@@ -9,6 +9,9 @@ struct BudgetCardStack<Item: Identifiable, Row: View>: View {
   var isCollapsed: Bool
   var onExpand: () -> Void
   var route: (Item) -> BudgetRoute
+  /// Opens a card's route. Cards use buttons, not NavigationLinks: several links in one List row
+  /// make the List treat the whole row as one link, so taps open the wrong (or several) envelopes.
+  var onOpen: (BudgetRoute) -> Void
   @ViewBuilder var row: (Item) -> Row
 
   private static var cardRadius: CGFloat { 22 }
@@ -21,7 +24,7 @@ struct BudgetCardStack<Item: Identifiable, Row: View>: View {
   var body: some View {
     VStack(spacing: Bow.Space.s2) {
       ForEach(visibleItems) { item in
-        NavigationLink(value: route(item)) {
+        Button { onOpen(route(item)) } label: {
           card { row(item) }
         }
         .buttonStyle(BudgetCardButtonStyle())

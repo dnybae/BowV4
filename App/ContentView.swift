@@ -145,6 +145,7 @@ private struct BudgetHomeView: View {
                 snapshot: snapshot,
                 previousSnapshot: loadedPreviousSnapshot,
                 selectedMonth: $selectedMonth,
+                path: $budgetPath,
                 returnToPresentRequest: budgetReturnToPresentRequest,
                 onAddGroup: { activeSheet = .newGroup },
                 onAddEnvelope: { activeSheet = .newEnvelope },

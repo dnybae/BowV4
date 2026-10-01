@@ -306,7 +306,7 @@ struct BudgetScreen: View {
           }
           .budgetCardStackRow()
         } header: {
-          BudgetGroupHeader(
+          BowGroupHeader(
             name: group.name, count: matching.count,
             isCollapsed: collapseState.isCollapsed(key),
             onToggle: { toggleGroup(key) }
@@ -330,7 +330,7 @@ struct BudgetScreen: View {
         }
         .budgetCardStackRow()
       } header: {
-        BudgetGroupHeader(
+        BowGroupHeader(
           name: "Credit card payments", count: creditCards.count,
           isCollapsed: collapseState.isCollapsed(key),
           onToggle: { toggleGroup(key) }

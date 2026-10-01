@@ -9,6 +9,7 @@ struct ContentView: View {
   @AppStorage("bow.demoScenario") private var demoScenarioRaw = DemoScenario.showcase.rawValue
   @State private var demoContainer: ModelContainer?
   @State private var demoError: String?
+  @State private var toasts = BowToastCenter()
 
   var body: some View {
     Group {
@@ -26,13 +27,14 @@ struct ContentView: View {
             Button("Return to My Budget") { isDemoMode = false }
           }
         } else {
-          ProgressView("Preparing demo…")
+          BowOverviewSkeleton(accessibilityTitle: "Preparing the demo budget")
         }
       } else {
         BudgetHomeView(isDemoMode: false)
       }
     }
     .bowAppTint()
+    .environment(\.bowToasts, toasts)
     .task(id: isDemoMode) {
       if isDemoMode && demoContainer == nil { prepareDemo() }
     }
@@ -66,6 +68,7 @@ private struct BudgetHomeView: View {
   @Environment(\.modelContext) private var modelContext
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.bowToasts) private var toasts
   @Query private var profiles: [BudgetProfile]
   @Query private var accounts: [BudgetAccount]
   @Query private var groups: [BudgetGroup]
@@ -116,6 +119,7 @@ private struct BudgetHomeView: View {
     Group {
       if profiles.isEmpty {
         WelcomeScreen()
+          .transition(.opacity)
       } else {
         let tabs = TabView(selection: Binding(
           get: { selectedTab },
@@ -166,10 +170,12 @@ private struct BudgetHomeView: View {
                   ContentUnavailableView("Budget Unavailable", systemImage: "exclamationmark.triangle",
                                          description: Text(ledgerError))
                 } else {
-                  ProgressView("Calculating budget…")
+                  BowOverviewSkeleton(accessibilityTitle: "Calculating your budget")
+                    .transition(.opacity)
                 }
               }
               }
+              .bowAnimation(value: loadedSnapshot == nil)
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                   Button("Settings", systemImage: "gearshape") { showingSettings = true }
@@ -193,7 +199,9 @@ private struct BudgetHomeView: View {
                 onSelect: selectTransaction,
                 onRecord: { activeSheet = .recordScheduled($0) },
                 onEditSchedule: { activeSheet = .editSchedule($0) },
-                onReviewBankRecord: { activeSheet = .reviewBankRecord($0) }
+                onReviewBankRecord: { activeSheet = .reviewBankRecord($0) },
+                onAddTransaction: { activeSheet = .newTransaction },
+                onConnectBank: { activeSheet = .bankSync }
               )
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -232,17 +240,20 @@ private struct BudgetHomeView: View {
                 currencyCode: currencyCode,
                 onAddAccount: { activeSheet = .newAccount },
                 onViewInsights: { showingInsights = true },
-                onSelectTransaction: selectTransaction
+                onSelectTransaction: selectTransaction,
+                onAddTransaction: { activeSheet = .newTransactionInAccount($0) }
                 )
               } else {
                 if let ledgerError {
                   ContentUnavailableView("Balances Unavailable", systemImage: "exclamationmark.triangle",
                                          description: Text(ledgerError))
                 } else {
-                  ProgressView("Calculating balances…")
+                  BowOverviewSkeleton(mood: .mint, accessibilityTitle: "Calculating balances")
+                    .transition(.opacity)
                 }
               }
               }
+              .bowAnimation(value: loadedAccountReport == nil)
               .navigationDestination(isPresented: $showingInsights) {
                 insightsDestination
               }
@@ -280,6 +291,8 @@ private struct BudgetHomeView: View {
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .bowAppTint()
+        .bowToastHost()
+        .transition(.opacity)
         .sheet(isPresented: $showingSettings) {
           SettingsScreen()
         }
@@ -293,6 +306,25 @@ private struct BudgetHomeView: View {
               payees: payees,
               currencyCode: currencyCode
             )
+          case .newTransactionInAccount(let accountID):
+            TransactionEditorScreen(
+              transaction: nil,
+              accounts: accounts,
+              envelopes: envelopes,
+              payees: payees,
+              currencyCode: currencyCode,
+              preferredAccountID: accountID
+            )
+          case .bankSync:
+            NavigationStack {
+              SimpleFINScreen()
+                .toolbar {
+                  ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { activeSheet = nil }
+                  }
+                }
+            }
+            .bowToastHost()
           case .editTransaction(let id):
             TransactionEditorScreen(
               transaction: transaction(for: id),
@@ -375,6 +407,7 @@ private struct BudgetHomeView: View {
         }
       }
     }
+    .bowAnimation(value: profiles.isEmpty)
     .environment(\.budgetSnapshotRepository, snapshotRepository)
     .environment(tabReselect)
     .environment(\.payeeLogoDirectory, PayeeLogoDirectory(payees: payees))
@@ -439,9 +472,16 @@ private struct BudgetHomeView: View {
     }
   }
 
+  /// Background sync. New items are announced with a toast, so they don't appear unexplained.
   private func refreshSimpleFINIfConnected() async {
-    guard (try? SimpleFINCredentialStore().load()) != nil else { return }
-    _ = try? await SimpleFINSyncCoordinator.shared.sync(in: modelContext)
+    guard (try? SimpleFINCredentialStore().load()) != nil,
+          let summary = try? await SimpleFINSyncCoordinator.shared.sync(in: modelContext) else { return }
+    let arrived = summary.imported + summary.needsReview
+    guard arrived > 0 else { return }
+    toasts?.show(BowToast(
+      message: arrived == 1 ? "1 new transaction from your bank" : "\(arrived) new transactions from your bank",
+      systemImage: "building.columns.fill", feedback: .quiet
+    ))
   }
 
   /// Transactions waiting for review open the review sheet; everything else opens its details.
@@ -467,7 +507,7 @@ private struct BudgetHomeView: View {
         currencyCode: currencyCode
       )
     } else {
-      ProgressView("Preparing insights…")
+      BowOverviewSkeleton(accessibilityTitle: "Preparing insights")
     }
   }
 
@@ -503,6 +543,8 @@ private struct BudgetHomeView: View {
 
 private enum BowSheet: Identifiable {
   case newTransaction
+  case newTransactionInAccount(UUID)
+  case bankSync
   case editTransaction(UUID)
   case transactionDetail(UUID)
   case reviewTransaction(UUID)
@@ -521,6 +563,8 @@ private enum BowSheet: Identifiable {
   var id: String {
     switch self {
     case .newTransaction: "newTransaction"
+    case .newTransactionInAccount(let id): "newTransactionInAccount-\(id)"
+    case .bankSync: "bankSync"
     case .editTransaction(let id): "editTransaction-\(id)"
     case .transactionDetail(let id): "transactionDetail-\(id)"
     case .reviewTransaction(let id): "reviewTransaction-\(id)"

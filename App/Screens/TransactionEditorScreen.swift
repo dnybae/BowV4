@@ -51,6 +51,7 @@ struct TransactionEditorScreen: View {
     currencyCode: String,
     scheduledDraft: ScheduledTransactionDraft? = nil,
     reviewRecord: SimpleFINImportRecord? = nil,
+    preferredAccountID: UUID? = nil,
     onEditSchedule: ((UUID) -> Void)? = nil
   ) {
     let reviewRecord = transaction == nil ? reviewRecord : nil
@@ -64,10 +65,12 @@ struct TransactionEditorScreen: View {
     self.onEditSchedule = onEditSchedule
     let recordKind: BudgetTransactionKind? = reviewRecord.map { $0.amountMinor < 0 ? .expense : .inflow }
     _kind = State(initialValue: transaction?.kind ?? scheduledDraft?.kind ?? recordKind ?? .expense)
-    let defaultAccountID = transaction?.accountID ?? scheduledDraft?.accountID ?? reviewRecord?.localAccountID
-      ?? accounts.first(where: { $0.kind == .cash })?.id
+    let fallbackAccountID: UUID? = accounts.first(where: { $0.kind == .cash })?.id
       ?? accounts.first(where: { $0.kind == .credit })?.id
       ?? accounts.first?.id
+    let sourceAccountID: UUID? = transaction?.accountID ?? scheduledDraft?.accountID
+    let defaultAccountID: UUID? = sourceAccountID ?? reviewRecord?.localAccountID
+      ?? preferredAccountID ?? fallbackAccountID
     self.defaultAccountID = defaultAccountID
     _accountID = State(initialValue: defaultAccountID)
     _destinationID = State(initialValue: transaction?.transferAccountID ?? scheduledDraft?.transferAccountID)

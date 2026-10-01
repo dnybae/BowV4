@@ -3,6 +3,7 @@ import SwiftData
 
 struct SpendingTimelineEntryView: View {
   @Environment(\.modelContext) private var modelContext
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   var item: SpendingTimelineItem
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
@@ -20,16 +21,13 @@ struct SpendingTimelineEntryView: View {
       switch item.source {
       case .transaction(let id):
         Button { onSelect(id) } label: { row }
-          .buttonStyle(.plain)
       case .bankReview(let record, let related)
         where record.status == .imported && related == nil && record.transactionID != nil:
         // Already imported as a transaction: approve it in the review sheet.
         Button { record.transactionID.map(onSelect) } label: { row }
-          .buttonStyle(.plain)
       case .bankReview(let record, let related) where record.status == .review && related == nil:
         // Not in the budget yet: match it or add it in the review sheet.
         Button { onReviewBankRecord(record) } label: { row }
-          .buttonStyle(.plain)
       case .bankReview(let record, let related):
         NavigationLink {
           SimpleFINReviewScreen(
@@ -50,7 +48,6 @@ struct SpendingTimelineEntryView: View {
       case .scheduled(let occurrence, let schedule):
         // Tapping opens the bill in the editor to record it.
         Button { record(occurrence, schedule) } label: { row }
-          .buttonStyle(.plain)
           .accessibilityHint("Opens the bill to record it")
           .swipeActions(edge: .leading) {
             Button("Record", systemImage: "plus") { record(occurrence, schedule) }
@@ -67,13 +64,7 @@ struct SpendingTimelineEntryView: View {
       }
     }
     .listRowBackground(model.state.rowStatus?.rowBackground ?? Bow.card)
-    .alert("Couldn’t Update Bill", isPresented: Binding(
-      get: { message != nil }, set: { if !$0 { message = nil } }
-    )) {
-      Button("OK") { message = nil }
-    } message: {
-      Text(message ?? "")
-    }
+    .bowErrorAlert("Couldn’t Update Bill", message: $message)
   }
 
   private var row: some View {
@@ -93,7 +84,7 @@ struct SpendingTimelineEntryView: View {
   }
 
   private func skip(_ occurrence: BudgetScheduleOccurrence) {
-    occurrence.isSkipped = true
+    withAnimation(Bow.motion(reduceMotion: reduceMotion)) { occurrence.isSkipped = true }
     do { try modelContext.save() }
     catch { message = error.localizedDescription }
   }

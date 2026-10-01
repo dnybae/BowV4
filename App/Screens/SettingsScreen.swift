@@ -211,6 +211,7 @@ struct SettingsScreen: View {
       .sheet(isPresented: $showingBankImport) {
         BankFileImportScreen()
       }
+      .bowToastHost()
       .alert("Rename Budget", isPresented: $showingRename) {
         TextField("Budget Name", text: $budgetNameDraft)
         Button("Cancel", role: .cancel) {}

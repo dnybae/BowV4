@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// A Budget group's section header: the group name, "N envelopes" and a glass chevron
-/// that collapses or expands the group.
-struct BudgetGroupHeader: View {
+/// A collapsible group's header, on Budget and Accounts: the group name, a trailing detail
+/// ("4 envelopes", a group total) and a glass chevron that collapses or expands the group.
+struct BowGroupHeader<Detail: View>: View {
   var name: String
-  var count: Int
   var isCollapsed: Bool
   var onToggle: () -> Void
+  @ViewBuilder var detail: () -> Detail
 
   var body: some View {
     HStack(spacing: Bow.Space.s2) {
@@ -15,7 +15,7 @@ struct BudgetGroupHeader: View {
           .font(.bowHeadline)
           .foregroundStyle(Bow.inkSoft)
           .frame(maxWidth: .infinity, alignment: .leading)
-        Text("^[\(count) envelope](inflect: true)")
+        detail()
           .font(.bowSubhead)
           .foregroundStyle(Bow.inkSoft)
       }
@@ -43,5 +43,14 @@ struct BudgetGroupHeader: View {
       .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
     }
     .textCase(nil)
+  }
+}
+
+extension BowGroupHeader where Detail == Text {
+  /// A Budget group: its name and how many envelopes it holds.
+  init(name: String, count: Int, isCollapsed: Bool, onToggle: @escaping () -> Void) {
+    self.init(name: name, isCollapsed: isCollapsed, onToggle: onToggle) {
+      Text("^[\(count) envelope](inflect: true)")
+    }
   }
 }

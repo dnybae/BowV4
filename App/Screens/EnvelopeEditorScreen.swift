@@ -8,6 +8,7 @@ struct EnvelopeEditorScreen: View {
   var nextOrder: Int
   var envelope: BudgetEnvelope?
   @Query private var profiles: [BudgetProfile]
+  @Query private var schedules: [BudgetSchedule]
   @State private var name = ""
   @State private var groupID: UUID?
   @State private var targetAmountMinor: Int64 = 0
@@ -17,6 +18,21 @@ struct EnvelopeEditorScreen: View {
 
   private var targetMinor: Int64? { targetAmountMinor > 0 ? targetAmountMinor : nil }
   private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
+
+  /// Scheduled transactions that add to this month's target, as on the envelope's detail screen.
+  private var scheduledContributions: [ScheduleTargetContribution] {
+    guard let envelope else { return [] }
+    return ScheduleTargetCalculator().contributions(for: envelope.id, schedules: schedules, month: Date())
+  }
+
+  /// Your target plus scheduled transactions: what the footnote used to describe.
+  private var fundThisMonthMinor: Int64 {
+    targetAmountMinor + scheduledContributions.reduce(0) { $0 + $1.totalMinor }
+  }
+
+  private var tileSymbol: String {
+    TransactionIconSymbol.name(for: .expense, payee: "", envelope: name)
+  }
 
   init(groups: [BudgetGroup], nextOrder: Int, envelope: BudgetEnvelope? = nil) {
     self.groups = groups
@@ -32,37 +48,87 @@ struct EnvelopeEditorScreen: View {
   var body: some View {
     NavigationStack {
       Form {
-        Section("Envelope") {
-          LabeledContent("Name") {
-            TextField("Envelope name", text: $name)
-              .multilineTextAlignment(.trailing)
+        Section {
+          BowContextCard {
+            BowGlossyTile(systemImage: tileSymbol, size: 44)
+          } title: {
+            VStack(alignment: .leading, spacing: 2) {
+              TextField("Name", text: $name)
+                .font(.bowHeadline)
+                .foregroundStyle(Bow.ink)
+                .accessibilityLabel("Envelope name")
+              Text("Envelope name")
+                .font(.bowSubhead)
+                .foregroundStyle(Bow.inkSoft)
+                .accessibilityHidden(true)
+            }
+          } trailing: {
+            Picker("Group", selection: $groupID) {
+              ForEach(groups) { group in
+                Text(group.name).tag(Optional(group.id))
+              }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
           }
-          Picker("Group", selection: $groupID) {
-            ForEach(groups) { group in
-              Text(group.name).tag(Optional(group.id))
+        }
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets())
+
+        Section {
+          CurrencyAmountField("Amount each month", minor: $targetAmountMinor, currencyCode: currencyCode,
+                              style: .editorHero)
+            .padding(.vertical, Bow.Space.s2)
+          Toggle(isOn: $hasTargetDate) {
+            Label("Set target date", systemImage: "calendar").labelStyle(.bowTile)
+          }
+          if hasTargetDate {
+            NavigationLink {
+              BowDatePickerScreen(title: "Target date", date: $targetDate)
+            } label: {
+              LabeledContent {
+                Text(targetDate.formatted(date: .abbreviated, time: .omitted))
+                  .foregroundStyle(Bow.bowInk)
+              } label: {
+                Label("Target date", systemImage: "clock").labelStyle(.bowTile)
+              }
             }
           }
         }
         .listRowBackground(Bow.card)
+
         Section {
-          CurrencyAmountField("Amount each month", minor: $targetAmountMinor, currencyCode: currencyCode)
-          Toggle("Set target date", isOn: $hasTargetDate)
-          if hasTargetDate {
-            DatePicker("Target date", selection: $targetDate, displayedComponents: .date)
+          LabeledContent {
+            MoneyText(minor: targetAmountMinor, currencyCode: currencyCode)
+          } label: {
+            Label("Your target", systemImage: "dollarsign").labelStyle(.bowTile)
           }
+          .listRowBackground(Bow.card)
+          ForEach(scheduledContributions) { contribution in
+            ScheduledTargetRow(contribution: contribution, currencyCode: currencyCode)
+              .listRowBackground(Bow.card)
+          }
+          LabeledContent {
+            MoneyText(minor: fundThisMonthMinor, currencyCode: currencyCode)
+              .font(.bowTitle)
+              .foregroundStyle(Bow.ink)
+          } label: {
+            Text("Fund this month")
+              .font(.bowHeadline)
+              .foregroundStyle(Bow.ink)
+          }
+          .accessibilityElement(children: .combine)
+          .listRowBackground(Bow.bowTint)
         } header: {
-          Text("Target")
+          Text("This month")
         } footer: {
-          if let envelope, envelope.scheduledTargetMinor > 0 {
-            Text("A target is a plan. It shows what to assign each month but does not move money by itself. Scheduled transactions add \(BudgetMoney.formatted(envelope.scheduledTargetMinor, currencyCode: currencyCode)) this month on top of it.")
-          } else {
-            Text("A target is a plan. It shows what to assign each month but does not move money by itself.")
-          }
+          Text("A target is a plan. It shows what to assign each month but doesn’t move money by itself.")
         }
-        .listRowBackground(Bow.card)
       }
-      .bowListBackground()
-      .navigationTitle(envelope?.name ?? "New envelope")
+      .bowSkyList(mood: .dawn, height: 420)
+      .navigationTitle(envelope == nil ? "New envelope" : "Target")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {

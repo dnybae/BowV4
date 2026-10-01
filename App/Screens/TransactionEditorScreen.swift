@@ -13,6 +13,8 @@ struct TransactionEditorScreen: View {
   var payees: [BudgetPayee]
   var currencyCode: String
   var scheduledDraft: ScheduledTransactionDraft?
+  /// A bank item not yet in the budget, reviewed in this sheet before it's added or matched.
+  var reviewRecord: SimpleFINImportRecord?
   @State private var kind: BudgetTransactionKind
   @State private var accountID: UUID?
   @State private var destinationID: UUID?
@@ -33,6 +35,9 @@ struct TransactionEditorScreen: View {
   @State private var linkScheduledBill = true
   @State private var showingPayeeSelection = false
   @State private var showingIgnoreConfirmation = false
+  /// Transactions you already entered that this bank item might be.
+  @State private var candidates: [BudgetTransaction] = []
+  @State private var matchChoice: BankMatchChoice?
   /// Reviewing an imported transaction: fixed when the sheet opens, so it doesn't change on save.
   @State private var isReviewing: Bool
 
@@ -42,16 +47,20 @@ struct TransactionEditorScreen: View {
     envelopes: [BudgetEnvelope],
     payees: [BudgetPayee],
     currencyCode: String,
-    scheduledDraft: ScheduledTransactionDraft? = nil
+    scheduledDraft: ScheduledTransactionDraft? = nil,
+    reviewRecord: SimpleFINImportRecord? = nil
   ) {
+    let reviewRecord = transaction == nil ? reviewRecord : nil
     self.transaction = transaction
     self.accounts = accounts
     self.envelopes = envelopes
     self.payees = payees
     self.currencyCode = currencyCode
     self.scheduledDraft = scheduledDraft
-    _kind = State(initialValue: transaction?.kind ?? scheduledDraft?.kind ?? .expense)
-    let defaultAccountID = transaction?.accountID ?? scheduledDraft?.accountID
+    self.reviewRecord = reviewRecord
+    let recordKind: BudgetTransactionKind? = reviewRecord.map { $0.amountMinor < 0 ? .expense : .inflow }
+    _kind = State(initialValue: transaction?.kind ?? scheduledDraft?.kind ?? recordKind ?? .expense)
+    let defaultAccountID = transaction?.accountID ?? scheduledDraft?.accountID ?? reviewRecord?.localAccountID
       ?? accounts.first(where: { $0.kind == .cash })?.id
       ?? accounts.first(where: { $0.kind == .credit })?.id
       ?? accounts.first?.id
@@ -59,12 +68,13 @@ struct TransactionEditorScreen: View {
     _accountID = State(initialValue: defaultAccountID)
     _destinationID = State(initialValue: transaction?.transferAccountID ?? scheduledDraft?.transferAccountID)
     _envelopeID = State(initialValue: transaction?.envelopeID ?? scheduledDraft?.envelopeID)
-    _amountMinor = State(initialValue: transaction.map { abs($0.amountMinor) } ?? scheduledDraft.map { abs($0.amountMinor) } ?? 0)
-    _payee = State(initialValue: transaction?.payee ?? scheduledDraft?.payee ?? "")
+    _amountMinor = State(initialValue: transaction.map { abs($0.amountMinor) }
+      ?? scheduledDraft.map { abs($0.amountMinor) } ?? reviewRecord.map { abs($0.amountMinor) } ?? 0)
+    _payee = State(initialValue: transaction?.payee ?? scheduledDraft?.payee ?? reviewRecord?.payee ?? "")
     _merchantDomain = State(initialValue: transaction?.merchantDomain)
-    _notes = State(initialValue: transaction?.notes ?? scheduledDraft?.notes ?? "")
-    _date = State(initialValue: transaction?.date ?? scheduledDraft?.date ?? Date())
-    _isReviewing = State(initialValue: transaction?.needsImportReview == true)
+    _notes = State(initialValue: transaction?.notes ?? scheduledDraft?.notes ?? reviewRecord?.memo ?? "")
+    _date = State(initialValue: transaction?.date ?? scheduledDraft?.date ?? reviewRecord?.date ?? Date())
+    _isReviewing = State(initialValue: transaction?.needsImportReview == true || reviewRecord != nil)
     let transactionID = transaction?.id
     _importRecords = Query(filter: #Predicate<SimpleFINImportRecord> { $0.transactionID == transactionID })
   }
@@ -73,6 +83,37 @@ struct TransactionEditorScreen: View {
   private var importRecord: SimpleFINImportRecord? {
     guard transaction != nil else { return nil }
     return importRecords.first { $0.status == .imported && $0.bankState == .posted }
+  }
+
+  /// The bank item under review: the one passed in, or the record behind an imported transaction.
+  private var bankRecord: SimpleFINImportRecord? { reviewRecord ?? importRecord }
+
+  private var isMatching: Bool {
+    if case .match = matchChoice { return true }
+    return false
+  }
+
+  /// A matched expense still needs an envelope when the transaction you entered doesn't have one.
+  private var matchNeedsEnvelope: Bool {
+    guard case .match(let id) = matchChoice, let bankRecord, bankRecord.amountMinor < 0 else { return false }
+    return candidates.first { $0.id == id }?.envelopeID == nil
+  }
+
+  private var canApprove: Bool {
+    switch matchChoice {
+    case .match: !matchNeedsEnvelope || envelopeID != nil
+    case .addNew: canSave
+    case nil: false
+    }
+  }
+
+  private var approveTitle: String {
+    switch matchChoice {
+    case .match: "Match and approve"
+    case .addNew:
+      transaction == nil || transaction?.needsApproval == true ? "Approve and add to budget" : "Add to budget"
+    case nil: "Choose an option"
+    }
   }
 
   private var title: String {
@@ -124,12 +165,9 @@ struct TransactionEditorScreen: View {
   var body: some View {
     NavigationStack {
       Form {
-        if isReviewing, let transaction {
+        if isReviewing {
           Section {
-            ReviewContextCard(
-              transaction: transaction, record: importRecord,
-              accountName: accounts.first { $0.id == transaction.accountID }?.name
-            )
+            reviewContextCard
           }
           .listRowBackground(Color.clear)
           .listRowInsets(EdgeInsets())
@@ -146,11 +184,21 @@ struct TransactionEditorScreen: View {
               .pickerStyle(.segmented)
             }
             CurrencyAmountField("Amount", minor: $amountMinor, currencyCode: currencyCode, style: .editorHero)
+              // A match uses the posted bank amount.
+              .disabled(isMatching)
           }
           .padding(.bottom, Bow.Space.s2)
           .listRowBackground(Color.clear)
           .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         }
+        if !candidates.isEmpty, let bankRecord {
+          BankMatchSection(
+            candidates: candidates, choice: $matchChoice, envelopeID: $envelopeID,
+            record: bankRecord, envelopes: envelopes, currencyCode: currencyCode,
+            showsEnvelope: matchNeedsEnvelope
+          )
+        }
+        if !isMatching {
         Section {
           if kind == .transfer {
             AccountSelectionField(title: "From account", selection: $accountID, accounts: accounts,
@@ -184,8 +232,17 @@ struct TransactionEditorScreen: View {
             )
           }
           if kind != .transfer {
-            AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts,
-                                  systemImage: "creditcard")
+            if isReviewing {
+              // The bank decides which account an imported transaction is in.
+              LabeledContent {
+                Text(selectedAccount?.name ?? "Account")
+              } label: {
+                Label("Account", systemImage: "creditcard").labelStyle(.bowTile)
+              }
+            } else {
+              AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts,
+                                    systemImage: "creditcard")
+            }
           }
           NavigationLink {
             TransactionDatePickerScreen(title: isScheduled ? "First due" : "Date", date: $date)
@@ -204,7 +261,8 @@ struct TransactionEditorScreen: View {
           }
         }
         .listRowBackground(Bow.card)
-        if let matchingSchedule {
+        }
+        if let matchingSchedule, !isMatching {
           ScheduledMatchSection(
             payee: matchingSchedule.payee, date: date,
             isLinked: $linkScheduledBill
@@ -238,7 +296,7 @@ struct TransactionEditorScreen: View {
           .listRowBackground(Bow.card)
         }
 
-        if isReviewing && importRecord != nil {
+        if isReviewing && bankRecord != nil {
           BowDestructiveSection("Ignore bank transaction") {
             showingIgnoreConfirmation = true
           }
@@ -251,12 +309,12 @@ struct TransactionEditorScreen: View {
       .bowSkyList(mood: isReviewing ? .review : .dawn, height: 420)
       .safeAreaInset(edge: .bottom) {
         if isReviewing {
-          Button { save() } label: {
-            Text(transaction?.needsApproval == true ? "Approve and add to budget" : "Add to budget")
+          Button { approve() } label: {
+            Text(approveTitle)
               .frame(maxWidth: .infinity)
           }
           .bowPrimaryButton()
-          .disabled(!canSave)
+          .disabled(!canApprove)
           .padding(.horizontal, Bow.Space.s4)
           .padding(.bottom, Bow.Space.s2)
         }
@@ -268,8 +326,8 @@ struct TransactionEditorScreen: View {
           Button("Cancel") { dismiss() }
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Save") { save() }
-            .disabled(!canSave)
+          Button("Save") { isReviewing ? approve() : save() }
+            .disabled(isReviewing ? !canApprove : !canSave)
         }
       }
       .confirmationDialog(
@@ -321,6 +379,11 @@ struct TransactionEditorScreen: View {
       } message: {
         Text(errorMessage ?? "")
       }
+      .task(id: bankRecord?.id) { loadCandidates() }
+      .onAppear {
+        // A new bank item gets the same envelope suggestion the old review screen made.
+        if reviewRecord != nil && envelopeID == nil { applyPayeeRule() }
+      }
       .onChange(of: payee) { _, _ in applyPayeeRule() }
       .onChange(of: kind) { _, _ in applyPayeeRule() }
       .task(id: PayeeDefaultsTrigger(payee: payee, kind: kind)) {
@@ -348,6 +411,29 @@ struct TransactionEditorScreen: View {
       return "Envelopes on tracking accounts are for reference and don't change your budget."
     }
     return nil
+  }
+
+  @ViewBuilder
+  private var reviewContextCard: some View {
+    let source = transaction
+    let origin: String? = if bankRecord?.origin == .bankFile || source?.sourceRaw == "bankFile" {
+      "From a bank file"
+    } else if bankRecord != nil || source?.isFromBank == true {
+      "From your bank"
+    } else {
+      nil
+    }
+    let accountName = accounts.first { $0.id == (source?.accountID ?? reviewRecord?.localAccountID) }?.name
+    let shownDate = source?.date ?? reviewRecord?.date ?? date
+    ReviewContextCard(
+      name: source?.payee ?? reviewRecord?.payee ?? "",
+      domain: source?.merchantDomain,
+      kind: source?.kind ?? kind,
+      context: [origin, accountName, shownDate.formatted(.dateTime.month(.abbreviated).day())]
+        .compactMap { $0 }.joined(separator: ", "),
+      pill: source == nil || source?.needsApproval == true
+        ? .needsReview : StatusPill(text: "Choose an envelope", state: .needs)
+    )
   }
 
   private func applyPayeeRule() {
@@ -477,10 +563,80 @@ struct TransactionEditorScreen: View {
     }
   }
 
-  private func ignoreImport() {
-    guard let importRecord else { return }
+  /// Finds transactions you entered that this bank item could be, and picks a starting choice
+  /// the same way the bank review screen does.
+  private func loadCandidates() {
+    guard let bankRecord else { return }
     do {
-      try SimpleFINSyncCoordinator.shared.resolve(importRecord, as: .ignore, in: modelContext)
+      let nearby = try BudgetTransactionLookup.near(
+        accountID: bankRecord.localAccountID, date: bankRecord.date, days: 10, in: modelContext
+      )
+      let records = try modelContext.fetch(FetchDescriptor<SimpleFINImportRecord>())
+      candidates = SimpleFINSyncCoordinator.shared.possibleMatches(
+        for: bankRecord, among: nearby, records: records
+      ).filter { $0.id != transaction?.id }
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+    guard matchChoice == nil else { return }
+    if bankRecord.status == .imported || candidates.isEmpty {
+      matchChoice = .addNew
+    } else if let id = bankRecord.transactionID, candidates.contains(where: { $0.id == id }) {
+      matchChoice = .match(id)
+    }
+  }
+
+  /// The review sheet's main action: match, approve the imported transaction, or add the bank item.
+  private func approve() {
+    switch matchChoice {
+    case .match(let id):
+      guard let bankRecord else { return }
+      resolve(bankRecord, as: .link(id))
+    case .addNew:
+      if let reviewRecord {
+        addReviewRecord(reviewRecord)
+      } else {
+        save()
+      }
+    case nil:
+      break
+    }
+  }
+
+  private func resolve(_ record: SimpleFINImportRecord, as decision: SimpleFINReviewDecision) {
+    do {
+      try SimpleFINSyncCoordinator.shared.resolve(record, as: decision, envelopeID: envelopeID, in: modelContext)
+      dismiss()
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
+  /// Adds a bank item to the budget, then applies anything changed in the sheet.
+  private func addReviewRecord(_ record: SimpleFINImportRecord) {
+    do {
+      try SimpleFINSyncCoordinator.shared.resolve(record, as: .importNew, envelopeID: envelopeID, in: modelContext)
+      let edited = payee != record.payee || notes != record.memo || merchantDomain != nil
+        || amountMinor != abs(record.amountMinor)
+        || !Calendar.current.isDate(date, inSameDayAs: record.date)
+      if edited, let account = selectedAccount,
+         let added = try record.transactionID.flatMap({ try BudgetTransactionLookup.byID($0, in: modelContext) }) {
+        try BudgetCommands.updateTransaction(
+          added, kind: kind, account: account, destination: nil, envelopeID: envelopeID,
+          amountMinor: amountMinor, date: date, payee: payee, merchantDomain: merchantDomain,
+          notes: notes, in: modelContext
+        )
+      }
+      dismiss()
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
+  private func ignoreImport() {
+    guard let bankRecord else { return }
+    do {
+      try SimpleFINSyncCoordinator.shared.resolve(bankRecord, as: .ignore, in: modelContext)
       dismiss()
     } catch {
       errorMessage = error.localizedDescription
@@ -535,37 +691,105 @@ private struct ScheduledMatchSection: View {
 
 /// The card at the top of the review sheet: where the transaction came from and why it's here.
 private struct ReviewContextCard: View {
-  var transaction: BudgetTransaction
-  var record: SimpleFINImportRecord?
-  var accountName: String?
-
-  private var origin: String? {
-    if record?.origin == .bankFile || transaction.sourceRaw == "bankFile" { return "From a bank file" }
-    return transaction.isFromBank ? "From your bank" : nil
-  }
-
-  private var context: String {
-    [origin, accountName, transaction.date.formatted(.dateTime.month(.abbreviated).day())]
-      .compactMap { $0 }
-      .joined(separator: ", ")
-  }
+  var name: String
+  var domain: String?
+  var kind: BudgetTransactionKind
+  var context: String
+  var pill: StatusPill
 
   var body: some View {
-    BowContextCard(
-      name: transaction.payee.isEmpty ? "Bank transaction" : transaction.payee,
-      context: context
-    ) {
-      MerchantLogoView(
-        merchantName: transaction.payee, domain: transaction.merchantDomain,
-        kind: transaction.kind, size: 44, style: .glossy
-      )
+    BowContextCard(name: name.isEmpty ? "Bank transaction" : name, context: context) {
+      MerchantLogoView(merchantName: name, domain: domain, kind: kind, size: 44, style: .glossy)
     } trailing: {
-      if transaction.needsApproval {
-        StatusPill.needsReview
-      } else {
-        StatusPill(text: "Choose an envelope", state: .needs)
-      }
+      pill
     }
+  }
+}
+
+private enum BankMatchChoice: Equatable {
+  case match(UUID)
+  case addNew
+}
+
+/// "Already entered?": the transactions this bank item might be, or add it as new.
+private struct BankMatchSection: View {
+  var candidates: [BudgetTransaction]
+  @Binding var choice: BankMatchChoice?
+  @Binding var envelopeID: UUID?
+  var record: SimpleFINImportRecord
+  var envelopes: [BudgetEnvelope]
+  var currencyCode: String
+  var showsEnvelope: Bool
+
+  var body: some View {
+    Section {
+      ForEach(candidates) { candidate in
+        option(.match(candidate.id)) {
+          HStack(spacing: Bow.Space.s3) {
+            VStack(alignment: .leading, spacing: 2) {
+              Text(candidate.payee.isEmpty ? "Transfer" : candidate.payee)
+                .foregroundStyle(Bow.ink)
+              Text(detail(for: candidate))
+                .font(.bowSubhead)
+                .foregroundStyle(Bow.inkSoft)
+              if candidate.amountMinor != record.amountMinor {
+                Text("Amount differs; matching uses the posted bank amount")
+                  .font(.bowSubhead)
+                  .foregroundStyle(Bow.needsInk)
+              }
+            }
+            Spacer(minLength: Bow.Space.s2)
+            MoneyText(
+              minor: candidate.transferAccountID == record.localAccountID
+                ? -candidate.amountMinor : candidate.amountMinor,
+              currencyCode: currencyCode, usesTrueMinus: true
+            )
+            .foregroundStyle(Bow.ink)
+          }
+        }
+      }
+      if showsEnvelope {
+        EnvelopeSelectionField(
+          title: "Envelope", selection: $envelopeID,
+          envelopes: envelopes, noneTitle: "Choose an envelope", systemImage: "square.grid.2x2"
+        )
+      }
+      // For an already imported transaction, this approves it as its own transaction.
+      option(.addNew) {
+        Text("No, add as new transaction")
+          .foregroundStyle(Bow.ink)
+      }
+    } header: {
+      Text("Already entered?")
+    } footer: {
+      Text("Matching keeps your payee, envelope and notes. You can unmatch it later.")
+    }
+    .listRowBackground(Bow.card)
+  }
+
+  private func option<Label: View>(_ value: BankMatchChoice, @ViewBuilder label: () -> Label) -> some View {
+    Button {
+      choice = value
+    } label: {
+      HStack(spacing: Bow.Space.s3) {
+        Image(systemName: choice == value ? "largecircle.fill.circle" : "circle")
+          .font(.title3)
+          .foregroundStyle(choice == value ? AnyShapeStyle(.tint) : AnyShapeStyle(Bow.inkFaint))
+          .accessibilityHidden(true)
+        label()
+      }
+      .contentShape(.rect)
+    }
+    .buttonStyle(.plain)
+    .accessibilityAddTraits(choice == value ? .isSelected : [])
+  }
+
+  private func detail(for candidate: BudgetTransaction) -> String {
+    [
+      candidate.date.formatted(.dateTime.month(.abbreviated).day()),
+      envelopes.first { $0.id == candidate.envelopeID }?.name,
+      candidate.sourceRaw == "manual" ? "entered by you" : nil
+    ].compactMap { $0 }.joined(separator: ", ")
   }
 }
 

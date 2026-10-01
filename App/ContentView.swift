@@ -190,7 +190,8 @@ private struct BudgetHomeView: View {
                 currencyCode: currencyCode,
                 onSelect: selectTransaction,
                 onRecord: { activeSheet = .recordScheduled($0) },
-                onEditSchedule: { activeSheet = .editSchedule($0) }
+                onEditSchedule: { activeSheet = .editSchedule($0) },
+                onReviewBankRecord: { activeSheet = .reviewBankRecord($0) }
               )
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -305,6 +306,15 @@ private struct BudgetHomeView: View {
               envelopes: envelopes,
               payees: payees,
               currencyCode: currencyCode
+            )
+          case .reviewBankRecord(let record):
+            TransactionEditorScreen(
+              transaction: nil,
+              accounts: accounts,
+              envelopes: envelopes,
+              payees: payees,
+              currencyCode: currencyCode,
+              reviewRecord: record
             )
           case .transactionDetail(let id):
             if let transaction = transaction(for: id) {
@@ -486,6 +496,7 @@ private enum BowSheet: Identifiable {
   case editTransaction(UUID)
   case transactionDetail(UUID)
   case reviewTransaction(UUID)
+  case reviewBankRecord(SimpleFINImportRecord)
   case recordScheduled(ScheduledTransactionDraft)
   case editSchedule(UUID)
   case newAccount
@@ -502,6 +513,7 @@ private enum BowSheet: Identifiable {
     case .editTransaction(let id): "editTransaction-\(id)"
     case .transactionDetail(let id): "transactionDetail-\(id)"
     case .reviewTransaction(let id): "reviewTransaction-\(id)"
+    case .reviewBankRecord(let record): "reviewBankRecord-\(record.id)"
     case .recordScheduled(let draft): "recordScheduled-\(draft.scheduleID)-\(draft.scheduledFor)"
     case .editSchedule(let id): "editSchedule-\(id)"
     case .newAccount: "newAccount"

@@ -10,6 +10,7 @@ struct SpendingTimelineEntryView: View {
   var onSelect: (UUID) -> Void
   var onRecord: (ScheduledTransactionDraft) -> Void
   var onEditSchedule: (UUID) -> Void
+  var onReviewBankRecord: (SimpleFINImportRecord) -> Void
   @State private var message: String?
 
   private var model: TransactionRowModel { TransactionRowModel(item) }
@@ -24,6 +25,10 @@ struct SpendingTimelineEntryView: View {
         where record.status == .imported && related == nil && record.transactionID != nil:
         // Already imported as a transaction: approve it in the review sheet.
         Button { record.transactionID.map(onSelect) } label: { row }
+          .buttonStyle(.plain)
+      case .bankReview(let record, let related) where record.status == .review && related == nil:
+        // Not in the budget yet: match it or add it in the review sheet.
+        Button { onReviewBankRecord(record) } label: { row }
           .buttonStyle(.plain)
       case .bankReview(let record, let related):
         NavigationLink {

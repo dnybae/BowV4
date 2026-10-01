@@ -156,7 +156,7 @@ private struct BudgetHomeView: View {
                 onCoverOverspending: { scope in
                   activeSheet = .coverOverspending(displayedBudgetMonth, scope)
                 },
-                onSelectTransaction: { activeSheet = .transactionDetail($0) },
+                onSelectTransaction: selectTransaction,
                 onEditSchedule: { activeSheet = .editSchedule($0) }
                 )
               } else {
@@ -188,7 +188,7 @@ private struct BudgetHomeView: View {
                 schedules: schedules,
                 occurrences: scheduleOccurrences,
                 currencyCode: currencyCode,
-                onSelect: { activeSheet = .transactionDetail($0) },
+                onSelect: selectTransaction,
                 onRecord: { activeSheet = .recordScheduled($0) },
                 onEditSchedule: { activeSheet = .editSchedule($0) }
               )
@@ -210,7 +210,7 @@ private struct BudgetHomeView: View {
                 selectedDate: $selectedCalendarDate,
                 returnToTodayRequest: calendarReturnToTodayRequest,
                 onRecord: { activeSheet = .recordScheduled($0) },
-                onSelectTransaction: { activeSheet = .transactionDetail($0) }
+                onSelectTransaction: selectTransaction
               )
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -229,7 +229,7 @@ private struct BudgetHomeView: View {
                 currencyCode: currencyCode,
                 onAddAccount: { activeSheet = .newAccount },
                 onViewInsights: { showingInsights = true },
-                onSelectTransaction: { activeSheet = .transactionDetail($0) }
+                onSelectTransaction: selectTransaction
                 )
               } else {
                 if let ledgerError {
@@ -291,6 +291,14 @@ private struct BudgetHomeView: View {
               currencyCode: currencyCode
             )
           case .editTransaction(let id):
+            TransactionEditorScreen(
+              transaction: transaction(for: id),
+              accounts: accounts,
+              envelopes: envelopes,
+              payees: payees,
+              currencyCode: currencyCode
+            )
+          case .reviewTransaction(let id):
             TransactionEditorScreen(
               transaction: transaction(for: id),
               accounts: accounts,
@@ -416,6 +424,12 @@ private struct BudgetHomeView: View {
     _ = try? await SimpleFINSyncCoordinator.shared.sync(in: modelContext)
   }
 
+  /// Transactions waiting for review open the review sheet; everything else opens its details.
+  private func selectTransaction(_ id: UUID) {
+    activeSheet = transaction(for: id)?.needsImportReview == true
+      ? .reviewTransaction(id) : .transactionDetail(id)
+  }
+
   private func transaction(for id: UUID) -> BudgetTransaction? {
     let predicate = #Predicate<BudgetTransaction> { $0.id == id }
     var descriptor = FetchDescriptor<BudgetTransaction>(predicate: predicate)
@@ -471,6 +485,7 @@ private enum BowSheet: Identifiable {
   case newTransaction
   case editTransaction(UUID)
   case transactionDetail(UUID)
+  case reviewTransaction(UUID)
   case recordScheduled(ScheduledTransactionDraft)
   case editSchedule(UUID)
   case newAccount
@@ -486,6 +501,7 @@ private enum BowSheet: Identifiable {
     case .newTransaction: "newTransaction"
     case .editTransaction(let id): "editTransaction-\(id)"
     case .transactionDetail(let id): "transactionDetail-\(id)"
+    case .reviewTransaction(let id): "reviewTransaction-\(id)"
     case .recordScheduled(let draft): "recordScheduled-\(draft.scheduleID)-\(draft.scheduledFor)"
     case .editSchedule(let id): "editSchedule-\(id)"
     case .newAccount: "newAccount"

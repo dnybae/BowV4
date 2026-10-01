@@ -20,6 +20,11 @@ struct SpendingTimelineEntryView: View {
       case .transaction(let id):
         Button { onSelect(id) } label: { row }
           .buttonStyle(.plain)
+      case .bankReview(let record, let related)
+        where record.status == .imported && related == nil && record.transactionID != nil:
+        // Already imported as a transaction: approve it in the review sheet.
+        Button { record.transactionID.map(onSelect) } label: { row }
+          .buttonStyle(.plain)
       case .bankReview(let record, let related):
         NavigationLink {
           SimpleFINReviewScreen(

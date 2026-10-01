@@ -32,3 +32,19 @@ extension BowTileIcon where Icon == Image {
     self.icon = { Image(systemName: systemImage) }
   }
 }
+
+/// A form row's title: plain text, or an icon-tile label when a symbol is given.
+struct BowFieldTitle: View {
+  var title: String
+  var systemImage: String?
+
+  var body: some View {
+    if let systemImage {
+      Label(title, systemImage: systemImage)
+        .labelStyle(.bowTile)
+        .foregroundStyle(Bow.ink)
+    } else {
+      Text(title).foregroundStyle(Bow.ink)
+    }
+  }
+}

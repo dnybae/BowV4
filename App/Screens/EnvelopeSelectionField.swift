@@ -6,6 +6,8 @@ struct EnvelopeSelectionField: View {
   @Binding var selection: UUID?
   var envelopes: [BudgetEnvelope]
   var noneTitle: String? = nil
+  /// Shows the title as an icon-tile label, as in the editor sheets.
+  var systemImage: String? = nil
   @State private var showingSelection = false
 
   private var selectedName: String {
@@ -18,7 +20,7 @@ struct EnvelopeSelectionField: View {
       showingSelection = true
     } label: {
       HStack(spacing: 12) {
-        Text(title).foregroundStyle(Bow.ink)
+        BowFieldTitle(title: title, systemImage: systemImage)
         Spacer(minLength: 12)
         Text(selectedName)
           .foregroundStyle(Bow.inkSoft)

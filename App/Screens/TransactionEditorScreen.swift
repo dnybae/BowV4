@@ -5,6 +5,8 @@ struct TransactionEditorScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
   @Query private var schedules: [BudgetSchedule]
+  /// The bank record behind this transaction, if it was imported.
+  @Query private var importRecords: [SimpleFINImportRecord]
   var transaction: BudgetTransaction?
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
@@ -30,6 +32,9 @@ struct TransactionEditorScreen: View {
   private var defaultAccountID: UUID?
   @State private var linkScheduledBill = true
   @State private var showingPayeeSelection = false
+  @State private var showingIgnoreConfirmation = false
+  /// Reviewing an imported transaction: fixed when the sheet opens, so it doesn't change on save.
+  @State private var isReviewing: Bool
 
   init(
     transaction: BudgetTransaction?,
@@ -59,6 +64,25 @@ struct TransactionEditorScreen: View {
     _merchantDomain = State(initialValue: transaction?.merchantDomain)
     _notes = State(initialValue: transaction?.notes ?? scheduledDraft?.notes ?? "")
     _date = State(initialValue: transaction?.date ?? scheduledDraft?.date ?? Date())
+    _isReviewing = State(initialValue: transaction?.needsImportReview == true)
+    let transactionID = transaction?.id
+    _importRecords = Query(filter: #Predicate<SimpleFINImportRecord> { $0.transactionID == transactionID })
+  }
+
+  /// The posted bank record this review came from; ignoring it removes the transaction.
+  private var importRecord: SimpleFINImportRecord? {
+    guard transaction != nil else { return nil }
+    return importRecords.first { $0.status == .imported && $0.bankState == .posted }
+  }
+
+  private var title: String {
+    if isReviewing { return "Review transaction" }
+    if transaction != nil { return "Edit transaction" }
+    return scheduledDraft == nil ? "New transaction" : "Record scheduled bill"
+  }
+
+  private var canSave: Bool {
+    accountID != nil && amountMinor != 0 && !(kind == .expense && envelopeID == nil)
   }
 
   private var selectedAccount: BudgetAccount? {
@@ -100,33 +124,28 @@ struct TransactionEditorScreen: View {
   var body: some View {
     NavigationStack {
       Form {
-        if transaction?.needsApproval == true {
+        if isReviewing, let transaction {
           Section {
-            Text("Review this imported transaction. Saving it marks it approved.")
-              .foregroundStyle(Bow.inkSoft)
+            ReviewContextCard(
+              transaction: transaction, record: importRecord,
+              accountName: accounts.first { $0.id == transaction.accountID }?.name
+            )
           }
-          .listRowBackground(Bow.card)
-        }
-        if let matchingSchedule {
-          ScheduledMatchSection(
-            payee: matchingSchedule.payee, date: date,
-            isLinked: $linkScheduledBill
-          )
+          .listRowBackground(Color.clear)
+          .listRowInsets(EdgeInsets())
         }
         Section {
           VStack(spacing: Bow.Space.s4) {
-            Picker("Type", selection: $kind) {
-              ForEach(BudgetTransactionKind.allCases) { option in
-                Text(option.title).tag(option)
+            // The bank sets the direction of an imported transaction.
+            if !isReviewing {
+              Picker("Type", selection: $kind) {
+                ForEach(BudgetTransactionKind.allCases) { option in
+                  Text(option.title).tag(option)
+                }
               }
+              .pickerStyle(.segmented)
             }
-            .pickerStyle(.segmented)
-            VStack(spacing: Bow.Space.s1) {
-              Text("Amount")
-                .font(.bowSubhead)
-                .foregroundStyle(Bow.inkSoft)
-              CurrencyAmountField("Amount", minor: $amountMinor, currencyCode: currencyCode, style: .hero)
-            }
+            CurrencyAmountField("Amount", minor: $amountMinor, currencyCode: currencyCode, style: .editorHero)
           }
           .padding(.bottom, Bow.Space.s2)
           .listRowBackground(Color.clear)
@@ -134,17 +153,18 @@ struct TransactionEditorScreen: View {
         }
         Section {
           if kind == .transfer {
-            AccountSelectionField(title: "From account", selection: $accountID, accounts: accounts)
+            AccountSelectionField(title: "From account", selection: $accountID, accounts: accounts,
+                                  systemImage: "creditcard")
             AccountSelectionField(
               title: "To account", selection: $destinationID,
-              accounts: accounts, excludingID: accountID
+              accounts: accounts, excludingID: accountID, systemImage: "arrow.right"
             )
           } else {
             Button {
               showingPayeeSelection = true
             } label: {
               HStack(spacing: 12) {
-                Text(kind == .expense ? "Payee" : "Source").foregroundStyle(Bow.ink)
+                BowFieldTitle(title: kind == .expense ? "Payee" : "Source", systemImage: "person")
                 Spacer(minLength: 12)
                 Text(payee.isEmpty ? "Choose a payee" : payee)
                   .foregroundStyle(Bow.inkSoft)
@@ -160,28 +180,36 @@ struct TransactionEditorScreen: View {
           if kind != .transfer || needsEnvelopeForTransfer {
             EnvelopeSelectionField(
               title: "Envelope", selection: $envelopeID,
-              envelopes: envelopes, noneTitle: envelopeNoneTitle
+              envelopes: envelopes, noneTitle: envelopeNoneTitle, systemImage: "square.grid.2x2"
             )
-            if kind == .expense && envelopeID == nil {
-              Text("Choose an envelope before saving this expense.")
-                .font(.footnote)
-                .foregroundStyle(Bow.inkSoft)
-            }
           }
           if kind != .transfer {
-            AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts)
+            AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts,
+                                  systemImage: "creditcard")
           }
-          DatePicker(isScheduled ? "First due" : "Date", selection: $date,
-                     in: Date.distantPast...Date.distantFuture, displayedComponents: .date)
-          if kind != .transfer && (selectedAccount?.kind == .asset || selectedAccount?.kind == .liability) {
-            Text("Envelopes on tracking accounts are for reference and don't change your budget.")
-              .font(.footnote)
-              .foregroundStyle(Bow.inkSoft)
+          NavigationLink {
+            TransactionDatePickerScreen(title: isScheduled ? "First due" : "Date", date: $date)
+          } label: {
+            LabeledContent {
+              Text(date.formatted(date: .abbreviated, time: .omitted))
+            } label: {
+              Label(isScheduled ? "First due" : "Date", systemImage: "calendar")
+                .labelStyle(.bowTile)
+            }
           }
-          TextField("Add a note", text: $notes, axis: .vertical)
-            .lineLimit(2...4)
+          BowNotesRow(notes: $notes)
+        } footer: {
+          if let fieldsFootnote {
+            Text(fieldsFootnote)
+          }
         }
         .listRowBackground(Bow.card)
+        if let matchingSchedule {
+          ScheduledMatchSection(
+            payee: matchingSchedule.payee, date: date,
+            isLinked: $linkScheduledBill
+          )
+        }
         if transaction == nil && scheduledDraft == nil {
           Section("Schedule") {
             Toggle("Schedule for later", isOn: $isScheduled)
@@ -210,17 +238,30 @@ struct TransactionEditorScreen: View {
           .listRowBackground(Bow.card)
         }
 
-        if transaction != nil {
-          Section {
-            Button("Delete transaction", role: .destructive) {
-              showingDeleteConfirmation = true
-            }
+        if isReviewing && importRecord != nil {
+          BowDestructiveSection("Ignore bank transaction") {
+            showingIgnoreConfirmation = true
           }
-          .listRowBackground(Bow.card)
+        } else if transaction != nil {
+          BowDestructiveSection("Delete transaction") {
+            showingDeleteConfirmation = true
+          }
         }
       }
-      .bowListBackground()
-      .navigationTitle(transaction == nil ? (scheduledDraft == nil ? "New transaction" : "Record scheduled bill") : "Edit transaction")
+      .bowSkyList(mood: isReviewing ? .review : .dawn, height: 420)
+      .safeAreaInset(edge: .bottom) {
+        if isReviewing {
+          Button { save() } label: {
+            Text(transaction?.needsApproval == true ? "Approve and add to budget" : "Add to budget")
+              .frame(maxWidth: .infinity)
+          }
+          .bowPrimaryButton()
+          .disabled(!canSave)
+          .padding(.horizontal, Bow.Space.s4)
+          .padding(.bottom, Bow.Space.s2)
+        }
+      }
+      .navigationTitle(title)
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -228,8 +269,7 @@ struct TransactionEditorScreen: View {
         }
         ToolbarItem(placement: .confirmationAction) {
           Button("Save") { save() }
-            .disabled(accountID == nil || amountMinor == 0
-              || (kind == .expense && envelopeID == nil))
+            .disabled(!canSave)
         }
       }
       .confirmationDialog(
@@ -240,6 +280,15 @@ struct TransactionEditorScreen: View {
         Button("Delete transaction", role: .destructive) { delete() }
       } message: {
         Text("Its effect on your accounts and envelopes will be removed.")
+      }
+      .confirmationDialog(
+        "Ignore this bank transaction?",
+        isPresented: $showingIgnoreConfirmation,
+        titleVisibility: .visible
+      ) {
+        Button("Ignore transaction", role: .destructive) { ignoreImport() }
+      } message: {
+        Text("It will not appear in Spending or affect your budget.")
       }
       .confirmationDialog(
         "Possible imported match",
@@ -288,6 +337,17 @@ struct TransactionEditorScreen: View {
         }
       }
     }
+  }
+
+  /// Explains the fields when something needs it; shown under the main section so Notes stays last.
+  private var fieldsFootnote: String? {
+    if (kind != .transfer || needsEnvelopeForTransfer) && kind == .expense && envelopeID == nil {
+      return "Choose an envelope before saving this expense."
+    }
+    if kind != .transfer && (selectedAccount?.kind == .asset || selectedAccount?.kind == .liability) {
+      return "Envelopes on tracking accounts are for reference and don't change your budget."
+    }
+    return nil
   }
 
   private func applyPayeeRule() {
@@ -417,6 +477,16 @@ struct TransactionEditorScreen: View {
     }
   }
 
+  private func ignoreImport() {
+    guard let importRecord else { return }
+    do {
+      try SimpleFINSyncCoordinator.shared.resolve(importRecord, as: .ignore, in: modelContext)
+      dismiss()
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
   private func delete() {
     guard let transaction else { return }
     do {
@@ -460,5 +530,59 @@ private struct ScheduledMatchSection: View {
       Text("Linking marks this bill recorded without creating another transaction.")
     }
     .listRowBackground(Bow.card)
+  }
+}
+
+/// The card at the top of the review sheet: where the transaction came from and why it's here.
+private struct ReviewContextCard: View {
+  var transaction: BudgetTransaction
+  var record: SimpleFINImportRecord?
+  var accountName: String?
+
+  private var origin: String? {
+    if record?.origin == .bankFile || transaction.sourceRaw == "bankFile" { return "From a bank file" }
+    return transaction.isFromBank ? "From your bank" : nil
+  }
+
+  private var context: String {
+    [origin, accountName, transaction.date.formatted(.dateTime.month(.abbreviated).day())]
+      .compactMap { $0 }
+      .joined(separator: ", ")
+  }
+
+  var body: some View {
+    BowContextCard(
+      name: transaction.payee.isEmpty ? "Bank transaction" : transaction.payee,
+      context: context
+    ) {
+      MerchantLogoView(
+        merchantName: transaction.payee, domain: transaction.merchantDomain,
+        kind: transaction.kind, size: 44, style: .glossy
+      )
+    } trailing: {
+      if transaction.needsApproval {
+        StatusPill.needsReview
+      } else {
+        StatusPill(text: "Choose an envelope", state: .needs)
+      }
+    }
+  }
+}
+
+/// Date row destination: a full calendar for picking the transaction's date.
+private struct TransactionDatePickerScreen: View {
+  var title: String
+  @Binding var date: Date
+
+  var body: some View {
+    Form {
+      DatePicker(title, selection: $date, in: Date.distantPast...Date.distantFuture,
+                 displayedComponents: .date)
+        .datePickerStyle(.graphical)
+        .listRowBackground(Bow.card)
+    }
+    .bowListBackground()
+    .navigationTitle(title)
+    .navigationBarTitleDisplayMode(.inline)
   }
 }

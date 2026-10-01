@@ -44,57 +44,41 @@ struct ReconciliationScreen: View {
     NavigationStack {
       List {
         Section {
-          VStack(spacing: Bow.Space.s3) {
-            PulseTarget(color: isBalanced ? Bow.funded : Bow.bow, size: 150) {
-              Image(systemName: isBalanced ? "checkmark" : "scalemass")
-                .font(.system(.largeTitle, weight: .semibold))
-                .foregroundStyle(isBalanced ? Bow.funded : Bow.bow)
-            }
-            .accessibilityHidden(true)
-            VStack(spacing: Bow.Space.s1) {
-              Text(heroTitle)
-                .font(.bowLargeTitle)
-                .monospacedDigit()
-                .foregroundStyle(Bow.ink)
-              Text(heroMessage)
-                .font(.bowSubhead)
-                .monospacedDigit()
-                .foregroundStyle(Bow.inkSoft)
-            }
-            .multilineTextAlignment(.center)
-            .accessibilityElement(children: .combine)
+          VStack(spacing: Bow.Space.s1) {
+            CurrencyAmountField("Statement balance", minor: $statementBalanceMinor,
+                                currencyCode: currencyCode, allowsNegative: true, style: .editorHero)
+            Text(account.name)
+              .font(.bowFootnote)
+              .foregroundStyle(Bow.inkSoft)
           }
+          .padding(.bottom, Bow.Space.s2)
           .frame(maxWidth: .infinity)
           .listRowBackground(Color.clear)
+          .listRowInsets(EdgeInsets())
         }
 
         Section {
-          DatePicker("Statement date", selection: $statementDate, in: ...Date(), displayedComponents: .date)
-          CurrencyAmountField("Statement balance", minor: $statementBalanceMinor,
-                              currencyCode: currencyCode, allowsNegative: true)
-        } header: {
-          Text("Statement")
-        } footer: {
-          Text("Enter the balance shown by your bank on the statement date.")
-        }
-        .listRowBackground(Bow.card)
-        Section {
-          LabeledContent("Cleared balance") {
+          NavigationLink {
+            BowDatePickerScreen(title: "Statement date", date: $statementDate, range: Date.distantPast...Date())
+          } label: {
+            BowTileValueRow("Statement date", systemImage: "calendar",
+                            value: statementDate.formatted(date: .abbreviated, time: .omitted))
+          }
+          BowTileValueRow(title: "Cleared balance", systemImage: "checkmark.circle") {
             MoneyText(minor: clearedBalanceMinor, currencyCode: currencyCode)
-              .fontDesign(.rounded).monospacedDigit()
           }
           if let difference {
-            LabeledContent("Difference") {
-              MoneyText(minor: difference, currencyCode: currencyCode)
-                .fontDesign(.rounded).monospacedDigit()
+            BowTileValueRow(title: "Difference", systemImage: "dollarsign") {
+              StatusPill(text: BudgetMoney.formatted(difference, currencyCode: currencyCode),
+                         state: difference == 0 ? .funded : .needs)
             }
-              .foregroundStyle(difference == 0 ? Bow.fundedInk : Bow.needsInk)
-          } else {
-            Text("Enter a statement balance to compare.")
-              .foregroundStyle(Bow.inkSoft)
+            .accessibilityElement(children: .combine)
           }
+        } footer: {
+          Text("\(isBalanced ? heroTitle + ". " : "")\(heroMessage)")
         }
         .listRowBackground(Bow.card)
+
         Section {
           if entries.isEmpty {
             ContentUnavailableView("No entries by this date", systemImage: "list.bullet.rectangle")
@@ -121,8 +105,8 @@ struct ReconciliationScreen: View {
                       .foregroundStyle(Bow.inkSoft)
                   }
                   Spacer()
-                  MoneyText(minor: entry.amountMinor, currencyCode: currencyCode)
-                    .font(.bowAmount)
+                  MoneyText(minor: entry.amountMinor, currencyCode: currencyCode,
+                            showsPlusSign: entry.amountMinor > 0, usesTrueMinus: true)
                     .monospacedDigit()
                     .foregroundStyle(Bow.ink)
                 }
@@ -134,11 +118,6 @@ struct ReconciliationScreen: View {
             if visibleEntryCount < entries.count {
               Button("Show more transactions") { visibleEntryCount += 300 }
             }
-          }
-        } header: {
-          HStack {
-            Text("Transactions")
-            Spacer()
             Button("Select all") {
               selectedIDs = Set(entries.map(\.id))
               clearedBalanceMinor = calculator.clearedBalance(
@@ -146,16 +125,16 @@ struct ReconciliationScreen: View {
                 entries: entries, selectedIDs: selectedIDs
               )
             }
-              .textCase(nil)
+            .disabled(selectedIDs.count == entries.count)
           }
+        } header: {
+          Text("Transactions")
         } footer: {
           Text("Select the transactions that cleared by your statement date. Reconciliation does not add or remove money.")
         }
         .listRowBackground(Bow.card)
       }
-      .bowListBackground {
-        Bow.mist.overlay(alignment: .top) { SkyBackground(mood: isBalanced ? .mint : .dawn, height: 460) }
-      }
+      .bowSkyList(mood: .reconcile, height: 420)
       .navigationTitle("Reconcile")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

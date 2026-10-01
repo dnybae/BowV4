@@ -8,6 +8,8 @@ struct BudgetBucketSelectionField: View {
   var cardAccounts: [BudgetAccount]
   var snapshot: BudgetSnapshot
   var currencyCode: String
+  /// Shows the title as an icon-tile label, as in the editor sheets.
+  var systemImage: String? = nil
   @State private var showingSelection = false
 
   private var selectedName: String {
@@ -24,7 +26,7 @@ struct BudgetBucketSelectionField: View {
       showingSelection = true
     } label: {
       HStack(spacing: 12) {
-        Text(title).foregroundStyle(Bow.ink)
+        BowFieldTitle(title: title, systemImage: systemImage)
         Spacer(minLength: 12)
         Text(selectedName)
           .foregroundStyle(Bow.inkSoft)

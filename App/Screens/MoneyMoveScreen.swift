@@ -44,37 +44,18 @@ struct MoneyMoveScreen: View {
       Form {
         Section {
           VStack(spacing: Bow.Space.s3) {
-            PulseTarget(size: 150) {
-              Image("BowMark")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 46, height: 46)
-                .foregroundStyle(Bow.bow)
+            CurrencyAmountField("Amount", minor: $amountMinor, currencyCode: currencyCode, style: .editorHero)
+            if let enteredMinor, enteredMinor > sourceAvailable {
+              Text("Only \(BudgetMoney.formatted(max(0, sourceAvailable), currencyCode: currencyCode)) is available to move.")
+                .font(.bowFootnote)
+                .foregroundStyle(Bow.overInk)
             }
-            .accessibilityHidden(true)
-
-            VStack(spacing: Bow.Space.s1) {
-              Text("Amount")
-                .font(.bowSubhead)
-                .foregroundStyle(Bow.inkSoft)
-              CurrencyAmountField("Amount to move", minor: $amountMinor, currencyCode: currencyCode, style: .hero)
-              if let enteredMinor, enteredMinor > sourceAvailable {
-                Text("Only \(BudgetMoney.formatted(max(0, sourceAvailable), currencyCode: currencyCode)) is available to move.")
-                  .font(.bowFootnote)
-                  .foregroundStyle(Bow.overInk)
-              }
-            }
-
             Button("Move all") {
               amountMinor = max(0, sourceAvailable)
             }
-            .bowSecondaryButton()
+            .fontWeight(.semibold)
+            .bowSecondaryButton(size: .regular)
             .disabled(sourceAvailable <= 0)
-
-            Text("Recorded in \(month.formatted(.dateTime.month(.wide).year())). Remaining balances carry into later months.")
-              .font(.bowFootnote)
-              .foregroundStyle(Bow.inkSoft)
-              .multilineTextAlignment(.center)
           }
           .frame(maxWidth: .infinity)
         }
@@ -85,17 +66,19 @@ struct MoneyMoveScreen: View {
           BudgetBucketSelectionField(
             title: "From", selection: $source,
             envelopes: currentEnvelopes, cardAccounts: cardAccounts,
-            snapshot: snapshot, currencyCode: currencyCode
+            snapshot: snapshot, currencyCode: currencyCode, systemImage: bucketSymbol(source)
           )
           BudgetBucketSelectionField(
             title: "To", selection: $target,
             envelopes: currentEnvelopes, cardAccounts: cardAccounts,
-            snapshot: snapshot, currencyCode: currencyCode
+            snapshot: snapshot, currencyCode: currencyCode, systemImage: bucketSymbol(target)
           )
-          Button("Swap direction", systemImage: "arrow.up.arrow.down") {
+          Button {
             let oldSource = source
             source = target
             target = oldSource
+          } label: {
+            Label("Swap direction", systemImage: "arrow.up.arrow.down").labelStyle(.bowTile)
           }
           .disabled(source == target)
         } header: {
@@ -112,12 +95,12 @@ struct MoneyMoveScreen: View {
           balanceRow("To", bucket: target, before: balance(of: target), after: balance(of: target) + (enteredMinor ?? 0))
         } header: {
           Text("After moving")
+        } footer: {
+          Text("Recorded in \(month.formatted(.dateTime.month(.wide).year())). Remaining balances carry into later months.")
         }
         .listRowBackground(Bow.card)
       }
-      .bowListBackground {
-        Bow.mist.overlay(alignment: .top) { SkyBackground(mood: .dawn, height: 460) }
-      }
+      .bowSkyList(mood: .dawn, height: 420)
       .navigationTitle("Move money")
       .task(id: refreshVersion) {
         let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
@@ -169,37 +152,29 @@ struct MoneyMoveScreen: View {
     let beforeText = BudgetMoney.formatted(before, currencyCode: currencyCode)
     let afterText = BudgetMoney.formatted(after, currencyCode: currencyCode)
     return HStack(spacing: Bow.Space.s3) {
-      Image(systemName: bucketSymbol(bucket))
-        .bowScaledIcon(frame: 36, glyph: 15, weight: .semibold)
-        .foregroundStyle(Bow.bowInk)
-        .background(Bow.bowTint, in: Circle())
-      VStack(alignment: .leading, spacing: 1) {
-        Text(role)
-          .font(.bowFootnote)
-          .foregroundStyle(Bow.inkSoft)
-        Text(bucketName(bucket))
-          .font(.bowHeadline)
-          .foregroundStyle(Bow.ink)
-      }
+      Text(bucketName(bucket))
+        .foregroundStyle(Bow.ink)
       Spacer(minLength: Bow.Space.s2)
-      VStack(alignment: .trailing, spacing: 1) {
-        if changes {
-          Text(beforeText)
-            .font(.bowFootnote)
-            .monospacedDigit()
-            .strikethrough()
-            .foregroundStyle(Bow.inkSoft)
-        }
-        Text(afterText)
-          .font(.bowAmount)
-          .monospacedDigit()
-          .foregroundStyle(after < 0 ? Bow.overInk : Bow.ink)
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: Bow.Space.s2) { amounts(changes: changes, before: beforeText, after: afterText, isNegative: after < 0) }
+        VStack(alignment: .trailing, spacing: 1) { amounts(changes: changes, before: beforeText, after: afterText, isNegative: after < 0) }
       }
     }
-    .padding(.vertical, Bow.Space.s1)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel("\(role) \(bucketName(bucket))")
     .accessibilityValue(changes ? "\(beforeText) now, \(afterText) after moving" : afterText)
+  }
+
+  /// The balance before (struck through, only when it changes) and after moving.
+  @ViewBuilder
+  private func amounts(changes: Bool, before: String, after: String, isNegative: Bool) -> some View {
+    if changes {
+      Text(before)
+        .strikethrough()
+        .foregroundStyle(Bow.inkSoft)
+    }
+    Text(after)
+      .foregroundStyle(isNegative ? Bow.overInk : Bow.ink)
   }
 
   private func bucketSymbol(_ bucket: BudgetBucket) -> String {

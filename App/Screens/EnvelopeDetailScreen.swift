@@ -102,9 +102,9 @@ struct EnvelopeDetailScreen: View {
     }
   }
 
-  private var primaryActionTitle: String {
-    if availableMinor < 0 { return "Cover overspending" }
-    return snapshot.readyToAssignMinor > 0 ? "Assign money" : "Move money"
+  /// "Set target" until the envelope has a target of its own.
+  private var targetActionTitle: String {
+    (envelope.targetMinor ?? 0) > 0 ? "Edit target" : "Set target"
   }
 
   private var canMoveMoneyIn: Bool {
@@ -127,7 +127,8 @@ struct EnvelopeDetailScreen: View {
     List {
       Section {
         VStack(spacing: Bow.Space.s4) {
-          GlowRing(fraction: heroFraction, color: status.state.ring, size: 200) {
+          // Small enough that the funding target starts on the first screen.
+          GlowRing(fraction: heroFraction, color: status.state.ring, size: 176) {
             VStack(spacing: Bow.Space.s1) {
               Text("Available")
                 .font(.bowSubhead)
@@ -145,7 +146,7 @@ struct EnvelopeDetailScreen: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             }
-            .frame(maxWidth: 170)
+            .frame(maxWidth: 150)
           }
           .accessibilityElement(children: .combine)
 
@@ -163,21 +164,13 @@ struct EnvelopeDetailScreen: View {
             .accessibilityElement(children: .combine)
           }
 
-          HStack(spacing: Bow.Space.s3) {
-            Button(primaryActionTitle, action: availableMinor < 0 ? onCoverOverspending : moveMoneyIn)
-              .bowPrimaryButton()
-              .disabled(!canMoveMoneyIn)
-            if availableMinor > 0 && !isPastMonth {
-              Button("Move out") { onMoveMoney(.envelope(envelope.id), .readyToAssign) }
-                .bowSecondaryButton()
-            }
-          }
+          actionTiles
 
-          HStack(spacing: Bow.Space.s3) {
-            statTile("Assigned", amount: snapshot.assigned[envelope.id, default: 0])
-            statTile("Spent", amount: max(0, -(snapshot.activity[envelope.id, default: 0])))
-            statTile("Carried in", amount: snapshot.carriedIn(for: envelope.id))
-          }
+          BowStatStrip(stats: [
+            .money("Assigned", snapshot.assigned[envelope.id, default: 0]),
+            .money("Spent", max(0, -(snapshot.activity[envelope.id, default: 0]))),
+            .money("Carried in", snapshot.carriedIn(for: envelope.id))
+          ], currencyCode: currencyCode)
         }
         .frame(maxWidth: .infinity)
         .listRowBackground(Color.clear)
@@ -210,23 +203,25 @@ struct EnvelopeDetailScreen: View {
             .font(.footnote)
             .foregroundStyle(Bow.inkSoft)
         } else {
-          Text("No funding target set")
+          Text("No target yet")
             .foregroundStyle(Bow.inkSoft)
         }
         if let suggestedTarget {
           LabeledContent("Suggested from spending") {
-              MoneyText(minor: suggestedTarget, currencyCode: currencyCode)
-                .fontDesign(.rounded).monospacedDigit()
-            }
+            MoneyText(minor: suggestedTarget, currencyCode: currencyCode)
+              .fontDesign(.rounded).monospacedDigit()
+          }
           if envelope.targetMinor != suggestedTarget && !isPastMonth {
-            Button("Use Suggested Target", systemImage: "target") {
+            Button {
               envelope.targetMinor = suggestedTarget
               do { try modelContext.save() } catch { message = error.localizedDescription }
+            } label: {
+              Label("Use \(BudgetMoney.formatted(suggestedTarget, currencyCode: currencyCode)) as the target",
+                    systemImage: "checkmark.circle")
+                .labelStyle(.bowTile)
             }
           }
         }
-        Button("Edit Target", systemImage: "pencil", action: onEdit)
-          .disabled(isPastMonth)
       } header: {
         Text("Funding target")
       } footer: {
@@ -308,24 +303,6 @@ struct EnvelopeDetailScreen: View {
         .listRowBackground(Bow.card)
       }
 
-      if !isPastMonth { Section {
-        Button(envelope.isHidden ? "Unhide Envelope" : "Hide Envelope",
-               systemImage: envelope.isHidden ? "eye" : "eye.slash") {
-          if !envelope.isHidden && snapshot.available(for: envelope.id) > 0 {
-            showingHideWithBalance = true
-          } else {
-            setHidden(!envelope.isHidden)
-          }
-        }
-        if !hasHistory {
-          Button("Delete Envelope", role: .destructive) { showingDelete = true }
-        }
-      } footer: {
-        if hasHistory {
-          Text("Hiding keeps this envelope’s balance and history. You can unhide it in Budget Settings.")
-        }
-      }
-      .listRowBackground(Bow.card) }
     }
     .bowListBackground {
       Bow.mist.overlay(alignment: .top) { SkyBackground(mood: status.state.sky) }
@@ -348,7 +325,20 @@ struct EnvelopeDetailScreen: View {
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       if !isPastMonth { ToolbarItem(placement: .topBarTrailing) {
-        Button("Edit Envelope", systemImage: "pencil", action: onEdit)
+        Menu("Edit Envelope", systemImage: "pencil") {
+          Button("Edit Envelope", systemImage: "pencil", action: onEdit)
+          Button(envelope.isHidden ? "Unhide Envelope" : "Hide Envelope",
+                 systemImage: envelope.isHidden ? "eye" : "eye.slash") {
+            if !envelope.isHidden && snapshot.available(for: envelope.id) > 0 {
+              showingHideWithBalance = true
+            } else {
+              setHidden(!envelope.isHidden)
+            }
+          }
+          if !hasHistory {
+            Button("Delete Envelope", systemImage: "trash", role: .destructive) { showingDelete = true }
+          }
+        }
       } }
     }
     .confirmationDialog("Delete this unused envelope?", isPresented: $showingDelete) {
@@ -378,22 +368,25 @@ struct EnvelopeDetailScreen: View {
     }
   }
 
-  private func statTile(_ title: String, amount: Int64) -> some View {
-    VStack(alignment: .leading, spacing: 2) {
-      Text(title)
-        .font(.bowFootnote)
-        .foregroundStyle(Bow.inkSoft)
-      MoneyText(minor: amount, currencyCode: currencyCode)
-        .font(.bowAmount)
-        .monospacedDigit()
-        .foregroundStyle(Bow.ink)
-        .lineLimit(1)
-        .minimumScaleFactor(0.6)
+  /// Assign / Move out / target; when overspent, Cover leads instead.
+  private var actionTiles: some View {
+    BowActionTileRow {
+      if availableMinor < 0 {
+        BowActionTile("Cover", systemImage: "bolt", isProminent: true, action: onCoverOverspending)
+          .disabled(!canMoveMoneyIn)
+        BowActionTile("Assign", systemImage: "plus", action: moveMoneyIn)
+          .disabled(!canMoveMoneyIn)
+      } else {
+        BowActionTile("Assign", systemImage: "plus", isProminent: true, action: moveMoneyIn)
+          .disabled(!canMoveMoneyIn)
+        BowActionTile("Move out", systemImage: "arrow.up.arrow.down") {
+          onMoveMoney(.envelope(envelope.id), .readyToAssign)
+        }
+        .disabled(availableMinor <= 0 || isPastMonth)
+      }
+      BowActionTile(targetActionTitle, systemImage: "dollarsign", action: onEdit)
+        .disabled(isPastMonth)
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(Bow.Space.s3)
-    .bowCard(radius: Bow.Radius.md)
-    .accessibilityElement(children: .combine)
   }
 
   /// Opens Move Money into this envelope from the most useful source, as before the redesign.

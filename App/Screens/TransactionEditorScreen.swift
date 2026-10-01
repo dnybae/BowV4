@@ -269,7 +269,7 @@ struct TransactionEditorScreen: View {
             }
           }
           NavigationLink {
-            TransactionDatePickerScreen(title: isScheduled ? "First due" : "Date", date: $date)
+            BowDatePickerScreen(title: isScheduled ? "First due" : "Date", date: $date)
           } label: {
             LabeledContent {
               Text(date.formatted(date: .abbreviated, time: .omitted))
@@ -887,23 +887,5 @@ private struct BankMatchSection: View {
       envelopes.first { $0.id == candidate.envelopeID }?.name,
       candidate.sourceRaw == "manual" ? "entered by you" : nil
     ].compactMap { $0 }.joined(separator: ", ")
-  }
-}
-
-/// Date row destination: a full calendar for picking the transaction's date.
-private struct TransactionDatePickerScreen: View {
-  var title: String
-  @Binding var date: Date
-
-  var body: some View {
-    Form {
-      DatePicker(title, selection: $date, in: Date.distantPast...Date.distantFuture,
-                 displayedComponents: .date)
-        .datePickerStyle(.graphical)
-        .listRowBackground(Bow.card)
-    }
-    .bowListBackground()
-    .navigationTitle(title)
-    .navigationBarTitleDisplayMode(.inline)
   }
 }

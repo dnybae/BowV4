@@ -24,9 +24,9 @@ struct ScheduledTargetRow: View {
             .foregroundStyle(Bow.inkSoft)
         }
       } icon: {
-        Image(systemName: "calendar.badge.clock")
-          .foregroundStyle(.tint)
+        Image(systemName: "calendar")
       }
+      .labelStyle(.bowTile)
     }
     .accessibilityElement(children: .combine)
   }

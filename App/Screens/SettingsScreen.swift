@@ -25,6 +25,12 @@ struct SettingsScreen: View {
   var body: some View {
     NavigationStack {
       Form {
+        Section {
+          SettingsHeader(budgetName: profiles.first?.name ?? "My Budget", version: version)
+        }
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets())
+
         Section("Budget") {
           Button {
             budgetNameDraft = profiles.first?.name ?? "My Budget"
@@ -191,7 +197,7 @@ struct SettingsScreen: View {
         .listRowBackground(Bow.card)
       }
       .labelStyle(.bowTile)
-      .bowListBackground()
+      .bowSkyList(mood: .dawn, height: 420)
       .navigationTitle("Settings")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -227,5 +233,36 @@ struct SettingsScreen: View {
         Text("This restores the original sample budget, transactions, schedules, and bank review items.")
       }
     }
+  }
+}
+
+/// The top of Settings: the app icon with a soft glow, the budget's name and the app version.
+private struct SettingsHeader: View {
+  var budgetName: String
+  var version: String
+  @ScaledMetric(relativeTo: .largeTitle) private var iconSize: CGFloat = 84
+
+  var body: some View {
+    VStack(spacing: Bow.Space.s2) {
+      let side = min(iconSize, 84 * Bow.maxGraphicScale)
+      Image("BrandIcon")
+        .resizable()
+        .scaledToFit()
+        .frame(width: side, height: side)
+        .clipShape(RoundedRectangle(cornerRadius: side * 0.225, style: .continuous))
+        .shadow(color: Bow.bow.opacity(0.4), radius: 18, y: 8)
+        .padding(.bottom, Bow.Space.s2)
+        .accessibilityHidden(true)
+      Text(budgetName)
+        .font(.bowTitle)
+        .foregroundStyle(Bow.ink)
+      Text("Bow \(version)")
+        .font(.bowSubhead)
+        .foregroundStyle(Bow.inkSoft)
+    }
+    .multilineTextAlignment(.center)
+    .frame(maxWidth: .infinity)
+    .padding(.vertical, Bow.Space.s2)
+    .accessibilityElement(children: .combine)
   }
 }

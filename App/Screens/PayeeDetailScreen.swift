@@ -16,6 +16,7 @@ struct PayeeDetailScreen: View {
   @State private var entry: PayeeDirectory.Entry?
   @State private var hasLoadedEntry = false
   @State private var feed = TransactionFeedModel()
+  @State private var hasLoadedFeed = false
   @State private var activity: PayeeActivity?
   @State private var activityVersion = 0
   @State private var reloadVersion = 0
@@ -189,7 +190,12 @@ struct PayeeDetailScreen: View {
           }
           .listRowBackground(Bow.card)
         }
-        if feed.items.isEmpty && !feed.isLoading {
+        if feed.items.isEmpty && (!hasLoadedFeed || feed.isLoading) {
+          Section("Activity") {
+            BowTransactionSkeletonRows(count: 3)
+          }
+          .listRowBackground(Bow.card)
+        } else if feed.items.isEmpty {
           ContentUnavailableView(
             "No transactions yet",
             systemImage: "list.bullet.rectangle",
@@ -208,7 +214,6 @@ struct PayeeDetailScreen: View {
                     model: TransactionRowModel(transaction), currencyCode: currencyCode
                   )
                 }
-                .buttonStyle(.plain)
                 .accessibilityHint("Opens transaction details")
               }
             } header: {
@@ -225,9 +230,11 @@ struct PayeeDetailScreen: View {
             .listRowBackground(Bow.card)
           }
           if feed.hasMore {
-            ProgressView("Loading more…")
-              .frame(maxWidth: .infinity)
-              .onAppear { Task { await feed.loadNext() } }
+            Section {
+              BowTransactionSkeletonRows(count: 1)
+                .onAppear { Task { await feed.loadNext() } }
+            }
+            .listRowBackground(Bow.card)
           }
         }
       } else if hasLoadedEntry {
@@ -237,12 +244,18 @@ struct PayeeDetailScreen: View {
         )
         .listRowBackground(Color.clear)
       } else {
-        ProgressView()
-          .frame(maxWidth: .infinity)
-          .listRowBackground(Color.clear)
+        BowIdentityHeader(name: "Payee name", context: "Usually paid with Checking") {
+          BowGlossyTile(systemImage: "storefront")
+        }
+        .redacted(reason: .placeholder)
+        .bowShimmer()
+        .listRowBackground(Color.clear)
+        .accessibilityLabel("Loading payee")
       }
     }
     .bowSkyList(mood: .dawn, height: 460)
+    .bowAnimation(value: entry?.key)
+    .bowAnimation(value: feed.items.map(\.id))
     .navigationTitle("Payee")
     .task(id: "\(payeeKey)|\(reloadVersion)") {
       let repository = PayeeDirectoryRepository(modelContainer: modelContext.container)
@@ -251,6 +264,7 @@ struct PayeeDetailScreen: View {
       await feed.reload(container: modelContext.container, searchText: "",
                         filter: TransactionFilter(), scopedPayeeKey: payeeKey,
                         includeUncategorizedCount: false)
+      hasLoadedFeed = true
     }
     .task(id: activityVersion) {
       let repository = PayeeDirectoryRepository(modelContainer: modelContext.container)
@@ -262,7 +276,7 @@ struct PayeeDetailScreen: View {
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
-        Button("Edit") { showingEdit = true }
+        Button("Edit Payee", systemImage: "pencil") { showingEdit = true }
           .disabled(entry == nil)
       }
     }
@@ -271,8 +285,9 @@ struct PayeeDetailScreen: View {
         PayeeEditorScreen(entry: entry, payee: payee) { dismiss() }
       }
     }
-    .navigationDestination(item: $selectedTransaction) { transaction in
-      TransactionDetailScreen(
+    // Transactions open as a sheet, the same as everywhere else in the app.
+    .sheet(item: $selectedTransaction) { transaction in
+      TransactionDetailSheet(
         transaction: transaction,
         accounts: accounts, envelopes: envelopes,
         payees: payees, currencyCode: currencyCode

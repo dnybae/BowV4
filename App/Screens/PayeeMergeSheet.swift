@@ -27,8 +27,10 @@ struct PayeeMergeSheet: View {
     NavigationStack {
       List {
         if isLoading {
-          ProgressView("Loading payees…")
-            .frame(maxWidth: .infinity)
+          Section {
+            BowTransactionSkeletonRows(count: 4)
+          }
+          .listRowBackground(Bow.card)
         } else if candidates.isEmpty {
           ContentUnavailableView(
             searchText.isEmpty ? "No other payees" : "No matching payees",

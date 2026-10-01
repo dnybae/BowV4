@@ -42,7 +42,7 @@ struct PayeeSelectionSheet: View {
               Button {
                 selectLocal(entry)
               } label: {
-                HStack(spacing: 12) {
+                HStack(spacing: Bow.Space.s3) {
                   MerchantLogoView(
                     merchantName: entry.name,
                     domain: payees.first(where: { $0.id == entry.ruleID })?.merchantDomain
@@ -73,8 +73,10 @@ struct PayeeSelectionSheet: View {
           .listRowBackground(Bow.card)
         }
         if localEntries.isEmpty && query.isEmpty && isLoadingPayees {
-          ProgressView("Loading payees…")
-            .frame(maxWidth: .infinity)
+          Section {
+            BowTransactionSkeletonRows(count: 4)
+          }
+          .listRowBackground(Bow.card)
         } else if localEntries.isEmpty && query.isEmpty {
           ContentUnavailableView(
             "No payees yet", systemImage: "person.text.rectangle",
@@ -85,6 +87,16 @@ struct PayeeSelectionSheet: View {
       .bowListBackground()
       .searchable(text: $searchText, placement: .toolbar, prompt: "Search payees")
       .searchFocused($searchFocused)
+      // Return picks the exact match, or creates the payee that was typed.
+      .onSubmit(of: .search) {
+        guard !query.isEmpty else { return }
+        if let exact = localEntries.first(where: { PayeeDirectory.key($0.name) == PayeeDirectory.key(query) }) {
+          selectLocal(exact)
+        } else {
+          createNamedPayee()
+        }
+      }
+      .submitLabel(.done)
       .navigationTitle("Payee")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -100,14 +112,7 @@ struct PayeeSelectionSheet: View {
         try? await Task.sleep(for: .milliseconds(250))
         if !Task.isCancelled { searchFocused = true }
       }
-      .alert("Couldn’t save payee", isPresented: Binding(
-        get: { errorMessage != nil },
-        set: { if !$0 { errorMessage = nil } }
-      )) {
-        Button("OK") { errorMessage = nil }
-      } message: {
-        Text(errorMessage ?? "")
-      }
+      .bowErrorAlert("Couldn’t save payee", message: $errorMessage)
     }
     .presentationDetents([.large])
   }

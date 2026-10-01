@@ -57,8 +57,10 @@ struct ManagePayeesScreen: View {
   var body: some View {
     List {
       if entries.isEmpty && isLoading {
-        ProgressView("Loading payees…")
-          .frame(maxWidth: .infinity)
+        Section {
+          BowTransactionSkeletonRows(count: 6)
+        }
+        .listRowBackground(Bow.card)
       } else if entries.isEmpty {
         ContentUnavailableView(
           searchText.isEmpty ? "No payees yet" : "No matching payees",
@@ -92,6 +94,7 @@ struct ManagePayeesScreen: View {
             }
           }
           .listRowBackground(Bow.card)
+          .sectionIndexLabel(section.letter)
         }
       }
     }

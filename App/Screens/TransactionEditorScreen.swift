@@ -42,6 +42,9 @@ struct TransactionEditorScreen: View {
   @State private var matchChoice: BankMatchChoice?
   /// Reviewing an imported transaction: fixed when the sheet opens, so it doesn't change on save.
   @State private var isReviewing: Bool
+  /// What the sheet opened with, to tell whether anything was changed before Cancel or a swipe down.
+  @State private var initialFields: EditorFields?
+  @Environment(\.bowToasts) private var toasts
 
   init(
     transaction: BudgetTransaction?,
@@ -121,6 +124,38 @@ struct TransactionEditorScreen: View {
       transaction == nil || transaction?.needsApproval == true ? "Approve and add to budget" : "Add to budget"
     case nil: "Choose an option"
     }
+  }
+
+  private var fields: EditorFields {
+    EditorFields(kind: kind, accountID: accountID, destinationID: destinationID, envelopeID: envelopeID,
+                 amountMinor: amountMinor, payee: payee, notes: notes, date: date, isScheduled: isScheduled)
+  }
+
+  private var hasChanges: Bool {
+    guard let initialFields else { return false }
+    return fields != initialFields
+  }
+
+  /// The bottom button: what tapping it will do, with the amount.
+  private var primaryTitle: String {
+    if isReviewing { return approveTitle }
+    if isRecordingBill { return recordTitle }
+    if transaction != nil { return "Save changes" }
+    if isScheduled { return "Schedule \(signedAmountText)" }
+    return amountMinor == 0 ? "Add transaction" : "Add \(signedAmountText)"
+  }
+
+  private var signedAmountText: String {
+    let signed = kind == .expense ? -amountMinor : amountMinor
+    return BudgetMoney.formatted(signed, currencyCode: currencyCode, showsPlusSign: kind == .inflow)
+  }
+
+  /// "−$12.50 · Groceries", for the confirmation after saving.
+  private var savedSummary: String {
+    let destination = kind == .transfer
+      ? accounts.first { $0.id == destinationID }?.name
+      : envelopes.first { $0.id == envelopeID }?.name ?? (payee.isEmpty ? nil : payee)
+    return [signedAmountText, destination].compactMap { $0 }.joined(separator: " · ")
   }
 
   /// Recording a scheduled bill that's come due.
@@ -209,7 +244,8 @@ struct TransactionEditorScreen: View {
               }
               .pickerStyle(.segmented)
             }
-            CurrencyAmountField("Amount", minor: $amountMinor, currencyCode: currencyCode, style: .editorHero)
+            CurrencyAmountField("Amount", minor: $amountMinor, currencyCode: currencyCode, style: .editorHero,
+                                focusOnAppear: transaction == nil && reviewRecord == nil && scheduledDraft == nil)
               // A match uses the posted bank amount.
               .disabled(isMatching)
           }
@@ -243,9 +279,10 @@ struct TransactionEditorScreen: View {
                 Text(payee.isEmpty ? "Choose a payee" : payee)
                   .foregroundStyle(payee.isEmpty ? Bow.inkSoft : Bow.ink)
                   .lineLimit(1)
-                Image(systemName: "chevron.up.chevron.down")
-                  .font(.bowSubhead)
+                Image(systemName: "chevron.right")
+                  .font(.bowFootnote.weight(.semibold))
                   .foregroundStyle(Bow.inkFaint)
+                  .accessibilityHidden(true)
               }
               .contentShape(Rectangle())
             }
@@ -351,38 +388,19 @@ struct TransactionEditorScreen: View {
         }
       }
       .bowSkyList(mood: isReviewing ? .review : .dawn, height: 420)
+      .bowEditorSheet(hasChanges: hasChanges)
+      .sensoryFeedback(.selection, trigger: matchChoice)
+      .bowAnimation(value: matchChoice)
+      // One primary action, at the bottom, riding above the keyboard. No Save in the toolbar.
       .safeAreaInset(edge: .bottom) {
-        if isRecordingBill {
-          Button { save() } label: {
-            Text(recordTitle)
-              .monospacedDigit()
-              .frame(maxWidth: .infinity)
-          }
-          .bowPrimaryButton()
-          .disabled(!canSave)
-          .padding(.horizontal, Bow.Space.s4)
-          .padding(.bottom, Bow.Space.s2)
-        } else if isReviewing {
-          Button { approve() } label: {
-            Text(approveTitle)
-              .frame(maxWidth: .infinity)
-          }
-          .bowPrimaryButton()
-          .disabled(!canApprove)
-          .padding(.horizontal, Bow.Space.s4)
-          .padding(.bottom, Bow.Space.s2)
+        BowBottomAction(primaryTitle, isEnabled: isReviewing ? canApprove : canSave) {
+          isReviewing ? approve() : save()
         }
       }
       .navigationTitle(title)
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }
-        }
-        ToolbarItem(placement: .confirmationAction) {
-          Button("Save") { isReviewing ? approve() : save() }
-            .disabled(isReviewing ? !canApprove : !canSave)
-        }
+        BowCancelButton(hasChanges: hasChanges) { dismiss() }
       }
       .confirmationDialog(
         "Delete this transaction?",
@@ -425,18 +443,12 @@ struct TransactionEditorScreen: View {
       } message: {
         Text("An imported transaction may already represent this payment. Updating it keeps one ledger entry and uses the details you entered.")
       }
-      .alert("Couldn’t save transaction", isPresented: Binding(
-        get: { errorMessage != nil },
-        set: { if !$0 { errorMessage = nil } }
-      )) {
-        Button("OK") { errorMessage = nil }
-      } message: {
-        Text(errorMessage ?? "")
-      }
+      .bowErrorAlert("Couldn’t save transaction", message: $errorMessage)
       .task(id: bankRecord?.id) { loadCandidates() }
       .onAppear {
         // A new bank item gets the same envelope suggestion the old review screen made.
         if reviewRecord != nil && envelopeID == nil { applyPayeeRule() }
+        if initialFields == nil { initialFields = fields }
       }
       .onChange(of: payee) { _, _ in applyPayeeRule() }
       .onChange(of: kind) { _, _ in applyPayeeRule() }
@@ -559,6 +571,7 @@ struct TransactionEditorScreen: View {
           envelopeID: chosenEnvelopeID, amountMinor: minor, startDate: date,
           frequency: recurrence, payee: payee, notes: notes, in: modelContext
         )
+        toasts?.show(.saved("Scheduled · \(savedSummary)"))
         dismiss()
       } catch { errorMessage = error.localizedDescription }
       return
@@ -611,6 +624,7 @@ struct TransactionEditorScreen: View {
           in: modelContext
         )
       }
+      toasts?.show(.saved(transaction == nil ? "Added · \(savedSummary)" : "Saved · \(savedSummary)"))
       dismiss()
     } catch {
       errorMessage = error.localizedDescription
@@ -660,6 +674,7 @@ struct TransactionEditorScreen: View {
   private func resolve(_ record: SimpleFINImportRecord, as decision: SimpleFINReviewDecision) {
     do {
       try SimpleFINSyncCoordinator.shared.resolve(record, as: decision, envelopeID: envelopeID, in: modelContext)
+      if case .link = decision { toasts?.show(.saved("Matched and approved")) }
       dismiss()
     } catch {
       errorMessage = error.localizedDescription
@@ -681,6 +696,7 @@ struct TransactionEditorScreen: View {
           notes: notes, in: modelContext
         )
       }
+      toasts?.show(.saved("Added · \(savedSummary)"))
       dismiss()
     } catch {
       errorMessage = error.localizedDescription
@@ -727,6 +743,19 @@ struct TransactionEditorScreen: View {
       errorMessage = error.localizedDescription
     }
   }
+}
+
+/// The editable fields, compared to what the sheet opened with.
+private struct EditorFields: Equatable {
+  var kind: BudgetTransactionKind
+  var accountID: UUID?
+  var destinationID: UUID?
+  var envelopeID: UUID?
+  var amountMinor: Int64
+  var payee: String
+  var notes: String
+  var date: Date
+  var isScheduled: Bool
 }
 
 private struct PayeeDefaultsTrigger: Equatable {
@@ -880,13 +909,13 @@ private struct BankMatchSection: View {
       HStack(spacing: Bow.Space.s3) {
         Image(systemName: choice == value ? "largecircle.fill.circle" : "circle")
           .font(.title3)
+          .contentTransition(.symbolEffect(.replace))
           .foregroundStyle(choice == value ? AnyShapeStyle(.tint) : AnyShapeStyle(Bow.inkFaint))
           .accessibilityHidden(true)
         label()
       }
       .contentShape(.rect)
     }
-    .buttonStyle(.plain)
     .accessibilityAddTraits(choice == value ? .isSelected : [])
   }
 

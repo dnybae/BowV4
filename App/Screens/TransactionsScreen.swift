@@ -50,14 +50,6 @@ struct TransactionsScreen: View {
     )
   }
 
-  private var attentionSummary: String {
-    switch timeline.needsAttention.count {
-    case 0: "All caught up"
-    case 1: "1 thing needs you"
-    case let count: "\(count) things need you"
-    }
-  }
-
   var body: some View {
     List {
       if filter.isActive {
@@ -148,7 +140,6 @@ struct TransactionsScreen: View {
       refreshVersion += 1
     }
     .navigationTitle("Spending")
-    .navigationSubtitle(attentionSummary)
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {

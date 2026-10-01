@@ -140,7 +140,6 @@ struct BankFileImportScreen: View {
                     .fontWeight(.medium)
                   Spacer()
                   MoneyText(minor: proposal.row.amountMinor, currencyCode: currencyCode)
-                    .fontDesign(.rounded).monospacedDigit()
                 }
                 Text(proposal.row.date.formatted(date: .abbreviated, time: .omitted))
                   .font(.bowSubhead)

@@ -14,7 +14,6 @@ struct ScheduledTargetRow: View {
   var body: some View {
     LabeledContent {
       MoneyText(minor: contribution.totalMinor, currencyCode: currencyCode)
-        .fontDesign(.rounded).monospacedDigit()
     } label: {
       Label {
         VStack(alignment: .leading, spacing: 2) {

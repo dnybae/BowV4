@@ -34,6 +34,7 @@ struct ContentView: View {
       }
     }
     .bowAppTint()
+    .bowCachedAsyncImages()
     .environment(\.bowToasts, toasts)
     .task(id: isDemoMode) {
       if isDemoMode && demoContainer == nil { prepareDemo() }

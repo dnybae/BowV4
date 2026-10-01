@@ -19,6 +19,7 @@ struct CardPaymentDetailScreen: View {
   @State private var showingGoalEditor = false
   @State private var showingAccountEditor = false
   @State private var feed = TransactionFeedModel()
+  @State private var hasLoadedFeed = false
 
   private var owed: Int64 { max(0, -snapshot.accountBalances[card.id, default: 0]) }
   private var reserved: Int64 { max(0, snapshot.paymentAvailable[card.id, default: 0]) }
@@ -50,6 +51,11 @@ struct CardPaymentDetailScreen: View {
     } else {
       onMoveMoney(.cardPayment(card.id), .readyToAssign)
     }
+  }
+
+  private var canMoveMoney: Bool {
+    !isPastMonth && (snapshot.readyToAssignMinor > 0 || reserved > 0
+      || envelopes.contains { snapshot.available(for: $0.id) > 0 })
   }
 
   private var cardSchedules: [BudgetSchedule] {
@@ -85,7 +91,6 @@ struct CardPaymentDetailScreen: View {
                 .foregroundStyle(Bow.inkSoft)
               MoneyText(minor: reserved, currencyCode: currencyCode)
                 .bowHeroFont()
-                .monospacedDigit()
                 .foregroundStyle(Bow.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.4)
@@ -116,13 +121,19 @@ struct CardPaymentDetailScreen: View {
             .accessibilityElement(children: .combine)
           }
 
-          HStack(spacing: Bow.Space.s3) {
-            Button(owed > reserved ? "Fund payment" : "Move money", action: moveMoney)
-              .bowPrimaryButton()
-              .disabled(isPastMonth || snapshot.readyToAssignMinor <= 0 && reserved <= 0
-                && !envelopes.contains { snapshot.available(for: $0.id) > 0 })
-            Button("Payoff goal") { showingGoalEditor = true }
-              .bowSecondaryButton()
+          BowStatStrip(stats: [
+            .money("Owed", owed),
+            .money("Set aside", reserved),
+            .money("Carried debt", carriedDebt)
+          ], currencyCode: currencyCode)
+
+          BowActionTileRow {
+            BowActionTile(owed > reserved ? "Fund" : "Move", systemImage: "plus",
+                          isProminent: true, action: moveMoney)
+              .disabled(!canMoveMoney)
+            BowActionTile("Payoff goal", systemImage: "flag") { showingGoalEditor = true }
+              .disabled(isPastMonth)
+            BowActionTile("Edit card", systemImage: "pencil") { showingAccountEditor = true }
               .disabled(isPastMonth)
           }
         }
@@ -133,16 +144,15 @@ struct CardPaymentDetailScreen: View {
 
       if underfunded > 0 {
         Section("Underfunded") {
-          LabeledContent("Total underfunded") {
+          BowTileValueRow(title: "Total underfunded", systemImage: "exclamationmark.circle") {
             MoneyText(minor: underfunded, currencyCode: currencyCode)
-              .fontWeight(.semibold).fontDesign(.rounded).monospacedDigit()
+              .fontWeight(.semibold)
               .foregroundStyle(Bow.ink)
           }
           if overspentOnCard > 0 {
             VStack(alignment: .leading, spacing: Bow.Space.s2) {
-              LabeledContent("Overspent envelopes") {
+              BowTileValueRow(title: "Overspent envelopes", systemImage: "square.grid.2x2") {
                 MoneyText(minor: overspentOnCard, currencyCode: currencyCode)
-                  .fontDesign(.rounded).monospacedDigit()
               }
               Text("Card purchases went over their envelopes. Covering them funds this payment.")
                 .font(.bowFootnote)
@@ -155,9 +165,8 @@ struct CardPaymentDetailScreen: View {
           }
           if uncoveredDebt > 0 {
             VStack(alignment: .leading, spacing: Bow.Space.s2) {
-              LabeledContent("Carried debt") {
+              BowTileValueRow(title: "Carried debt", systemImage: "clock.arrow.circlepath") {
                 MoneyText(minor: uncoveredDebt, currencyCode: currencyCode)
-                  .fontDesign(.rounded).monospacedDigit()
               }
               Text(hasPayoffGoal
                 ? "Your payoff goal tracks this debt. Fund the payment a little each month."
@@ -177,9 +186,8 @@ struct CardPaymentDetailScreen: View {
       }
 
       Section("Debt progress") {
-        LabeledContent("Amount owed") {
+        BowTileValueRow(title: "Amount owed", systemImage: "creditcard") {
           MoneyText(minor: owed, currencyCode: currencyCode)
-            .fontDesign(.rounded).monospacedDigit()
         }
         ProgressView(value: debtProgress) {
           Text("Debt paid down")
@@ -197,13 +205,13 @@ struct CardPaymentDetailScreen: View {
             .foregroundStyle(Bow.inkSoft)
         }
         if let monthly = card.debtMonthlyTargetMinor {
-          LabeledContent("Fund each month") {
+          BowTileValueRow(title: "Fund each month", systemImage: "calendar.badge.clock") {
             MoneyText(minor: monthly, currencyCode: currencyCode)
-              .fontDesign(.rounded).monospacedDigit()
           }
         }
         if let date = card.debtGoalDate {
-          LabeledContent("Target date", value: date.formatted(date: .abbreviated, time: .omitted))
+          BowTileValueRow("Target date", systemImage: "flag",
+                          value: date.formatted(date: .abbreviated, time: .omitted))
         }
       }
       .listRowBackground(Bow.card)
@@ -214,11 +222,7 @@ struct CardPaymentDetailScreen: View {
         } else {
           ForEach(cardSchedules) { schedule in
             Button { onEditSchedule(schedule.id) } label: {
-              VStack(alignment: .leading, spacing: 3) {
-                Text(schedule.payee)
-                Text("\(schedule.frequency.title) · \(BudgetMoney.formatted(schedule.amountMinor, currencyCode: currencyCode))")
-                  .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
-              }
+              ScheduleSummaryRow(schedule: schedule, currencyCode: currencyCode)
             }
             .disabled(isPastMonth)
           }
@@ -226,9 +230,14 @@ struct CardPaymentDetailScreen: View {
       }
       .listRowBackground(Bow.card)
 
-      if feed.items.isEmpty && !feed.isLoading {
+      if feed.items.isEmpty && (!hasLoadedFeed || feed.isLoading) {
         Section("Card activity") {
-          Text("No transactions yet").foregroundStyle(Bow.inkSoft)
+          BowTransactionSkeletonRows(count: 3)
+        }
+        .listRowBackground(Bow.card)
+      } else if feed.items.isEmpty {
+        Section("Card activity") {
+          Text("Nothing charged to \(card.name) this month.").foregroundStyle(Bow.inkSoft)
         }
         .listRowBackground(Bow.card)
       } else {
@@ -241,16 +250,13 @@ struct CardPaymentDetailScreen: View {
                   currencyCode: currencyCode, options: .hidesAccount
                 )
               }
-              .buttonStyle(.plain)
-              .disabled(isPastMonth)
             }
           }
           .listRowBackground(Bow.card)
         }
         if feed.hasMore {
           Section {
-            ProgressView("Loading more…")
-              .frame(maxWidth: .infinity)
+            BowTransactionSkeletonRows(count: 1)
               .onAppear { Task { await feed.loadNext() } }
           }
           .listRowBackground(Bow.card)
@@ -265,7 +271,6 @@ struct CardPaymentDetailScreen: View {
           ForEach(cardAllocations) { allocation in
             LabeledContent(allocation.targetCardID == card.id ? "Moved in" : "Moved out") {
               MoneyText(minor: allocation.amountMinor, currencyCode: currencyCode)
-                .fontDesign(.rounded).monospacedDigit()
             }
           }
         }
@@ -275,24 +280,25 @@ struct CardPaymentDetailScreen: View {
     .bowListBackground {
       Bow.mist.overlay(alignment: .top) { SkyBackground(mood: status.state.sky) }
     }
+    .bowSoftScrollEdge()
+    .bowAnimation(value: feed.items.map(\.id))
+    .bowAnimation(value: hasLoadedFeed)
     .navigationTitle(card.name + " payment")
     .task(id: snapshot.month) {
       let nextMonth = Calendar.current.date(byAdding: .month, value: 1, to: snapshot.month) ?? .distantFuture
       await feed.reload(container: modelContext.container, searchText: "", filter: TransactionFilter(),
                         scopedAccountID: card.id, upperBound: nextMonth,
                         includeUncategorizedCount: false)
+      hasLoadedFeed = true
     }
     .navigationBarTitleDisplayMode(.inline)
-    .toolbar {
-      if !isPastMonth { ToolbarItem(placement: .topBarTrailing) {
-        Button("Edit Card", systemImage: "pencil") { showingAccountEditor = true }
-      } }
-    }
     .sheet(isPresented: $showingGoalEditor) {
       CardDebtGoalEditorScreen(card: card, currentDebtMinor: owed, currencyCode: currencyCode)
     }
     .sheet(isPresented: $showingAccountEditor) {
-      AccountEditorScreen(currencyCode: currencyCode, account: card)
+      NavigationStack {
+        AccountEditorScreen(currencyCode: currencyCode, account: card)
+      }
     }
   }
 }

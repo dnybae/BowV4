@@ -23,6 +23,25 @@ extension View {
   }
 }
 
+extension View {
+  /// Secondary toolbar actions (Hide, Delete): the iOS 27 overflow menu, or a More menu on iOS 26.
+  @ViewBuilder
+  func bowToolbarOverflow<Content: View>(isEnabled: Bool = true, @ViewBuilder _ content: () -> Content) -> some View {
+    let items = content()
+    if !isEnabled {
+      self
+    } else if #available(iOS 27.0, *) {
+      toolbarOverflowMenu { items }
+    } else {
+      toolbar {
+        ToolbarItem(placement: .topBarTrailing) {
+          Menu("More", systemImage: "ellipsis") { items }
+        }
+      }
+    }
+  }
+}
+
 /// A URL session with a disk cache for logos.
 enum BowImageSession {
   static let shared: URLSession = {

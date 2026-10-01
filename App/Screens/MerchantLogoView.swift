@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MerchantLogoView: View {
   @Environment(\.payeeLogoDirectory) private var directory
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   var merchantName: String
   var domain: String? = nil
   var kind: BudgetTransactionKind? = nil
@@ -46,22 +47,28 @@ struct MerchantLogoView: View {
         systemIcon
       } else if appearance?.source == .custom,
                 let data = appearance?.imageData,
-                let image = UIImage(data: data) {
+                let image = CustomLogoCache.image(for: data) {
         Image(uiImage: image)
           .resizable()
           .scaledToFit()
           .frame(width: side - 10, height: side - 10)
       } else if appearance?.source == .logoDev {
-        AsyncImage(url: LogoDev.logoURL(
-          domain: appearance?.domain ?? domain,
-          merchantName: appearance?.name ?? merchantName
-        )) { phase in
+        // The logo fades in over the fallback symbol instead of popping in.
+        AsyncImage(
+          url: LogoDev.logoURL(
+            domain: appearance?.domain ?? domain,
+            merchantName: appearance?.name ?? merchantName
+          ),
+          transaction: Transaction(animation: Bow.motion(reduceMotion: reduceMotion))
+        ) { phase in
           if let image = phase.image {
             image.resizable()
               .scaledToFit()
               .frame(width: side - 10, height: side - 10)
+              .transition(.opacity)
           } else {
             systemIcon
+              .transition(.opacity)
           }
         }
       } else {
@@ -78,5 +85,18 @@ struct MerchantLogoView: View {
       .font(.system(size: side * 0.44, weight: .medium))
       .foregroundStyle(Bow.inkSoft)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+}
+
+/// Decoded custom logos, so a row doesn't decode its image data on every render.
+private enum CustomLogoCache {
+  private static let cache = NSCache<NSData, UIImage>()
+
+  static func image(for data: Data) -> UIImage? {
+    let key = data as NSData
+    if let cached = cache.object(forKey: key) { return cached }
+    guard let image = UIImage(data: data) else { return nil }
+    cache.setObject(image, forKey: key)
+    return image
   }
 }

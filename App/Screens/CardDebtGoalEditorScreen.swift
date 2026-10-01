@@ -28,7 +28,6 @@ struct CardDebtGoalEditorScreen: View {
         Section {
           LabeledContent("Debt today") {
             MoneyText(minor: currentDebtMinor, currencyCode: currencyCode)
-              .fontDesign(.rounded).monospacedDigit()
           }
           CurrencyAmountField("Monthly funding target", minor: $monthlyMinor, currencyCode: currencyCode)
           Toggle("Set payoff date", isOn: $hasDate)

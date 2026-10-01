@@ -166,7 +166,7 @@ struct PayeeDetailScreen: View {
                   VStack(alignment: .leading, spacing: 3) {
                     Text(schedule.payee).foregroundStyle(Bow.ink)
                     Text(schedule.frequency.title)
-                      .font(.subheadline)
+                      .font(.bowSubhead)
                       .foregroundStyle(Bow.inkSoft)
                   }
                   Spacer()

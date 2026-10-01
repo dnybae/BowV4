@@ -66,7 +66,7 @@ struct AccountEditorScreen: View {
                             systemImage: "dollarsign")
         if type.kind == .liability && (parsedOpeningBalance ?? 0) > 0 {
           Text("Enter money owed as a negative balance.")
-            .font(.footnote)
+            .font(.bowFootnote)
             .foregroundStyle(Bow.overInk)
         }
         BowNotesRow(notes: $note)

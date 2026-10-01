@@ -343,10 +343,10 @@ private struct BudgetMonthTitle: View {
     HStack(spacing: Bow.Space.s2) {
       VStack(spacing: 0) {
         Text(month.formatted(.dateTime.month(.wide)))
-          .font(.headline)
+          .font(.bowHeadline)
           .foregroundStyle(Bow.ink)
         Text(month.formatted(.dateTime.year()))
-          .font(.subheadline)
+          .font(.bowSubhead)
           .foregroundStyle(Bow.inkSoft)
       }
       .id(month)

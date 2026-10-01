@@ -87,7 +87,7 @@ struct CoverEnvelopeScreen: View {
               .labelStyle(.bowTile)
             Spacer(minLength: Bow.Space.s2)
             Image(systemName: "chevron.right")
-              .font(.footnote.weight(.semibold))
+              .font(.bowFootnote.weight(.semibold))
               .foregroundStyle(Bow.inkFaint)
               .accessibilityHidden(true)
           }

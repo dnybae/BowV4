@@ -10,7 +10,7 @@ struct ComingSoonRowLabel: View {
         .labelStyle(.bowTile)
       Spacer(minLength: 8)
       Text("Soon")
-        .font(.subheadline)
+        .font(.bowSubhead)
         .foregroundStyle(Bow.inkSoft)
     }
     .accessibilityElement(children: .combine)

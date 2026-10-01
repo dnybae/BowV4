@@ -25,7 +25,7 @@ struct SimpleFINLinkPickerScreen: View {
       List {
         Section {
           Text("Choose the bank account that belongs to \(account.name). New bank activity will sync here. Transactions already in Bow stay where they are.")
-            .font(.subheadline).foregroundStyle(Bow.inkSoft)
+            .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
         }
         .listRowBackground(Bow.card)
         if choices.isEmpty {
@@ -44,7 +44,7 @@ struct SimpleFINLinkPickerScreen: View {
                     Text(link.name).foregroundStyle(Bow.ink)
                     if let balance = link.reportedBalance {
                       Text("Bank balance: \(BudgetMoney.formatted(bankAmount: balance, currencyCode: link.currencyCode))")
-                        .font(.subheadline).foregroundStyle(Bow.inkSoft)
+                        .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
                     }
                   }
                   Spacer()

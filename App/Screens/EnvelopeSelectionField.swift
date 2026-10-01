@@ -34,7 +34,7 @@ struct EnvelopeSelectionField: View {
           .lineLimit(1)
           .truncationMode(.middle)
         Image(systemName: "chevron.up.chevron.down")
-          .font(.subheadline)
+          .font(.bowSubhead)
           .foregroundStyle(Bow.inkFaint)
       }
       .contentShape(Rectangle())
@@ -78,7 +78,7 @@ struct EnvelopeScopeSelectionField: View {
           .foregroundStyle(Bow.inkSoft)
           .lineLimit(1)
         Image(systemName: "chevron.up.chevron.down")
-          .font(.subheadline)
+          .font(.bowSubhead)
           .foregroundStyle(Bow.inkFaint)
       }
       .contentShape(Rectangle())

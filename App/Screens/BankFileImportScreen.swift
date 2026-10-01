@@ -124,7 +124,7 @@ struct BankFileImportScreen: View {
         if !proposals.isEmpty {
           Section {
             Text("\(proposals.count) rows · \(reviewCount) will go to Bank Review")
-              .font(.subheadline.weight(.medium))
+              .font(.bowSubhead.weight(.medium))
           } header: {
             Text("Preview")
           } footer: {
@@ -143,10 +143,10 @@ struct BankFileImportScreen: View {
                     .fontDesign(.rounded).monospacedDigit()
                 }
                 Text(proposal.row.date.formatted(date: .abbreviated, time: .omitted))
-                  .font(.subheadline)
+                  .font(.bowSubhead)
                   .foregroundStyle(Bow.inkSoft)
                 Text(actionLabel(for: proposal))
-                  .font(.subheadline)
+                  .font(.bowSubhead)
                   .foregroundStyle(Bow.inkSoft)
               }
               .padding(.vertical, 4)

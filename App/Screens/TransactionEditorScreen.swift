@@ -133,7 +133,6 @@ struct TransactionEditorScreen: View {
   private var recordTitle: String {
     let signed = kind == .expense ? -amountMinor : amountMinor
     let amount = BudgetMoney.formatted(signed, currencyCode: currencyCode, showsPlusSign: kind == .inflow)
-      .replacingOccurrences(of: "-", with: "\u{2212}")
     return "Record \(amount)"
   }
 
@@ -242,7 +241,7 @@ struct TransactionEditorScreen: View {
                   .foregroundStyle(payee.isEmpty ? Bow.inkSoft : Bow.ink)
                   .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
-                  .font(.subheadline)
+                  .font(.bowSubhead)
                   .foregroundStyle(Bow.inkFaint)
               }
               .contentShape(Rectangle())
@@ -846,7 +845,7 @@ private struct BankMatchSection: View {
             MoneyText(
               minor: candidate.transferAccountID == record.localAccountID
                 ? -candidate.amountMinor : candidate.amountMinor,
-              currencyCode: currencyCode, usesTrueMinus: true
+              currencyCode: currencyCode
             )
             .foregroundStyle(Bow.ink)
           }

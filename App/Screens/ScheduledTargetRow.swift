@@ -20,7 +20,7 @@ struct ScheduledTargetRow: View {
         VStack(alignment: .leading, spacing: 2) {
           Text(contribution.payee)
           Text(detail)
-            .font(.subheadline)
+            .font(.bowSubhead)
             .foregroundStyle(Bow.inkSoft)
         }
       } icon: {

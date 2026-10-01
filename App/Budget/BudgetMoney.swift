@@ -9,6 +9,7 @@ struct BudgetMoney {
     let grouping = locale.groupingSeparator ?? ","
     let decimalSeparator = locale.decimalSeparator ?? "."
     let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+      .replacingOccurrences(of: trueMinus, with: "-")
       .replacingOccurrences(of: grouping, with: "")
       .replacingOccurrences(of: decimalSeparator, with: ".")
     guard let decimal = Decimal(string: cleaned, locale: Locale(identifier: "en_US_POSIX"))
@@ -19,16 +20,20 @@ struct BudgetMoney {
     return Int64(NSDecimalNumber(decimal: minor).stringValue)
   }
 
+  /// Negative amounts use a true minus sign (−), never a hyphen.
   static func formatted(_ minor: Int64, currencyCode: String) -> String {
     (Decimal(minor) / 100).formatted(.currency(code: currencyCode))
+      .replacingOccurrences(of: "-", with: trueMinus)
   }
+
+  static let trueMinus = "\u{2212}"
 
   /// Money coming in reads "+$50.00", so direction never depends on color alone.
   static func formatted(_ minor: Int64, currencyCode: String, showsPlusSign: Bool) -> String {
     guard showsPlusSign else { return formatted(minor, currencyCode: currencyCode) }
     return (Decimal(minor) / 100).formatted(
       .currency(code: currencyCode).sign(strategy: .always(showZero: false))
-    )
+    ).replacingOccurrences(of: "-", with: trueMinus)
   }
 
   /// Formats a decimal string reported by a bank, such as "-1234.50".

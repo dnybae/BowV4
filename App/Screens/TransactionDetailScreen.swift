@@ -199,7 +199,7 @@ struct TransactionDetailScreen: View {
     LabeledContent("Bank description", value: record.payee)
     LabeledContent("Posted", value: record.date.formatted(date: .abbreviated, time: .omitted))
     LabeledContent("Posted amount") {
-      MoneyText(minor: record.amountMinor, currencyCode: currencyCode, usesTrueMinus: true)
+      MoneyText(minor: record.amountMinor, currencyCode: currencyCode)
     }
   }
 

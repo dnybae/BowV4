@@ -62,6 +62,14 @@ enum Bow {
     // Spacing and radii
     enum Space { static let s1: CGFloat = 4, s2: CGFloat = 8, s3: CGFloat = 12, s4: CGFloat = 16, s5: CGFloat = 20, s6: CGFloat = 24, s8: CGFloat = 32 }
     enum Radius { static let sm: CGFloat = 10, md: CGFloat = 16, lg: CGFloat = 24, xl: CGFloat = 32 }
+    /// Separate cards (envelopes, accounts): one per destination.
+    static let itemCardRadius: CGFloat = 22
+
+    // Press feedback
+    /// How far a card or tile shrinks while pressed.
+    static let pressScale: CGFloat = 0.97
+    /// Laid over a row while pressed, like a List row highlight.
+    static let pressOverlay = Color(light: 0x141821, dark: 0xF1F3F8, lightAlpha: 0.06, darkAlpha: 0.08)
 }
 
 // MARK: - Type (SF Pro Rounded for numbers and titles, SF Pro for text)
@@ -420,6 +428,11 @@ extension View {
     /// Put on a List or Form (screen or sheet) so the sky shows behind it, under the native toolbar.
     func bowSkyList(mood: SkyMood = .dawn, height: CGFloat = 520) -> some View {
         self.bowListBackground { Bow.mist.overlay(alignment: .top) { SkyBackground(mood: mood, height: height) } }
+            .bowSoftScrollEdge()
+    }
+    /// A soft top edge, so the toolbar's scroll edge effect doesn't draw a hard line through the sky.
+    func bowSoftScrollEdge() -> some View {
+        self.scrollEdgeEffectStyle(.soft, for: .top)
     }
     /// Put on the app root once: system controls pick up the brand tint.
     func bowAppTint() -> some View { self.tint(Bow.bow) }

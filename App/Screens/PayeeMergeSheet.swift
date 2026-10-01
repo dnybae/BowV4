@@ -49,7 +49,7 @@ struct PayeeMergeSheet: View {
                   Text(entry.name).foregroundStyle(Bow.ink)
                   Spacer(minLength: 12)
                   Text(entry.transactionCount, format: .number)
-                    .font(.subheadline)
+                    .font(.bowSubhead)
                     .foregroundStyle(Bow.inkSoft)
                 }
                 .contentShape(Rectangle())

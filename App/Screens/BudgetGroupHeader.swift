@@ -29,7 +29,7 @@ struct BudgetGroupHeader: View {
           Text(isCollapsed ? "Expand \(name)" : "Collapse \(name)")
         } icon: {
           Image(systemName: "chevron.right")
-            .font(.footnote.weight(.semibold))
+            .font(.bowFootnote.weight(.semibold))
             .rotationEffect(.degrees(isCollapsed ? 0 : 90))
         }
         .labelStyle(.iconOnly)

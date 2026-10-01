@@ -58,7 +58,7 @@ struct BudgetCardStack<Item: Identifiable, Row: View>: View {
     HStack(spacing: Bow.Space.s3) {
       content()
       Image(systemName: "chevron.right")
-        .font(.footnote.weight(.semibold))
+        .font(.bowFootnote.weight(.semibold))
         .foregroundStyle(Bow.inkFaint)
         .accessibilityHidden(true)
     }

@@ -76,12 +76,12 @@ struct SimpleFINAccountSetupScreen: View {
           Text(isDemoMode
             ? "This sample connection shows accounts already in Bow and one you can add. No bank is contacted."
             : "These are the accounts found in your SimpleFIN connection. Select any new accounts to add to Bow.")
-            .font(.subheadline)
+            .font(.bowSubhead)
             .foregroundStyle(Bow.inkSoft)
           if !isDemoMode {
             if let lastCheck = connection?.lastAttemptAt {
               Text("Last checked \(lastCheck.formatted(date: .abbreviated, time: .shortened))")
-                .font(.footnote)
+                .font(.bowFootnote)
                 .foregroundStyle(Bow.inkSoft)
             }
             Button("Refresh bank accounts", systemImage: "arrow.clockwise") {
@@ -188,11 +188,11 @@ struct SimpleFINAccountSetupScreen: View {
           Text(link.name)
             .font(.body.weight(.medium))
           Text("Already in Bow as \(accounts.first { $0.id == localID }?.name ?? "an existing account")")
-            .font(.subheadline)
+            .font(.bowSubhead)
             .foregroundStyle(Bow.inkSoft)
           if let reported = link.reportedBalance {
             Text("Bank-reported balance: \(BudgetMoney.formatted(bankAmount: reported, currencyCode: link.currencyCode))")
-              .font(.subheadline)
+              .font(.bowSubhead)
               .foregroundStyle(Bow.inkSoft)
           }
         }
@@ -216,17 +216,17 @@ struct SimpleFINAccountSetupScreen: View {
             Text(link.name)
             if let reported = link.reportedBalance {
               Text("Bank-reported balance: \(BudgetMoney.formatted(bankAmount: reported, currencyCode: link.currencyCode))")
-                .font(.subheadline).foregroundStyle(Bow.inkSoft)
+                .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
             } else {
               Text("Balance unavailable")
-                .font(.subheadline).foregroundStyle(Bow.inkSoft)
+                .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
             }
           }
         }
         .disabled(link.currencyCode != currencyCode)
         if link.currencyCode != currencyCode {
           Text("This account uses \(link.currencyCode); this Bow budget uses \(currencyCode).")
-            .font(.footnote).foregroundStyle(Bow.inkSoft)
+            .font(.bowFootnote).foregroundStyle(Bow.inkSoft)
         } else if selectedKeys.contains(key) {
           Picker("Account type", selection: Binding(
             get: { accountTypes[key] ?? .other },
@@ -238,7 +238,7 @@ struct SimpleFINAccountSetupScreen: View {
           }
           .pickerStyle(.menu)
           Text((accountTypes[key] ?? .other).explanation)
-            .font(.subheadline).foregroundStyle(Bow.inkSoft)
+            .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
           LabeledContent("Starting balance") {
             CurrencyAmountField("Starting balance", minor: Binding(
               get: { balanceDrafts[key, default: 0] },
@@ -249,7 +249,7 @@ struct SimpleFINAccountSetupScreen: View {
           if (accountTypes[key] ?? .other).kind == .liability,
              balanceDrafts[key, default: 0] > 0 {
             Text("Enter money owed as a negative balance.")
-              .font(.footnote).foregroundStyle(Bow.inkSoft)
+              .font(.bowFootnote).foregroundStyle(Bow.inkSoft)
           }
         }
       }

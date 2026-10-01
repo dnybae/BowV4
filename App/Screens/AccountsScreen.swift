@@ -129,10 +129,10 @@ struct AccountsScreen: View {
               .frame(width: 16)
               .accessibilityHidden(true)
             Text(title)
-              .font(.headline)
+              .font(.bowHeadline)
             Spacer(minLength: 8)
             Text(formattedTotal)
-              .font(.subheadline.weight(.semibold))
+              .font(.bowSubhead.weight(.semibold))
               .foregroundStyle(Bow.inkSoft)
               .monospacedDigit()
               .lineLimit(1)
@@ -181,7 +181,7 @@ struct AccountsScreen: View {
         HStack(spacing: Bow.Space.s1) {
           Text("View insights")
           Image(systemName: "chevron.right")
-            .font(.footnote.weight(.semibold))
+            .font(.bowFootnote.weight(.semibold))
             .accessibilityHidden(true)
         }
       }

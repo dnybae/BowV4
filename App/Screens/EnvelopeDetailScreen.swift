@@ -201,7 +201,7 @@ struct EnvelopeDetailScreen: View {
           Text(remaining == 0
             ? "Monthly target met"
             : "\(BudgetMoney.formatted(remaining, currencyCode: currencyCode)) left to assign this month")
-            .font(.footnote)
+            .font(.bowFootnote)
             .foregroundStyle(Bow.inkSoft)
         } else {
           Text("No target yet")
@@ -244,7 +244,7 @@ struct EnvelopeDetailScreen: View {
               VStack(alignment: .leading, spacing: 3) {
                 Text(schedule.payee)
                 Text("\(schedule.frequency.title) · \(BudgetMoney.formatted(schedule.amountMinor, currencyCode: currencyCode))")
-                  .font(.subheadline)
+                  .font(.bowSubhead)
                   .foregroundStyle(Bow.inkSoft)
               }
             }
@@ -297,7 +297,7 @@ struct EnvelopeDetailScreen: View {
                   .fontDesign(.rounded).monospacedDigit()
               }
               Text(allocation.date.formatted(date: .abbreviated, time: .omitted))
-                .font(.subheadline).foregroundStyle(Bow.inkSoft)
+                .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
             }
           }
         }

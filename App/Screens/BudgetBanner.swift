@@ -61,7 +61,7 @@ struct BudgetBanner: View {
       Spacer(minLength: 0)
       if notice.isActionable {
         Image(systemName: "chevron.right")
-          .font(.footnote.weight(.semibold))
+          .font(.bowFootnote.weight(.semibold))
           .foregroundStyle(Bow.inkFaint)
           .frame(maxHeight: .infinity)
           .accessibilityHidden(true)

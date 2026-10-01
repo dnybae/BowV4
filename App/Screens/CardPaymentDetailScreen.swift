@@ -145,7 +145,7 @@ struct CardPaymentDetailScreen: View {
                   .fontDesign(.rounded).monospacedDigit()
               }
               Text("Card purchases went over their envelopes. Covering them funds this payment.")
-                .font(.footnote)
+                .font(.bowFootnote)
                 .foregroundStyle(Bow.inkSoft)
               Button("Cover overspending", action: onCoverOverspending)
                 .bowPrimaryButton(size: .regular)
@@ -162,7 +162,7 @@ struct CardPaymentDetailScreen: View {
               Text(hasPayoffGoal
                 ? "Your payoff goal tracks this debt. Fund the payment a little each month."
                 : "Debt from before this month. A payoff goal spreads it over time.")
-                .font(.footnote)
+                .font(.bowFootnote)
                 .foregroundStyle(Bow.inkSoft)
               if !hasPayoffGoal {
                 Button("Set a payoff goal") { showingGoalEditor = true }
@@ -189,11 +189,11 @@ struct CardPaymentDetailScreen: View {
           Text(owed > start
             ? "Debt is \(BudgetMoney.formatted(owed - start, currencyCode: currencyCode)) above the goal’s starting balance."
             : "\(BudgetMoney.formatted(start - owed, currencyCode: currencyCode)) paid down from \(BudgetMoney.formatted(start, currencyCode: currencyCode))")
-            .font(.footnote)
+            .font(.bowFootnote)
             .foregroundStyle(Bow.inkSoft)
         } else {
           Text("Set a payoff goal to track progress from today’s balance.")
-            .font(.footnote)
+            .font(.bowFootnote)
             .foregroundStyle(Bow.inkSoft)
         }
         if let monthly = card.debtMonthlyTargetMinor {
@@ -217,7 +217,7 @@ struct CardPaymentDetailScreen: View {
               VStack(alignment: .leading, spacing: 3) {
                 Text(schedule.payee)
                 Text("\(schedule.frequency.title) · \(BudgetMoney.formatted(schedule.amountMinor, currencyCode: currencyCode))")
-                  .font(.subheadline).foregroundStyle(Bow.inkSoft)
+                  .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
               }
             }
             .disabled(isPastMonth)

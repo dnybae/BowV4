@@ -354,7 +354,7 @@ struct InsightsScreen: View {
                 Text(transaction.payee.isEmpty ? transaction.kind.title : transaction.payee)
                   .foregroundStyle(Bow.ink)
                 Text(transaction.date, style: .date)
-                  .font(.subheadline)
+                  .font(.bowSubhead)
                   .foregroundStyle(Bow.inkSoft)
               }
               Spacer()

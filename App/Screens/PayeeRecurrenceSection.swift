@@ -38,14 +38,14 @@ struct PayeeRecurrenceSection: View {
       Section {
         VStack(alignment: .leading, spacing: 4) {
           Text("\(recurrence.frequency.title) · about \(money(recurrence.amountMinor))")
-            .font(.headline)
+            .font(.bowHeadline)
             .foregroundStyle(Bow.ink)
           Text("Next around \(recurrence.nextDate.formatted(.dateTime.month(.abbreviated).day()))")
-            .font(.subheadline)
+            .font(.bowSubhead)
             .foregroundStyle(Bow.inkSoft)
           if let previous = recurrence.previousAmountMinor {
             Label("Up from \(money(previous))", systemImage: "arrow.up.right")
-              .font(.subheadline)
+              .font(.bowSubhead)
               .foregroundStyle(Bow.needsInk)
           }
         }

@@ -38,7 +38,7 @@ struct YNABImportScreen: View {
         if let preview {
           Section {
             Text("\(preview.groups.count) groups · \(preview.envelopeCount) envelopes")
-              .font(.headline)
+              .font(.bowHeadline)
           }
           .listRowBackground(Bow.card)
           ForEach(preview.groups) { group in

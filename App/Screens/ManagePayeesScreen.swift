@@ -129,13 +129,13 @@ struct ManagePayeesScreen: View {
           Text(entry.name)
           if let envelopeName {
             Label(envelopeName, systemImage: "envelope")
-              .font(.subheadline)
+              .font(.bowSubhead)
               .foregroundStyle(Bow.inkSoft)
           }
         }
         Spacer(minLength: 12)
         Text(entry.transactionCount, format: .number)
-          .font(.subheadline)
+          .font(.bowSubhead)
           .foregroundStyle(Bow.inkSoft)
       }
       .accessibilityElement(children: .combine)

@@ -59,10 +59,10 @@ struct PayeeLogoFinderSheet: View {
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
-              Text(payeeName).font(.headline)
+              Text(payeeName).font(.bowHeadline)
               Text(isLoading ? "Looking for a logo…" : previewImage == nil
                    ? "No logo found" : "Logo found")
-                .font(.subheadline)
+                .font(.bowSubhead)
                 .foregroundStyle(Bow.inkSoft)
             }
           }
@@ -79,7 +79,7 @@ struct PayeeLogoFinderSheet: View {
             .keyboardType(.URL)
           if !validDomain {
             Text("Enter a domain like starbucks.com.")
-              .font(.footnote)
+              .font(.bowFootnote)
               .foregroundStyle(Bow.needsInk)
           }
         } footer: {

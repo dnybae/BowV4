@@ -106,7 +106,7 @@ struct ReconciliationScreen: View {
                   }
                   Spacer()
                   MoneyText(minor: entry.amountMinor, currencyCode: currencyCode,
-                            showsPlusSign: entry.amountMinor > 0, usesTrueMinus: true)
+                            showsPlusSign: entry.amountMinor > 0)
                     .monospacedDigit()
                     .foregroundStyle(Bow.ink)
                 }

@@ -10,6 +10,9 @@ struct CurrencyAmountField: View {
   var style: Style = .row
   /// Shows a row's title as an icon-tile label.
   var systemImage: String? = nil
+  /// Puts the cursor here as soon as the field is on screen, e.g. a new transaction's amount.
+  var focusOnAppear = false
+  @State private var isFocused = false
 
   enum Style {
     /// A form row with the title on the leading side and the amount trailing.
@@ -29,13 +32,14 @@ struct CurrencyAmountField: View {
   }
 
   init(_ title: String, minor: Binding<Int64>, currencyCode: String, allowsNegative: Bool = false,
-       style: Style = .row, systemImage: String? = nil) {
+       style: Style = .row, systemImage: String? = nil, focusOnAppear: Bool = false) {
     self.title = title
     _minor = minor
     self.currencyCode = currencyCode
     self.allowsNegative = allowsNegative
     self.style = style
     self.systemImage = systemImage
+    self.focusOnAppear = focusOnAppear
   }
 
   var body: some View {
@@ -47,7 +51,10 @@ struct CurrencyAmountField: View {
         BowFieldTitle(title: title, systemImage: systemImage)
       }
     case .hero:
-      field
+      VStack(spacing: Bow.Space.s1) {
+        field
+        focusMark
+      }
     case .editorHero:
       VStack(spacing: Bow.Space.s1) {
         Text(title)
@@ -55,6 +62,7 @@ struct CurrencyAmountField: View {
           .foregroundStyle(Bow.inkSoft)
           .accessibilityHidden(true)
         field
+        focusMark
       }
       .frame(maxWidth: .infinity)
     }
@@ -63,8 +71,19 @@ struct CurrencyAmountField: View {
   private var field: some View {
     CurrencyTextFieldRepresentable(
       title: title, minor: $minor, currencyCode: currencyCode, allowsNegative: allowsNegative,
-      heroSize: style.heroSize
+      heroSize: style.heroSize, focusOnAppear: focusOnAppear,
+      onFocusChange: { isFocused = $0 }
     )
+  }
+
+  /// A quiet brand underline under a hero amount while it's being edited.
+  private var focusMark: some View {
+    Capsule()
+      .fill(Bow.bow)
+      .frame(width: isFocused ? 44 : 12, height: 3)
+      .opacity(isFocused ? 1 : 0)
+      .bowAnimation(value: isFocused)
+      .accessibilityHidden(true)
   }
 }
 
@@ -75,6 +94,8 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
   var allowsNegative: Bool
   /// Point size of a hero amount; nil for a form row.
   var heroSize: CGFloat?
+  var focusOnAppear = false
+  var onFocusChange: (Bool) -> Void = { _ in }
   private var isHero: Bool { heroSize != nil }
   @Environment(\.isEnabled) private var isEnabled
 
@@ -110,6 +131,7 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
     field.setContentHuggingPriority(.defaultLow, for: .horizontal)
     field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     field.inputAccessoryView = context.coordinator.makeAccessoryBar(for: field)
+    field.focusOnAppear = focusOnAppear
     return field
   }
 
@@ -138,7 +160,7 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
     func render(in field: UITextField) {
       if parent.minor != 0 || !parent.allowsNegative { isNegativeZero = false }
       let formatted = BudgetMoney.formatted(parent.minor, currencyCode: parent.currencyCode)
-      let text = isNegativeZero ? "-" + formatted : formatted
+      let text = isNegativeZero ? "\u{2212}" + formatted : formatted
       if field.text != text { field.text = text }
       field.textColor = parent.minor == 0 ? UIColor(Bow.inkSoft) : UIColor(Bow.ink)
     }
@@ -162,7 +184,12 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
       return false
     }
 
-    func textFieldDidBeginEditing(_ textField: UITextField) { moveCaretToEnd(textField) }
+    func textFieldDidBeginEditing(_ textField: UITextField) {
+      moveCaretToEnd(textField)
+      parent.onFocusChange(true)
+    }
+
+    func textFieldDidEndEditing(_ textField: UITextField) { parent.onFocusChange(false) }
 
     func textFieldDidChangeSelection(_ textField: UITextField) {
       guard let range = textField.selectedTextRange,
@@ -209,6 +236,17 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
 }
 
 final class CurrencyInputTextField: UITextField {
+  /// Becomes first responder the first time the field lands in a window.
+  var focusOnAppear = false
+  private var didFocusOnAppear = false
+
+  override func didMoveToWindow() {
+    super.didMoveToWindow()
+    guard focusOnAppear, !didFocusOnAppear, window != nil else { return }
+    didFocusOnAppear = true
+    DispatchQueue.main.async { [weak self] in _ = self?.becomeFirstResponder() }
+  }
+
   override func closestPosition(to point: CGPoint) -> UITextPosition? { endOfDocument }
 
   override func selectionRects(for range: UITextRange) -> [UITextSelectionRect] { [] }

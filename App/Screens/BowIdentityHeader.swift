@@ -27,7 +27,7 @@ struct BowIdentityHeader<Tile: View>: View {
       }
       .accessibilityElement(children: .combine)
       if let amountMinor {
-        MoneyText(minor: amountMinor, currencyCode: currencyCode, usesTrueMinus: true)
+        MoneyText(minor: amountMinor, currencyCode: currencyCode)
           .bowHeroFont()
           .foregroundStyle(amountColor)
           .lineLimit(1)

@@ -98,10 +98,10 @@ struct SimpleFINReviewScreen: View {
                 Text(candidate.payee.isEmpty ? "Transfer" : candidate.payee)
                   .foregroundStyle(Bow.ink)
                 Text(candidate.date.formatted(date: .abbreviated, time: .omitted))
-                  .font(.subheadline).foregroundStyle(Bow.inkSoft)
+                  .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
                 if candidate.amountMinor != record.amountMinor {
                   Text("Amount differs; matching uses the posted bank amount")
-                    .font(.subheadline).foregroundStyle(Bow.needsInk)
+                    .font(.bowSubhead).foregroundStyle(Bow.needsInk)
                 }
               }
               Spacer(minLength: 6)
@@ -151,7 +151,7 @@ struct SimpleFINReviewScreen: View {
                   Text("Add as new transaction")
                     .foregroundStyle(Bow.ink)
                   Text("Use this if you have not entered it before")
-                    .font(.subheadline).foregroundStyle(Bow.inkSoft)
+                    .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
                 }
               }
               .contentShape(Rectangle())

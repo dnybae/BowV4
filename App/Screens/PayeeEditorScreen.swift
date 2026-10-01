@@ -54,13 +54,8 @@ struct PayeeEditorScreen: View {
   var body: some View {
     NavigationStack {
       Form {
-        Section("Payee") {
-          TextField("Payee name", text: $name)
-            .textInputAutocapitalization(.words)
-        }
-        .listRowBackground(Bow.card)
         Section {
-          HStack(spacing: 12) {
+          BowNameHeader(placeholder: "Payee name", name: $name) {
             MerchantLogoView(
               merchantName: trimmedName,
               appearanceOverride: PayeeLogoAppearance(
@@ -69,41 +64,52 @@ struct PayeeEditorScreen: View {
                 domain: merchantDomain,
                 imageData: customLogoData
               ),
-              size: 52
+              size: 64, style: .glossy
             )
-            VStack(alignment: .leading, spacing: 3) {
-              Text("Payee icon")
-              Text(logoSource.title)
-                .font(.subheadline)
-                .foregroundStyle(Bow.inkSoft)
+            .overlay(alignment: .bottomTrailing) {
+              Image(systemName: "pencil")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(Bow.onBow)
+                .frame(width: 22, height: 22)
+                .background(Bow.bowSolid, in: Circle())
+                .overlay(Circle().stroke(Bow.card, lineWidth: 2))
+                .offset(x: 6, y: 6)
+                .accessibilityHidden(true)
             }
           }
-          .padding(.vertical, 3)
-
+          .textInputAutocapitalization(.words)
+        }
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets())
+        Section {
+          Button { showingFindLogo = true } label: {
+            Label("Find logo", systemImage: "globe").labelStyle(.bowTile)
+          }
+          .disabled(trimmedName.isEmpty)
           PhotosPicker(selection: $selectedPhoto, matching: .images) {
-            Label("Choose photo", systemImage: "photo")
+            Label("Choose photo", systemImage: "photo").labelStyle(.bowTile)
           }
           if isImportingLogo {
             ProgressView("Loading image…")
           }
-          Button("Choose file", systemImage: "folder") { showingFiles = true }
-          Button("Find logo", systemImage: "magnifyingglass") { showingFindLogo = true }
-            .disabled(trimmedName.isEmpty)
+          Button { showingFiles = true } label: {
+            Label("Choose file", systemImage: "doc").labelStyle(.bowTile)
+          }
           if logoSource != .system {
-            Button("Use default icon", systemImage: "storefront.fill") {
-              logoSource = .system
+            Button { logoSource = .system } label: {
+              Label("Use default icon", systemImage: "storefront").labelStyle(.bowTile)
             }
           }
         } header: {
           Text("Icon")
         } footer: {
-          Text("Every payee starts with a native icon. You can use your own image or choose a Logo.dev logo instead.")
+          Text("\(logoSource.title). Every payee starts with a native icon. You can use your own image or choose a Logo.dev logo instead.")
         }
         .listRowBackground(Bow.card)
         Section {
           EnvelopeSelectionField(
             title: "Default envelope", selection: $defaultEnvelopeID,
-            envelopes: envelopes, noneTitle: "None"
+            envelopes: envelopes, noneTitle: "None", systemImage: "square.grid.2x2"
           )
         } footer: {
           Text("Bow suggests this envelope when you enter this payee on an expense. You can always choose a different one.")
@@ -114,14 +120,15 @@ struct PayeeEditorScreen: View {
             Text(bankName)
           }
           .onDelete { bankNames.remove(atOffsets: $0) }
-          HStack {
+          HStack(spacing: Bow.Space.s3) {
+            BowTileIcon(systemImage: "plus")
             TextField("Add bank name", text: $newBankName)
               .textInputAutocapitalization(.characters)
               .autocorrectionDisabled()
               .onSubmit(addBankName)
-            Button("Add bank name", systemImage: "plus.circle.fill", action: addBankName)
-              .labelStyle(.iconOnly)
-              .disabled(trimmedNewBankName.isEmpty)
+            if !trimmedNewBankName.isEmpty {
+              Button("Add", action: addBankName)
+            }
           }
         } header: {
           Text("Bank names")
@@ -130,24 +137,18 @@ struct PayeeEditorScreen: View {
         }
         .listRowBackground(Bow.card)
         Section {
-          TextField("Add a note", text: $notes, axis: .vertical)
-            .lineLimit(2...6)
-        } header: {
-          Text("Notes")
+          BowNotesRow(notes: $notes)
         } footer: {
           Text("Keep details like a loyalty number or renewal month.")
         }
         .listRowBackground(Bow.card)
         if let entry, entry.transactionCount == 0 && entry.scheduleCount == 0,
            entry.ruleID != nil {
-          Section {
-            Button("Delete payee", role: .destructive) { showingDelete = true }
-          }
-          .listRowBackground(Bow.card)
+          BowDestructiveSection("Delete payee") { showingDelete = true }
         }
       }
-      .bowListBackground()
-      .navigationTitle(entry == nil ? "New payee" : "Edit payee")
+      .bowSkyList(mood: .dawn, height: 420)
+      .navigationTitle(entry == nil ? "New payee" : "Payee")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {

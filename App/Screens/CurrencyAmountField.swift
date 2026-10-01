@@ -8,6 +8,8 @@ struct CurrencyAmountField: View {
   var currencyCode: String
   var allowsNegative: Bool = false
   var style: Style = .row
+  /// Shows a row's title as an icon-tile label.
+  var systemImage: String? = nil
 
   enum Style {
     /// A form row with the title on the leading side and the amount trailing.
@@ -27,18 +29,23 @@ struct CurrencyAmountField: View {
   }
 
   init(_ title: String, minor: Binding<Int64>, currencyCode: String, allowsNegative: Bool = false,
-       style: Style = .row) {
+       style: Style = .row, systemImage: String? = nil) {
     self.title = title
     _minor = minor
     self.currencyCode = currencyCode
     self.allowsNegative = allowsNegative
     self.style = style
+    self.systemImage = systemImage
   }
 
   var body: some View {
     switch style {
     case .row:
-      LabeledContent(title) { field }
+      LabeledContent {
+        field
+      } label: {
+        BowFieldTitle(title: title, systemImage: systemImage)
+      }
     case .hero:
       field
     case .editorHero:

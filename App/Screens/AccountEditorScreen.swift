@@ -43,52 +43,57 @@ struct AccountEditorScreen: View {
   var body: some View {
     Form {
       Section {
-        TextField("Account name", text: $name)
-          .submitLabel(.done)
+        BowNameHeader("Account name", name: $name, systemImage: type.kind.systemImage)
+      }
+      .listRowBackground(Color.clear)
+      .listRowInsets(EdgeInsets())
+
+      Section {
         if availableTypes.count > 1 {
-          Picker("Type", selection: $type) {
+          Picker(selection: $type) {
             ForEach(availableTypes) { option in
               Text(option.title).tag(option)
             }
+          } label: {
+            Label("Type", systemImage: type.kind.systemImage).labelStyle(.bowTile)
           }
           .pickerStyle(.menu)
         } else {
-          LabeledContent("Type", value: type.title)
+          BowTileValueRow("Type", systemImage: type.kind.systemImage, value: type.title)
         }
-      } header: {
-        Text("Account")
-      } footer: {
-        Text(type.explanation)
-      }
-      .listRowBackground(Bow.card)
-
-      Section {
-        CurrencyAmountField(account == nil ? "Starting balance" : "Current balance",
-                            minor: $openingBalanceMinor, currencyCode: currencyCode, allowsNegative: true)
+        CurrencyAmountField(account == nil ? "Starting balance" : "Balance",
+                            minor: $openingBalanceMinor, currencyCode: currencyCode, allowsNegative: true,
+                            systemImage: "dollarsign")
         if type.kind == .liability && (parsedOpeningBalance ?? 0) > 0 {
           Text("Enter money owed as a negative balance.")
             .font(.footnote)
             .foregroundStyle(Bow.overInk)
         }
-      } header: {
-        Text("Balance")
+        BowNotesRow(notes: $note)
       } footer: {
-        Text(account == nil
+        Text(type.explanation + " " + (account == nil
           ? "Enter the balance this account should start with. New transactions will change it."
-          : "Changing the current balance records a dated adjustment. Earlier net worth history stays intact.")
+          : "Changing the current balance records a dated adjustment. Earlier net worth history stays intact."))
       }
       .listRowBackground(Bow.card)
 
-      Section("Note") {
-        TextField("Optional note", text: $note, axis: .vertical)
-          .lineLimit(2...4)
-      }
-      .listRowBackground(Bow.card)
       if let account, !isDemoMode, !simpleFINConnections.isEmpty {
         Section {
           if let link = simpleFINLinks.first(where: { $0.localAccountID == account.id }) {
-            LabeledContent("Bank account", value: link.name)
-            Button("Relink bank account", systemImage: "link") {
+            Label {
+              VStack(alignment: .leading, spacing: 2) {
+                Text("Linked to \(link.name)")
+                  .foregroundStyle(Bow.ink)
+                Text("Synced with SimpleFIN")
+                  .font(.bowSubhead)
+                  .foregroundStyle(Bow.inkSoft)
+              }
+            } icon: {
+              Image(systemName: "link")
+            }
+            .labelStyle(.bowTile)
+            .accessibilityElement(children: .combine)
+            Button("Relink bank account") {
               showingBankLinkPicker = true
             }
             Button("Unlink bank account", role: .destructive) {
@@ -109,8 +114,8 @@ struct AccountEditorScreen: View {
         .listRowBackground(Bow.card)
       }
     }
-    .bowListBackground()
-    .navigationTitle(account == nil ? "Private account" : "Edit account")
+    .bowSkyList(mood: .dawn, height: 420)
+    .navigationTitle(account == nil ? "Private account" : "Account")
     .task {
       guard let account, !loadedCurrentBalance else { return }
       let displayedBeforeLoad = openingBalanceMinor

@@ -15,6 +15,7 @@ struct EnvelopeDetailScreen: View {
   var allocations: [BudgetAllocation]
   var schedules: [BudgetSchedule]
   var onEdit: () -> Void
+  var onEditTarget: () -> Void
   var onMoveMoney: (BudgetBucket, BudgetBucket) -> Void
   var onCoverOverspending: () -> Void
   var onSelectTransaction: (UUID) -> Void
@@ -384,7 +385,7 @@ struct EnvelopeDetailScreen: View {
         }
         .disabled(availableMinor <= 0 || isPastMonth)
       }
-      BowActionTile(targetActionTitle, systemImage: "dollarsign", action: onEdit)
+      BowActionTile(targetActionTitle, systemImage: "dollarsign", action: onEditTarget)
         .disabled(isPastMonth)
     }
   }

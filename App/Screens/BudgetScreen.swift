@@ -16,6 +16,7 @@ struct BudgetScreen: View {
   var onAddGroup: () -> Void
   var onAddEnvelope: () -> Void
   var onEditEnvelope: (UUID) -> Void
+  var onEditEnvelopeTarget: (UUID) -> Void
   var onImportYNAB: () -> Void
   var onMoveMoney: (BudgetBucket, BudgetBucket) -> Void
   var onCoverOverspending: (CoverOverspendingScope) -> Void
@@ -251,6 +252,7 @@ struct BudgetScreen: View {
             accounts: accounts, envelopes: envelopes,
             allocations: allocations, schedules: schedules,
             onEdit: { onEditEnvelope(envelope.id) },
+            onEditTarget: { onEditEnvelopeTarget(envelope.id) },
             onMoveMoney: onMoveMoney,
             onCoverOverspending: { onCoverOverspending(.envelope(envelope.id)) },
             onSelectTransaction: onSelectTransaction,

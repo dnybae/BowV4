@@ -150,6 +150,7 @@ private struct BudgetHomeView: View {
                 onAddGroup: { activeSheet = .newGroup },
                 onAddEnvelope: { activeSheet = .newEnvelope },
                 onEditEnvelope: { activeSheet = .editEnvelope($0) },
+                onEditEnvelopeTarget: { activeSheet = .editEnvelopeTarget($0) },
                 onImportYNAB: { activeSheet = .importYNAB },
                 onMoveMoney: { source, target in
                   activeSheet = .moveMoney(source, target, displayedBudgetMonth)
@@ -352,6 +353,13 @@ private struct BudgetHomeView: View {
               nextOrder: envelopes.count,
               envelope: envelopes.first { $0.id == id }
             )
+          case .editEnvelopeTarget(let id):
+            EnvelopeEditorScreen(
+              groups: groups.filter { !$0.isSystem },
+              nextOrder: envelopes.count,
+              envelope: envelopes.first { $0.id == id },
+              layout: .target
+            )
           case .importYNAB:
             YNABImportScreen(groups: groups, envelopes: envelopes)
           case .moveMoney(let source, let target, let month):
@@ -505,6 +513,7 @@ private enum BowSheet: Identifiable {
   case newGroup
   case newEnvelope
   case editEnvelope(UUID)
+  case editEnvelopeTarget(UUID)
   case importYNAB
   case moveMoney(BudgetBucket, BudgetBucket, Date)
   case coverOverspending(Date, CoverOverspendingScope)
@@ -522,6 +531,7 @@ private enum BowSheet: Identifiable {
     case .newGroup: "newGroup"
     case .newEnvelope: "newEnvelope"
     case .editEnvelope(let id): "editEnvelope-\(id)"
+    case .editEnvelopeTarget(let id): "editEnvelopeTarget-\(id)"
     case .importYNAB: "importYNAB"
     case .moveMoney: "moveMoney"
     case .coverOverspending: "coverOverspending"

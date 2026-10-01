@@ -19,6 +19,9 @@ struct AccountEditorScreen: View {
   @State private var loadedCurrentBalance = false
   @State private var showingBankLinkPicker = false
   @State private var showingStopBankSync = false
+  @State private var initialFields: AccountEditorFields?
+  @State private var isSaving = false
+  @Environment(\.bowToasts) private var toasts
 
   init(currencyCode: String, account: BudgetAccount? = nil,
        suggestedName: String = "", suggestedBalanceMinor: Int64? = nil,
@@ -32,11 +35,11 @@ struct AccountEditorScreen: View {
     _note = State(initialValue: account?.note ?? "")
   }
 
-  /// Name, type or note changed. The balance loads after opening, so it isn't compared.
-  private var hasChanges: Bool {
-    name != (account?.name ?? "") || note != (account?.note ?? "")
-      || (account != nil && type != account?.accountType)
+  private var fields: AccountEditorFields {
+    AccountEditorFields(name: name, type: type, balance: openingBalanceMinor, note: note)
   }
+
+  private var hasChanges: Bool { initialFields.map { fields != $0 } ?? false }
 
   private var parsedOpeningBalance: Int64? {
     openingBalanceMinor
@@ -120,15 +123,19 @@ struct AccountEditorScreen: View {
         .listRowBackground(Bow.card)
       }
     }
+    .disabled(isSaving)
     .bowSkyList(mood: .dawn, height: 420)
+    .onAppear { if initialFields == nil { initialFields = fields } }
     .navigationTitle(account == nil ? "Private account" : "Account")
     .task {
+      if initialFields == nil { initialFields = fields }
       guard let account, !loadedCurrentBalance else { return }
       let displayedBeforeLoad = openingBalanceMinor
       let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
       if let report = try? await repository.accountReport(at: Date(), currencyCode: currencyCode) {
         if openingBalanceMinor == displayedBeforeLoad {
           openingBalanceMinor = report.balances[account.id] ?? account.openingBalanceMinor
+          initialFields?.balance = openingBalanceMinor
         }
       }
       loadedCurrentBalance = true
@@ -136,13 +143,12 @@ struct AccountEditorScreen: View {
     .navigationBarTitleDisplayMode(.inline)
     .bowEditorSheet(hasChanges: hasChanges)
     .toolbar {
-      if account != nil {
-        BowCancelButton(hasChanges: hasChanges) { dismiss() }
-      }
+      BowCancelButton(hasChanges: hasChanges) { dismiss() }
     }
+    .navigationBarBackButtonHidden(hasChanges)
     // One primary action at the bottom, creating or editing.
     .safeAreaInset(edge: .bottom) {
-      BowBottomAction(account == nil ? "Create account" : "Save changes", isEnabled: canSave) {
+      BowBottomAction(account == nil ? "Create account" : "Save changes", isEnabled: canSave && !isSaving) {
         Task { await save() }
       }
     }
@@ -176,6 +182,9 @@ struct AccountEditorScreen: View {
   }
 
   private func save() async {
+    guard !isSaving else { return }
+    isSaving = true
+    defer { isSaving = false }
     guard let minor = parsedOpeningBalance else {
       errorMessage = "Enter a valid balance with no more than two decimal places."
       return
@@ -206,10 +215,18 @@ struct AccountEditorScreen: View {
           in: modelContext
         )
       }
+      toasts?.show(.saved("\(account == nil ? "Created" : "Saved") · \(saved.name)"))
       onSaved?(saved)
       dismiss()
     } catch {
       errorMessage = error.localizedDescription
     }
   }
+}
+
+private struct AccountEditorFields: Equatable {
+  var name: String
+  var type: BudgetAccountType
+  var balance: Int64
+  var note: String
 }

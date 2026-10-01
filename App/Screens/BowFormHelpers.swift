@@ -10,14 +10,39 @@ extension View {
   }
 
   /// An error alert driven by an optional message: it shows while the message is set.
+  @ViewBuilder
   func bowErrorAlert(_ title: String, message: Binding<String?>) -> some View {
-    alert(title, isPresented: Binding(
-      get: { message.wrappedValue != nil },
-      set: { if !$0 { message.wrappedValue = nil } }
-    )) {
-      Button("OK") { message.wrappedValue = nil }
-    } message: {
-      Text(message.wrappedValue ?? "")
+    if #available(iOS 27.0, *) {
+      alert(title, item: message) { _ in
+        Button("OK") { message.wrappedValue = nil }
+      } message: { value in
+        Text(value)
+      }
+    } else {
+      alert(title, isPresented: Binding(
+        get: { message.wrappedValue != nil },
+        set: { if !$0 { message.wrappedValue = nil } }
+      ), presenting: message.wrappedValue) { _ in
+        Button("OK") { message.wrappedValue = nil }
+      } message: { value in
+        Text(value)
+      }
+    }
+  }
+
+  @ViewBuilder
+  func bowConfirmationDialog<Item, Actions: View, Message: View>(
+    _ title: String, item: Binding<Item?>,
+    @ViewBuilder actions: @escaping (Item) -> Actions,
+    @ViewBuilder message: @escaping (Item) -> Message
+  ) -> some View {
+    if #available(iOS 27.0, *) {
+      confirmationDialog(title, item: item, actions: actions, message: message)
+    } else {
+      confirmationDialog(title, isPresented: Binding(
+        get: { item.wrappedValue != nil },
+        set: { if !$0 { item.wrappedValue = nil } }
+      ), presenting: item.wrappedValue, actions: actions, message: message)
     }
   }
 }

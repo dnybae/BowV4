@@ -15,6 +15,7 @@ struct MoneyMoveScreen: View {
   @State private var errorMessage: String?
   @State private var snapshot: BudgetSnapshot?
   @State private var refreshVersion = 0
+  @State private var isSaving = false
   @Environment(\.bowToasts) private var toasts
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -115,6 +116,7 @@ struct MoneyMoveScreen: View {
         }
         .listRowBackground(Bow.card)
       }
+      .disabled(isSaving)
       .bowSkyList(mood: .dawn, height: 420)
       .bowEditorSheet(hasChanges: amountMinor != 0)
       .bowAnimation(value: isOverAvailable)
@@ -132,7 +134,7 @@ struct MoneyMoveScreen: View {
         BowCancelButton(hasChanges: amountMinor != 0) { dismiss() }
       }
       .safeAreaInset(edge: .bottom) {
-        BowBottomAction(isEnabled: isValid, action: { Task { await save() } }) {
+        BowBottomAction(isEnabled: isValid && !isSaving, action: { Task { await save() } }) {
           HStack(spacing: Bow.Space.s1) {
             Text("Move")
             MoneyText(minor: enteredMinor ?? 0, currencyCode: currencyCode)
@@ -200,6 +202,9 @@ struct MoneyMoveScreen: View {
   }
 
   private func save() async {
+    guard !isSaving else { return }
+    isSaving = true
+    defer { isSaving = false }
     guard let minor = enteredMinor, minor > 0 else {
       errorMessage = "Enter an amount greater than zero."
       return

@@ -6,9 +6,10 @@ struct AddAccountFlowScreen: View {
   @Query private var connections: [SimpleFINConnection]
   var currencyCode: String
   var isDemoMode: Bool
+  @State private var path: [AccountSetupRoute] = []
 
   var body: some View {
-    NavigationStack {
+    NavigationStack(path: $path) {
       List {
         Section {
           Text("How do you want to track it?")
@@ -20,9 +21,7 @@ struct AddAccountFlowScreen: View {
         }
 
         Section {
-          NavigationLink {
-            SimpleFINAccountSetupScreen(isDemoMode: isDemoMode, onDone: { dismiss() })
-          } label: {
+          NavigationLink(value: AccountSetupRoute.bank) {
             optionRow(
               title: "Connect a bank",
               detail: connections.isEmpty
@@ -38,9 +37,7 @@ struct AddAccountFlowScreen: View {
         .listRowBackground(Bow.card)
 
         Section {
-          NavigationLink {
-            AccountEditorScreen(currencyCode: currencyCode) { _ in dismiss() }
-          } label: {
+          NavigationLink(value: AccountSetupRoute.manual) {
             optionRow(
               title: "Track it yourself",
               detail: "Enter a balance and add transactions by hand, or import a bank file.",
@@ -55,8 +52,18 @@ struct AddAccountFlowScreen: View {
       .navigationTitle("Add account")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }
+        if path.isEmpty {
+          ToolbarItem(placement: .cancellationAction) {
+            Button("Cancel") { dismiss() }
+          }
+        }
+      }
+      .navigationDestination(for: AccountSetupRoute.self) { route in
+        switch route {
+        case .bank:
+          SimpleFINAccountSetupScreen(isDemoMode: isDemoMode, onDone: { dismiss() })
+        case .manual:
+          AccountEditorScreen(currencyCode: currencyCode) { _ in dismiss() }
         }
       }
     }
@@ -87,4 +94,8 @@ struct AddAccountFlowScreen: View {
     .padding(.vertical, Bow.Space.s3)
     .accessibilityElement(children: .combine)
   }
+}
+
+private enum AccountSetupRoute: Hashable {
+  case bank, manual
 }

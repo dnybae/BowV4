@@ -132,7 +132,7 @@ struct InsightsScreen: View {
           PointMark(x: .value("Month", last.month, unit: .month), y: .value("Net Worth", Double(last.netWorthMinor) / 100))
             .symbol {
               Image(systemName: "arrowtriangle.right.fill")
-                .font(.caption)
+                .font(.bowCaption)
                 .foregroundStyle(Bow.bow)
             }
             .annotation(position: .bottom, alignment: .trailing, spacing: 10) {
@@ -400,7 +400,7 @@ struct InsightsScreen: View {
         }
         .insightCard()
       }
-      .scenePadding(.horizontal)
+      .padding(.horizontal, Bow.Space.s5)
       .padding(.top, Bow.Space.s4)
       .padding(.bottom, Bow.Space.s6)
       .frame(maxWidth: .infinity, alignment: .leading)

@@ -238,6 +238,7 @@ struct TransactionDetailSheet: View {
         }
       }
     }
+    .bowToastHost()
   }
 }
 

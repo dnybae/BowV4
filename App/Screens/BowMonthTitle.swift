@@ -19,13 +19,10 @@ struct BowMonthTitle: View {
       }
       .id(month)
       .transition(reduceMotion ? .opacity : .push(from: direction))
-      if isLoading {
-        ProgressView()
-          .controlSize(.small)
-          .accessibilityLabel("Loading month")
-      }
     }
     .clipped()
+    .bowShimmer(isActive: isLoading)
+    .accessibilityValue(isLoading ? "Calculating balances" : "")
     .bowAnimation(value: month)
     .accessibilityElement(children: .combine)
     .accessibilityAddTraits(.isHeader)

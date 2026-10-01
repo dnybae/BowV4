@@ -55,6 +55,7 @@ struct CoverOverspendingScreen: View {
         refreshVersion += 1
       }
     }
+    .bowToastHost()
   }
 
   @ViewBuilder
@@ -63,7 +64,7 @@ struct CoverOverspendingScreen: View {
       if let snapshot {
         CoverEnvelopeScreen(
           envelopeID: envelopeID, currencyCode: currencyCode, month: month,
-          snapshot: snapshot, envelopes: envelopes, groups: groups
+          snapshot: snapshot, envelopes: envelopes, groups: groups, onCancel: { dismiss() }
         ) {
           dismiss()
         }
@@ -72,8 +73,10 @@ struct CoverOverspendingScreen: View {
       }
     }
     .toolbar {
-      ToolbarItem(placement: .cancellationAction) {
-        Button("Cancel") { dismiss() }
+      if snapshot == nil {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") { dismiss() }
+        }
       }
     }
   }
@@ -109,15 +112,17 @@ struct CoverOverspendingScreen: View {
       .navigationSubtitle(cardName.map { "Spent on \($0)" } ?? "")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .confirmationAction) {
-          Button("Done", systemImage: "checkmark") { dismiss() }
+        if path.isEmpty {
+          ToolbarItem(placement: .confirmationAction) {
+            Button("Done", systemImage: "checkmark") { dismiss() }
+          }
         }
       }
       .navigationDestination(for: UUID.self) { envelopeID in
         if let snapshot {
           CoverEnvelopeScreen(
             envelopeID: envelopeID, currencyCode: currencyCode, month: month,
-            snapshot: snapshot, envelopes: envelopes, groups: groups
+            snapshot: snapshot, envelopes: envelopes, groups: groups, onCancel: { path.removeAll() }
           ) {
             coveredCount += 1
             path.removeAll()
@@ -128,6 +133,7 @@ struct CoverOverspendingScreen: View {
         guard isEmpty == true, coveredCount > 0 else { return }
         Task { @MainActor in
           try? await Task.sleep(for: .milliseconds(700))
+          guard !Task.isCancelled else { return }
           dismiss()
         }
       }

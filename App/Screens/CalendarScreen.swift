@@ -65,7 +65,7 @@ struct CalendarScreen: View {
         selectedDayHeader
         agenda
       }
-      .scenePadding(.horizontal)
+      .padding(.horizontal, Bow.Space.s5)
       .padding(.top, Bow.Space.s2)
       .padding(.bottom, Bow.Space.s6)
     }

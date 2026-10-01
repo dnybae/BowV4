@@ -128,7 +128,9 @@ struct TransactionEditorScreen: View {
 
   private var fields: EditorFields {
     EditorFields(kind: kind, accountID: accountID, destinationID: destinationID, envelopeID: envelopeID,
-                 amountMinor: amountMinor, payee: payee, notes: notes, date: date, isScheduled: isScheduled)
+                 amountMinor: amountMinor, payee: payee, notes: notes, date: date, isScheduled: isScheduled,
+                 recurrence: recurrence, merchantDomain: merchantDomain,
+                 linkScheduledBill: linkScheduledBill, matchChoice: matchChoice)
   }
 
   private var hasChanges: Bool {
@@ -444,7 +446,11 @@ struct TransactionEditorScreen: View {
         Text("An imported transaction may already represent this payment. Updating it keeps one ledger entry and uses the details you entered.")
       }
       .bowErrorAlert("Couldn’t save transaction", message: $errorMessage)
-      .task(id: bankRecord?.id) { loadCandidates() }
+      .task(id: bankRecord?.id) {
+        let wasUnchanged = !hasChanges
+        loadCandidates()
+        if wasUnchanged { initialFields?.matchChoice = matchChoice }
+      }
       .onAppear {
         // A new bank item gets the same envelope suggestion the old review screen made.
         if reviewRecord != nil && envelopeID == nil { applyPayeeRule() }
@@ -756,6 +762,10 @@ private struct EditorFields: Equatable {
   var notes: String
   var date: Date
   var isScheduled: Bool
+  var recurrence: ScheduleFrequency
+  var merchantDomain: String?
+  var linkScheduledBill: Bool
+  var matchChoice: BankMatchChoice?
 }
 
 private struct PayeeDefaultsTrigger: Equatable {
@@ -908,7 +918,7 @@ private struct BankMatchSection: View {
     } label: {
       HStack(spacing: Bow.Space.s3) {
         Image(systemName: choice == value ? "largecircle.fill.circle" : "circle")
-          .font(.title3)
+          .font(.bowIconTitle)
           .contentTransition(.symbolEffect(.replace))
           .foregroundStyle(choice == value ? AnyShapeStyle(.tint) : AnyShapeStyle(Bow.inkFaint))
           .accessibilityHidden(true)

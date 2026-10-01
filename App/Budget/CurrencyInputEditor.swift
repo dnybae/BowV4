@@ -20,10 +20,12 @@ struct CurrencyInputEditor {
   }
 
   static func pasted(_ text: String, into minor: Int64, allowsNegative: Bool) -> Int64 {
-    let symbols = CharacterSet.decimalDigits.union(CharacterSet(charactersIn: ".,-"))
+    let symbols = CharacterSet.decimalDigits.union(CharacterSet(charactersIn: ".,-−"))
     let cleaned = String(text.unicodeScalars.filter(symbols.contains))
     guard var parsed = BudgetMoney.parseMinor(cleaned) else { return appending(text, to: minor) }
+    // Reject oversized values before taking abs (Int64.min cannot be made positive).
+    guard String(parsed.magnitude).count <= maximumDigits else { return minor }
     if !allowsNegative { parsed = abs(parsed) }
-    return String(parsed.magnitude).count <= maximumDigits ? parsed : minor
+    return parsed
   }
 }

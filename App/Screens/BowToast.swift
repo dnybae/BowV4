@@ -68,6 +68,9 @@ extension View {
 private struct BowToastHost: ViewModifier {
   @Environment(\.bowToasts) private var center
   @State private var hostID = UUID()
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  /// Height of an inline navigation bar, so the toast clears it.
+  private static let navigationBarClearance: CGFloat = 58
 
   private var isFrontmost: Bool { center?.hosts.last == hostID }
   private var visibleToast: BowToast? { isFrontmost ? center?.current : nil }
@@ -78,7 +81,9 @@ private struct BowToastHost: ViewModifier {
         if let toast = visibleToast {
           BowToastView(toast: toast) { center?.dismiss(toast) }
             .padding(.horizontal, Bow.Space.s4)
-            .transition(.move(edge: .top).combined(with: .opacity))
+            // Just below the navigation bar, so glass never sits on the bar's own glass controls.
+            .padding(.top, Self.navigationBarClearance)
+            .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
             .task(id: toast.id) {
               try? await Task.sleep(for: .seconds(2.4))
               if !Task.isCancelled { center?.dismiss(toast) }
@@ -86,11 +91,13 @@ private struct BowToastHost: ViewModifier {
         }
       }
       .bowAnimation(value: visibleToast?.id)
-      .sensoryFeedback(trigger: visibleToast?.id) { _, _ in
-        switch visibleToast?.feedback {
-        case .success: .success
-        case .moved: .impact(weight: .light)
-        case .quiet, nil: nil
+      .sensoryFeedback(trigger: center?.current?.id) { _, _ in
+        // Moving a toast from a closing sheet to its parent must not replay its haptic.
+        guard isFrontmost else { return nil }
+        switch center?.current?.feedback {
+        case .success: return .success
+        case .moved: return .impact(weight: .light)
+        case .quiet, nil: return nil
         }
       }
       .onAppear { center?.register(hostID) }
@@ -99,6 +106,7 @@ private struct BowToastHost: ViewModifier {
 }
 
 private struct BowToastView: View {
+  @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   var toast: BowToast
   var onDismiss: () -> Void
 
@@ -109,7 +117,7 @@ private struct BowToastView: View {
           .font(.bowSubhead.weight(.semibold))
           .foregroundStyle(Bow.ink)
           .monospacedDigit()
-          .lineLimit(2)
+          .fixedSize(horizontal: false, vertical: true)
       } icon: {
         Image(systemName: toast.systemImage)
           .foregroundStyle(Bow.fundedInk)
@@ -119,7 +127,10 @@ private struct BowToastView: View {
       .contentShape(.capsule)
     }
     .buttonStyle(.plain)
-    .glassEffect(.regular.interactive(), in: .capsule)
+    .background {
+      if reduceTransparency { Capsule().fill(Bow.card) }
+    }
+    .glassEffect(reduceTransparency ? .identity : .regular.interactive(), in: .capsule)
     .accessibilityHint("Dismisses the message")
   }
 }

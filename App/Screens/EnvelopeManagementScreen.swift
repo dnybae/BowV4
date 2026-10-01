@@ -21,6 +21,7 @@ struct EnvelopeManagementScreen: View {
   @State private var historyLoaded = false
   @State private var refreshVersion = 0
   @State private var showingDirectory = false
+  @State private var showingGroupOrder = false
 
   private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
   private var orderedGroups: [BudgetGroup] {
@@ -30,18 +31,6 @@ struct EnvelopeManagementScreen: View {
   }
   private var hiddenEnvelopes: [BudgetEnvelope] {
     envelopes.filter { $0.isHidden && $0.paymentAccountID == nil }.sorted { $0.name < $1.name }
-  }
-
-  private var showHideConfirmation: Binding<Bool> {
-    Binding(get: { pendingHide != nil }, set: { if !$0 { pendingHide = nil } })
-  }
-
-  private var showDeleteConfirmation: Binding<Bool> {
-    Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } })
-  }
-
-  private var showMessage: Binding<Bool> {
-    Binding(get: { message != nil }, set: { if !$0 { message = nil } })
   }
 
   private func activeEnvelopes(in group: BudgetGroup) -> [BudgetEnvelope] {
@@ -111,6 +100,13 @@ struct EnvelopeManagementScreen: View {
     .bowListBackground()
     .bowEnvelopeReordering { moveEnvelopes($0, to: $1, before: $2) }
     .navigationTitle("Groups and envelopes")
+    .toolbar {
+      ToolbarItem(placement: .topBarTrailing) {
+        Button("Reorder groups") { showingGroupOrder = true }
+          .disabled(orderedGroups.count < 2)
+      }
+    }
+    .sheet(isPresented: $showingGroupOrder) { GroupOrderScreen() }
     .navigationDestination(isPresented: $showingDirectory) { EnvelopeDirectoryScreen() }
     .task(id: refreshVersion) {
       let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
@@ -147,37 +143,29 @@ struct EnvelopeManagementScreen: View {
         source: .envelope(envelope.id), target: .readyToAssign
       )
     }
-    .confirmationDialog("Hide envelope with money?", isPresented: showHideConfirmation) {
+    .bowConfirmationDialog("Hide envelope with money?", item: $pendingHide) { envelope in
       Button("Move money first") {
-        movingEnvelope = pendingHide
+        movingEnvelope = envelope
         pendingHide = nil
       }
       Button("Hide and keep balance") {
-        if let pendingHide { setHidden(pendingHide, true) }
+        setHidden(envelope, true)
         pendingHide = nil
       }
-    } message: {
-      if let pendingHide {
-        Text("\(BudgetMoney.formatted(snapshot?.available(for: pendingHide.id) ?? 0, currencyCode: currencyCode)) will remain in this hidden envelope and in your budget.")
-      }
+    } message: { envelope in
+      Text("\(BudgetMoney.formatted(snapshot?.available(for: envelope.id) ?? 0, currencyCode: currencyCode)) will remain in this hidden envelope and in your budget.")
     }
-    .confirmationDialog("Delete unused envelope?", isPresented: showDeleteConfirmation) {
+    .bowConfirmationDialog("Delete unused envelope?", item: $pendingDelete) { envelope in
       Button("Delete envelope", role: .destructive) {
-        if let pendingDelete {
-          do {
-            try BudgetCommands.deleteUnusedEnvelope(pendingDelete, in: modelContext)
-          } catch { message = error.localizedDescription }
-        }
+        do {
+          try BudgetCommands.deleteUnusedEnvelope(envelope, in: modelContext)
+        } catch { message = error.localizedDescription }
         pendingDelete = nil
       }
-    } message: {
+    } message: { _ in
       Text("This cannot be undone.")
     }
-    .alert("Envelope", isPresented: showMessage) {
-      Button("OK") { message = nil }
-    } message: {
-      Text(message ?? "")
-    }
+    .bowErrorAlert("Envelope", message: $message)
   }
 
   private func envelopeRow(_ envelope: BudgetEnvelope) -> some View {
@@ -201,7 +189,7 @@ struct EnvelopeManagementScreen: View {
           .monospacedDigit()
           .foregroundStyle(Bow.inkSoft)
         Image(systemName: "chevron.right")
-          .font(.caption.weight(.semibold))
+          .font(.bowCaption.weight(.semibold))
           .foregroundStyle(Bow.inkFaint)
           .accessibilityHidden(true)
       }
@@ -271,7 +259,11 @@ extension EnvelopeManagementScreen {
   /// `beforeID` nil means the end of the group.
   fileprivate func moveEnvelopes(_ sources: [UUID], to groupID: UUID, before beforeID: UUID?) {
     guard let group = groups.first(where: { $0.id == groupID }) else { return }
-    let moving = sources.compactMap { id in envelopes.first { $0.id == id } }
+    let previous = envelopes.map { ($0, $0.groupID, $0.sortOrder) }
+    let moving = sources.compactMap { id in
+      envelopes.first { $0.id == id && !$0.isHidden && $0.paymentAccountID == nil }
+    }
+    guard moving.count == sources.count else { return }
     var ordered = activeEnvelopes(in: group).filter { !sources.contains($0.id) }
     let index = beforeID.flatMap { id in ordered.firstIndex { $0.id == id } } ?? ordered.count
     ordered.insert(contentsOf: moving, at: index)
@@ -279,7 +271,13 @@ extension EnvelopeManagementScreen {
       envelope.groupID = groupID
       envelope.sortOrder = order
     }
-    do { try modelContext.save() } catch { message = error.localizedDescription }
+    do { try modelContext.save() } catch {
+      for (envelope, groupID, order) in previous {
+        envelope.groupID = groupID
+        envelope.sortOrder = order
+      }
+      message = error.localizedDescription
+    }
   }
 }
 

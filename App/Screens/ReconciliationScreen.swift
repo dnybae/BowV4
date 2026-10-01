@@ -16,6 +16,11 @@ struct ReconciliationScreen: View {
   @State private var isFinishing = false
   @State private var errorMessage: String?
   @State private var hasLoaded = false
+  @State private var loadedDate: Date?
+  @State private var initialDate: Date?
+  @State private var initialSelectedIDs: Set<UUID>?
+  @State private var selectionFeedback = 0
+  @State private var loadError: String?
   @AppStorage(BowIntroKey.reconcile) private var hasSeenIntro = false
   @Environment(\.bowToasts) private var toasts
 
@@ -25,6 +30,12 @@ struct ReconciliationScreen: View {
 
   /// Matches the rule the Finish button already uses: the statement equals the cleared balance.
   private var isBalanced: Bool { difference == 0 }
+  private var hasChanges: Bool {
+    statementBalanceMinor != 0
+      || initialDate.map { statementDate != $0 } == true
+      || initialSelectedIDs.map { selectedIDs != $0 } == true
+  }
+  private var canFinish: Bool { loadedDate == statementDate && isBalanced && !isFinishing }
 
   private var heroTitle: String {
     if isBalanced { return "Balanced" }
@@ -116,7 +127,15 @@ struct ReconciliationScreen: View {
         .listRowBackground(Bow.card)
 
         Section {
-          if !hasLoaded {
+          if let loadError {
+            ContentUnavailableView {
+              Label("Couldn’t load transactions", systemImage: "exclamationmark.triangle")
+            } description: {
+              Text(loadError)
+            } actions: {
+              Button("Try again") { Task { await loadEntries() } }
+            }
+          } else if !hasLoaded {
             BowTransactionSkeletonRows(count: 3)
           } else if entries.isEmpty {
             ContentUnavailableView(
@@ -127,6 +146,7 @@ struct ReconciliationScreen: View {
           } else {
             ForEach(entries.prefix(visibleEntryCount)) { entry in
               Button {
+                selectionFeedback += 1
                 if selectedIDs.insert(entry.id).inserted {
                   clearedBalanceMinor += entry.amountMinor
                 } else {
@@ -137,7 +157,7 @@ struct ReconciliationScreen: View {
                 HStack(spacing: Bow.Space.s3) {
                   Image(systemName: selectedIDs.contains(entry.id) ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(selectedIDs.contains(entry.id) ? Bow.bowSolid : Bow.inkFaint)
-                    .font(.title2)
+                    .font(.bowTitle)
                     .contentTransition(.symbolEffect(.replace))
                     .accessibilityHidden(true)
                   VStack(alignment: .leading, spacing: 2) {
@@ -161,6 +181,7 @@ struct ReconciliationScreen: View {
               Button("Show more transactions") { visibleEntryCount += 300 }
             }
             Button("Select all") {
+              selectionFeedback += 1
               selectedIDs = Set(entries.map(\.id))
               clearedBalanceMinor = calculator.clearedBalance(
                 openingBalanceMinor: account.openingBalanceMinor,
@@ -177,21 +198,22 @@ struct ReconciliationScreen: View {
         .listRowBackground(Bow.card)
       }
       .bowSkyList(mood: .reconcile, height: 420)
-      .bowEditorSheet(hasChanges: statementBalanceMinor != 0)
+      .bowEditorSheet(hasChanges: hasChanges)
+      .onAppear { if initialDate == nil { initialDate = statementDate } }
       .bowAnimation(value: hasLoaded)
       .bowAnimation(value: selectedIDs)
-      .sensoryFeedback(.selection, trigger: selectedIDs)
+      .sensoryFeedback(.selection, trigger: selectionFeedback)
       .sensoryFeedback(.success, trigger: isBalanced) { wasBalanced, balanced in
-        !wasBalanced && balanced && statementBalanceMinor != 0
+        !wasBalanced && balanced && hasChanges && loadedDate == statementDate
       }
       .navigationTitle("Reconcile")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        BowCancelButton(hasChanges: statementBalanceMinor != 0) { dismiss() }
+        BowCancelButton(hasChanges: hasChanges) { dismiss() }
       }
       .safeAreaInset(edge: .bottom) {
         BowBottomAction(isBalanced ? "Finish reconciling" : "Off by \(BudgetMoney.formatted(abs(difference ?? 0), currencyCode: currencyCode))",
-                        isEnabled: difference == 0 && !isFinishing) {
+                        isEnabled: canFinish) {
           Task { await finish() }
         }
       }
@@ -202,7 +224,7 @@ struct ReconciliationScreen: View {
   }
 
   private func finish() async {
-    guard let enteredBalance, enteredBalance == clearedBalanceMinor else { return }
+    guard canFinish, let enteredBalance else { return }
     guard !isFinishing else { return }
     isFinishing = true
     defer { isFinishing = false }
@@ -219,6 +241,8 @@ struct ReconciliationScreen: View {
   private func loadEntries() async {
     let accountID = account.id
     let requestedDate = statementDate
+    loadedDate = nil
+    loadError = nil
     do {
       let result = try await ReconciliationRepository(modelContainer: modelContext.container)
         .load(accountID: accountID, through: requestedDate)
@@ -231,9 +255,12 @@ struct ReconciliationScreen: View {
         openingBalanceMinor: account.openingBalanceMinor,
         entries: result.entries, selectedIDs: selectedIDs
       )
+      if initialSelectedIDs == nil { initialSelectedIDs = selectedIDs }
+      loadedDate = requestedDate
       hasLoaded = true
     } catch {
-      errorMessage = error.localizedDescription
+      guard requestedDate == statementDate, !Task.isCancelled else { return }
+      loadError = error.localizedDescription
     }
   }
 }

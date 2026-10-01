@@ -180,7 +180,7 @@ struct SimpleFINAccountSetupScreen: View {
       HStack(alignment: .center, spacing: 12) {
         VStack(alignment: .leading, spacing: 4) {
           Text(link.name)
-            .font(.body.weight(.medium))
+            .font(.bowBody.weight(.medium))
           Text("Already in Bow as \(accounts.first { $0.id == localID }?.name ?? "an existing account")")
             .font(.bowSubhead)
             .foregroundStyle(Bow.inkSoft)

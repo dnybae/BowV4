@@ -87,6 +87,7 @@ extension Font {
     static let bowSubhead    = Font.subheadline
     static let bowFootnote   = Font.footnote
     static let bowCaption    = Font.caption.weight(.medium)
+    static let bowIconTitle  = Font.title3
 }
 // Always add .monospacedDigit() to money. Sentence case everywhere.
 
@@ -127,6 +128,8 @@ extension Bow {
     static let motion = Animation.snappy
     /// Rings sweep a little softer than numbers roll.
     static let ringMotion = Animation.smooth
+    /// A constant-speed sweep, only for loading placeholders.
+    static let loadingMotion = Animation.linear(duration: 1.4).repeatForever(autoreverses: false)
 
     /// The house spring, or no animation when Reduce Motion is on.
     static func motion(reduceMotion: Bool) -> Animation? { reduceMotion ? nil : motion }
@@ -422,6 +425,7 @@ extension View {
     /// Put on a List or Form so the Bow background (or a SkyBackground) shows through.
     func bowListBackground<Background: View>(@ViewBuilder _ background: () -> Background = { Bow.mist }) -> some View {
         self.listStyle(.insetGrouped)
+            .scrollDismissesKeyboard(.interactively)
             .scrollContentBackground(.hidden)
             .background { background().ignoresSafeArea() }
     }

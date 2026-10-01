@@ -63,7 +63,7 @@ struct AccountsScreen: View {
           }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .scenePadding(.horizontal)
+        .padding(.horizontal, Bow.Space.s5)
         .padding(.top, Bow.Space.s3)
         .padding(.bottom, Bow.Space.s8)
       }

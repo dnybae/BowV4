@@ -23,6 +23,7 @@ struct EnvelopeEditorScreen: View {
   @State private var hasTargetDate = false
   @State private var targetDate = Date()
   @State private var errorMessage: String?
+  @State private var initialFields: EnvelopeEditorFields?
 
   private var targetMinor: Int64? { targetAmountMinor > 0 ? targetAmountMinor : nil }
   private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
@@ -38,11 +39,12 @@ struct EnvelopeEditorScreen: View {
     targetAmountMinor + scheduledContributions.reduce(0) { $0 + $1.totalMinor }
   }
 
-  private var hasChanges: Bool {
-    name != (envelope?.name ?? "") || targetAmountMinor != (envelope?.targetMinor ?? 0)
-      || hasTargetDate != (envelope?.targetDate != nil)
-      || (envelope != nil && groupID != envelope?.groupID)
+  private var fields: EnvelopeEditorFields {
+    EnvelopeEditorFields(name: name, groupID: groupID, target: targetAmountMinor,
+                         targetDate: hasTargetDate ? targetDate : nil)
   }
+
+  private var hasChanges: Bool { initialFields.map { fields != $0 } ?? false }
 
   private var tileSymbol: String {
     TransactionIconSymbol.name(for: .expense, payee: "", envelope: name)
@@ -70,6 +72,7 @@ struct EnvelopeEditorScreen: View {
       }
       .bowSkyList(mood: .dawn, height: 420)
       .bowEditorSheet(hasChanges: hasChanges)
+      .onAppear { if initialFields == nil { initialFields = fields } }
       .navigationTitle(envelope == nil ? "New envelope" : layout == .target ? "Target" : "Envelope")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -243,4 +246,11 @@ struct EnvelopeEditorScreen: View {
       errorMessage = error.localizedDescription
     }
   }
+}
+
+private struct EnvelopeEditorFields: Equatable {
+  var name: String
+  var groupID: UUID?
+  var target: Int64
+  var targetDate: Date?
 }

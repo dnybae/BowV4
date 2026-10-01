@@ -82,7 +82,8 @@ struct CardDebtGoalEditorScreen: View {
   }
 
   private var hasChanges: Bool {
-    monthlyMinor != (card.debtMonthlyTargetMinor ?? 0) || hasDate != (card.debtGoalDate != nil) || resetBaseline
+    monthlyMinor != (card.debtMonthlyTargetMinor ?? 0) || hasDate != (card.debtGoalDate != nil)
+      || (hasDate && targetDate != card.debtGoalDate) || resetBaseline
   }
 
   private func save() {

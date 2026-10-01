@@ -47,7 +47,7 @@ struct PayeeEditorScreen: View {
 
   private var hasChanges: Bool {
     guard let initialFields else { return false }
-    return fields != initialFields
+    return fields != initialFields || !newBankName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
   private var trimmedName: String {

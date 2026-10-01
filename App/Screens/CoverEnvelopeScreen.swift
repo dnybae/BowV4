@@ -14,6 +14,7 @@ struct CoverEnvelopeScreen: View {
   var snapshot: BudgetSnapshot
   var envelopes: [BudgetEnvelope]
   var groups: [BudgetGroup]
+  var onCancel: () -> Void
   var onCovered: () -> Void
   @State private var draft: OverspendingCoverDraft
   @State private var showingDonorPicker = false
@@ -25,7 +26,8 @@ struct CoverEnvelopeScreen: View {
 
   init(
     envelopeID: UUID, currencyCode: String, month: Date, snapshot: BudgetSnapshot,
-    envelopes: [BudgetEnvelope], groups: [BudgetGroup], onCovered: @escaping () -> Void
+    envelopes: [BudgetEnvelope], groups: [BudgetGroup],
+    onCancel: @escaping () -> Void, onCovered: @escaping () -> Void
   ) {
     self.envelopeID = envelopeID
     self.currencyCode = currencyCode
@@ -33,6 +35,7 @@ struct CoverEnvelopeScreen: View {
     self.snapshot = snapshot
     self.envelopes = envelopes
     self.groups = groups
+    self.onCancel = onCancel
     self.onCovered = onCovered
     _draft = State(initialValue: OverspendingCoverDraft(envelopeID: envelopeID))
   }
@@ -101,9 +104,15 @@ struct CoverEnvelopeScreen: View {
       }
       .listRowBackground(Bow.card)
     }
+    .disabled(isSaving)
     .bowSkyList(mood: isCovered ? .mint : .coral, height: 420)
     .bowAnimation(value: remaining)
     .bowAnimation(value: draft.donors.map(\.bucket))
+    .bowEditorSheet(hasChanges: !draft.donors.isEmpty)
+    .navigationBarBackButtonHidden(true)
+    .toolbar {
+      BowCancelButton(hasChanges: !draft.donors.isEmpty, onCancel: onCancel)
+    }
     .navigationTitle("Cover overspending")
     .navigationBarTitleDisplayMode(.inline)
     .safeAreaInset(edge: .bottom) {
@@ -114,7 +123,6 @@ struct CoverEnvelopeScreen: View {
         }
       }
     }
-    .scrollDismissesKeyboard(.interactively)
     .sensoryFeedback(.success, trigger: isCovered) { _, covered in covered }
     .onChange(of: snapshot.month) { _, _ in draft.clamp(to: snapshot) }
     .onChange(of: snapshot.available(for: envelopeID)) { _, _ in draft.clamp(to: snapshot) }
@@ -215,6 +223,7 @@ struct CoverEnvelopeScreen: View {
   }
 
   private func save() async {
+    guard !isSaving else { return }
     isSaving = true
     defer { isSaving = false }
     do {

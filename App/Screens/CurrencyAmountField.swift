@@ -243,8 +243,34 @@ final class CurrencyInputTextField: UITextField {
   override func didMoveToWindow() {
     super.didMoveToWindow()
     guard focusOnAppear, !didFocusOnAppear, window != nil else { return }
-    didFocusOnAppear = true
-    DispatchQueue.main.async { [weak self] in _ = self?.becomeFirstResponder() }
+    // Wait for the actual sheet transition, rather than a timer that could steal focus
+    // after the person has already moved to another field or dismissed the keyboard.
+    DispatchQueue.main.async { [weak self] in
+      guard let self, self.window != nil else { return }
+      var responder: UIResponder? = self.next
+      while let current = responder {
+        if let controller = current as? UIViewController,
+           let transition = controller.transitionCoordinator,
+           transition.animate(alongsideTransition: nil, completion: { [weak self] context in
+             if !context.isCancelled { self?.focusInitially() }
+           }) {
+          return
+        }
+        responder = current.next
+      }
+      self.focusInitially()
+    }
+  }
+
+  override func becomeFirstResponder() -> Bool {
+    let becameFirstResponder = super.becomeFirstResponder()
+    if becameFirstResponder { didFocusOnAppear = true }
+    return becameFirstResponder
+  }
+
+  private func focusInitially() {
+    guard focusOnAppear, !didFocusOnAppear, window != nil else { return }
+    _ = becomeFirstResponder()
   }
 
   override func closestPosition(to point: CGPoint) -> UITextPosition? { endOfDocument }

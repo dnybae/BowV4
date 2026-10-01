@@ -44,8 +44,10 @@ struct PayeeLogoFinderSheet: View {
                   .scaledToFit()
                   .frame(width: 54, height: 54)
               } else if isLoading {
-                ProgressView()
+                RoundedRectangle(cornerRadius: Bow.Radius.sm)
+                  .fill(Bow.well)
                   .frame(width: 54, height: 54)
+                  .bowShimmer()
               } else {
                 Image(systemName: "storefront.fill")
                   .bowScaledIcon(frame: 54, glyph: 25, weight: .regular)
@@ -88,6 +90,8 @@ struct PayeeLogoFinderSheet: View {
         .listRowBackground(Bow.card)
       }
       .bowListBackground()
+      .scrollDismissesKeyboard(.interactively)
+      .bowAnimation(value: isLoading)
       .navigationTitle("Find logo")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

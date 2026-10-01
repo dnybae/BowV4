@@ -52,12 +52,13 @@ extension TransactionRowModel {
 
 extension View {
   /// A soft highlight that sweeps across loading content. Off with Reduce Motion.
-  func bowShimmer() -> some View {
-    modifier(BowShimmer())
+  func bowShimmer(isActive: Bool = true) -> some View {
+    modifier(BowShimmer(isActive: isActive))
   }
 }
 
 private struct BowShimmer: ViewModifier {
+  var isActive: Bool
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.colorScheme) private var scheme
   @State private var phase: CGFloat = -1
@@ -65,7 +66,7 @@ private struct BowShimmer: ViewModifier {
   func body(content: Content) -> some View {
     content
       .overlay {
-        if !reduceMotion {
+        if isActive && !reduceMotion {
           GeometryReader { geometry in
             LinearGradient(
               colors: [.clear, .white.opacity(scheme == .dark ? 0.14 : 0.6), .clear],
@@ -78,9 +79,9 @@ private struct BowShimmer: ViewModifier {
           .allowsHitTesting(false)
         }
       }
-      .onAppear {
-        guard !reduceMotion else { return }
-        withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) { phase = 1 }
+      .onChange(of: isActive && !reduceMotion, initial: true) { _, animates in
+        phase = -1
+        if animates { withAnimation(Bow.loadingMotion) { phase = 1 } }
       }
   }
 }

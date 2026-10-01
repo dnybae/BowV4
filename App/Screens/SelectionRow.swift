@@ -8,7 +8,7 @@ struct SelectionRow: View {
   var body: some View {
     HStack(spacing: 12) {
       Image(systemName: "checkmark")
-        .font(.body.weight(.semibold))
+        .font(.bowBody.weight(.semibold))
         .foregroundStyle(.tint)
         .frame(width: 20)
         .opacity(isSelected ? 1 : 0)

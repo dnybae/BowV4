@@ -198,6 +198,7 @@ struct SettingsScreen: View {
       }
       .labelStyle(.bowTile)
       .bowSkyList(mood: .dawn, height: 420)
+      .scrollDismissesKeyboard(.interactively)
       .navigationTitle("Settings")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

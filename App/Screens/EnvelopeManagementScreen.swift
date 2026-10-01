@@ -82,6 +82,7 @@ struct EnvelopeManagementScreen: View {
           ForEach(activeEnvelopes(in: group)) { envelope in
             envelopeRow(envelope)
           }
+          .bowReorderable(collectionID: group.id)
           if activeEnvelopes(in: group).isEmpty {
             Text("No envelopes in this group")
               .foregroundStyle(Bow.inkSoft)
@@ -108,6 +109,7 @@ struct EnvelopeManagementScreen: View {
       }
     }
     .bowListBackground()
+    .bowEnvelopeReordering { moveEnvelopes($0, to: $1, before: $2) }
     .navigationTitle("Groups and envelopes")
     .navigationDestination(isPresented: $showingDirectory) { EnvelopeDirectoryScreen() }
     .task(id: refreshVersion) {
@@ -260,6 +262,53 @@ private enum EnvelopeGroupEditor: Identifiable {
     case .editGroup(let group): "group-\(group.id)"
     case .newEnvelope: "newEnvelope"
     case .editEnvelope(let envelope): "envelope-\(envelope.id)"
+    }
+  }
+}
+
+extension EnvelopeManagementScreen {
+  /// Drops dragged envelopes into place, in their own group or another one, and renumbers that group.
+  /// `beforeID` nil means the end of the group.
+  fileprivate func moveEnvelopes(_ sources: [UUID], to groupID: UUID, before beforeID: UUID?) {
+    guard let group = groups.first(where: { $0.id == groupID }) else { return }
+    let moving = sources.compactMap { id in envelopes.first { $0.id == id } }
+    var ordered = activeEnvelopes(in: group).filter { !sources.contains($0.id) }
+    let index = beforeID.flatMap { id in ordered.firstIndex { $0.id == id } } ?? ordered.count
+    ordered.insert(contentsOf: moving, at: index)
+    for (order, envelope) in ordered.enumerated() {
+      envelope.groupID = groupID
+      envelope.sortOrder = order
+    }
+    do { try modelContext.save() } catch { message = error.localizedDescription }
+  }
+}
+
+private extension View {
+  /// Envelopes can be dragged to reorder them, and between groups (iOS 27).
+  @ViewBuilder
+  func bowEnvelopeReordering(move: @escaping ([UUID], UUID, UUID?) -> Void) -> some View {
+    if #available(iOS 27.0, *) {
+      reorderContainer(for: BudgetEnvelope.self, in: UUID.self) { difference in
+        let beforeID: UUID?
+        switch difference.destination.position {
+        case .before(let id): beforeID = id
+        case .end: beforeID = nil
+        }
+        move(difference.sources, difference.destination.collectionID, beforeID)
+      }
+    } else {
+      self
+    }
+  }
+}
+
+private extension DynamicViewContent {
+  @ViewBuilder
+  func bowReorderable(collectionID: UUID) -> some View {
+    if #available(iOS 27.0, *) {
+      reorderable(collectionID: collectionID)
+    } else {
+      self
     }
   }
 }

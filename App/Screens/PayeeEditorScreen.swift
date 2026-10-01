@@ -90,7 +90,7 @@ struct PayeeEditorScreen: View {
             Label("Choose photo", systemImage: "photo").labelStyle(.bowTile)
           }
           if isImportingLogo {
-            ProgressView("Loading image…")
+            BowLoadingLabel("Loading image…")
           }
           Button { showingFiles = true } label: {
             Label("Choose file", systemImage: "doc").labelStyle(.bowTile)

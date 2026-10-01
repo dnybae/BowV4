@@ -89,7 +89,7 @@ struct SimpleFINAccountSetupScreen: View {
             }
             .disabled(isWorking)
           }
-          if isWorking { ProgressView("Loading bank accounts…") }
+          if isWorking { BowLoadingLabel("Loading your bank accounts…") }
           if allLinks.isEmpty && !isWorking {
             ContentUnavailableView(
               "No bank accounts found", systemImage: "link",
@@ -134,7 +134,7 @@ struct SimpleFINAccountSetupScreen: View {
             }
             .bowPrimaryButton()
             .disabled(!canAdd || isWorking)
-            if isWorking { ProgressView("Adding accounts…") }
+            if isWorking { BowLoadingLabel("Adding accounts…") }
           }
           .listRowBackground(Bow.card)
         }

@@ -31,6 +31,8 @@ struct BankFileImportScreen: View {
   @State private var previewToken = UUID()
   @State private var importSummary: BankFileImportSummary?
   @State private var errorMessage: String?
+  @AppStorage(BowIntroKey.fileImport) private var hasSeenIntro = false
+  @Environment(\.bowToasts) private var toasts
 
   private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
   private var selectedAccount: BudgetAccount? { accounts.first { $0.id == accountID } }
@@ -38,6 +40,22 @@ struct BankFileImportScreen: View {
   var body: some View {
     NavigationStack {
       Form {
+        if !hasSeenIntro && fileName == nil {
+          BowFeatureIntro(
+            systemImage: "doc.text",
+            title: "Import from your bank’s website",
+            points: [
+              .init(systemImage: "arrow.down.doc", text: "Download a CSV, OFX, QFX or QIF file from your bank."),
+              .init(systemImage: "link", text: "Bow matches what you’ve already entered."),
+              .init(systemImage: "tray", text: "Anything unsure waits in Spending for review.")
+            ],
+            actionTitle: "Choose a file"
+          ) {
+            hasSeenIntro = true
+            showingFilePicker = true
+          }
+          .listRowBackground(Color.clear)
+        } else {
         Section {
           Button("Choose bank file", systemImage: "doc.text") {
             showingFilePicker = true
@@ -115,8 +133,8 @@ struct BankFileImportScreen: View {
               Task { await preview() }
             }
             .disabled(selectedAccount == nil || isPreviewing)
-            if isPreviewing { ProgressView("Preparing preview…") }
-            if isImporting { ProgressView("Importing transactions…") }
+            if isPreviewing { BowLoadingLabel("Reading your file…") }
+            if isImporting { BowLoadingLabel("Importing \(proposals.count) transactions…") }
           }
           .listRowBackground(Bow.card)
         }
@@ -134,7 +152,7 @@ struct BankFileImportScreen: View {
 
           Section("Transactions") {
             ForEach(proposals.prefix(visibleProposalCount)) { proposal in
-              VStack(alignment: .leading, spacing: 5) {
+              VStack(alignment: .leading, spacing: Bow.Space.s1) {
                 HStack {
                   Text(proposal.row.payee.isEmpty ? "Transaction" : proposal.row.payee)
                     .fontWeight(.medium)
@@ -148,7 +166,7 @@ struct BankFileImportScreen: View {
                   .font(.bowSubhead)
                   .foregroundStyle(Bow.inkSoft)
               }
-              .padding(.vertical, 4)
+              .padding(.vertical, Bow.Space.s1)
             }
             if visibleProposalCount < proposals.count {
               Button("Show more transactions") {
@@ -158,17 +176,28 @@ struct BankFileImportScreen: View {
           }
           .listRowBackground(Bow.card)
         }
+        }
       }
-      .bowListBackground()
+      .bowSkyList(mood: .dawn, height: 420)
+      .bowAnimation(value: proposals.count)
+      .bowAnimation(value: isPreviewing)
+      .bowAnimation(value: hasSeenIntro)
       .navigationTitle("Import bank file")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel") { dismiss() }
         }
-        ToolbarItem(placement: .confirmationAction) {
-          Button("Import") { Task { await importFile() } }
-            .disabled(proposals.isEmpty || selectedAccount == nil || isImporting || importSummary != nil)
+      }
+      .safeAreaInset(edge: .bottom) {
+        if !proposals.isEmpty {
+          BowBottomAction(
+            proposals.count == 1 ? "Import 1 transaction" : "Import \(proposals.count) transactions",
+            isEnabled: selectedAccount != nil && !isImporting && importSummary == nil
+          ) {
+            Task { await importFile() }
+          }
+          .transition(.move(edge: .bottom).combined(with: .opacity))
         }
       }
       .onChange(of: accountID) { _, _ in clearPreview() }
@@ -184,23 +213,7 @@ struct BankFileImportScreen: View {
           UTType(filenameExtension: "qif") ?? .data
         ]
       ) { result in handleFileSelection(result) }
-      .alert("Couldn’t import file", isPresented: Binding(
-        get: { errorMessage != nil },
-        set: { if !$0 { errorMessage = nil } }
-      )) {
-        Button("OK") { errorMessage = nil }
-      } message: {
-        Text(errorMessage ?? "")
-      }
-      .alert("Import complete", isPresented: Binding(
-        get: { importSummary != nil }, set: { if !$0 { importSummary = nil } }
-      )) {
-        Button("Done") { dismiss() }
-      } message: {
-        if let importSummary {
-          Text("\(importSummary.created) added, \(importSummary.linked) matched, \(importSummary.needsReview) in Bank Review, and \(importSummary.skipped) skipped. Open Spending to review uncertain transactions.")
-        }
-      }
+      .bowErrorAlert("Couldn’t import file", message: $errorMessage)
     }
   }
 
@@ -313,10 +326,15 @@ struct BankFileImportScreen: View {
     isImporting = true
     defer { isImporting = false }
     do {
-      importSummary = try await BankFileImportRepository(modelContainer: modelContext.container).save(
+      let summary = try await BankFileImportRepository(modelContainer: modelContext.container).save(
         proposals: proposals,
         accountID: account.id
       )
+      importSummary = summary
+      toasts?.show(.saved(summary.needsReview > 0
+        ? "Imported \(summary.created + summary.linked) · \(summary.needsReview) waiting in Spending"
+        : "Imported \(summary.created + summary.linked) transactions"))
+      dismiss()
     } catch {
       errorMessage = error.localizedDescription
     }

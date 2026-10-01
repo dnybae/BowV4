@@ -569,6 +569,8 @@ private struct CalendarAgendaRow<MenuItems: View>: View {
       }
     }
     .accessibilityHint(accessibilityHint)
+    // Swipeable rows clip to their container shape; a rectangle keeps them full-width bands, as in Spending.
+    .containerShape(.rect)
     .overlay(alignment: .bottom) {
       if showsDivider {
         Rectangle().fill(Bow.line).frame(height: 0.5).padding(.leading, Bow.Space.s4)

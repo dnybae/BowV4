@@ -46,29 +46,23 @@ struct CoverEnvelopeScreen: View {
   var body: some View {
     List {
       Section {
-        VStack(spacing: Bow.Space.s2) {
-          Text(envelope?.name ?? "Envelope")
-            .font(.bowHeadline)
-            .foregroundStyle(Bow.ink)
-          StatusPill(
-            text: BudgetMoney.formatted(-remaining, currencyCode: currencyCode),
-            state: remaining > 0 ? .over : .funded
-          )
-          .font(.bowTitle)
-          .contentTransition(.numericText())
-          Text(remaining > 0
-            ? "\(BudgetMoney.formatted(remaining, currencyCode: currencyCode)) still to cover"
-            : "Fully covered")
-            .font(.bowFootnote)
-            .monospacedDigit()
-            .foregroundStyle(Bow.inkSoft)
-            .contentTransition(.numericText())
+        BowIdentityHeader(
+          name: envelope?.name ?? "Envelope",
+          context: groups.first { $0.id == envelope?.groupID }?.name,
+          amountMinor: snapshot.available(for: envelopeID),
+          currencyCode: currencyCode,
+          amountColor: Bow.overInk,
+          pill: remaining > 0
+            ? StatusPill(text: "\(BudgetMoney.formatted(remaining, currencyCode: currencyCode)) still to cover", state: .over)
+            : StatusPill(text: "Fully covered", state: .funded, symbol: "checkmark")
+        ) {
+          BowGlossyTile(systemImage: TransactionIconSymbol.name(
+            for: .expense, payee: "", envelope: envelope?.name
+          ))
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Bow.Space.s4)
-        .accessibilityElement(children: .combine)
       }
       .listRowBackground(Color.clear)
+      .listRowInsets(EdgeInsets())
 
       Section {
         ForEach(draft.donors) { donor in
@@ -84,20 +78,28 @@ struct CoverEnvelopeScreen: View {
               }
             }
         }
-        Button(draft.donors.isEmpty ? "Choose an envelope to cover from" : "Select another",
-               systemImage: "plus.circle.fill") {
+        Button {
           showingDonorPicker = true
+        } label: {
+          HStack {
+            Label(draft.donors.isEmpty ? "Choose an envelope to cover from" : "Select another",
+                  systemImage: "plus")
+              .labelStyle(.bowTile)
+            Spacer(minLength: Bow.Space.s2)
+            Image(systemName: "chevron.right")
+              .font(.footnote.weight(.semibold))
+              .foregroundStyle(Bow.inkFaint)
+              .accessibilityHidden(true)
+          }
+          .contentShape(.rect)
         }
-        .frame(maxWidth: .infinity)
         .disabled(remaining == 0)
       } header: {
         Text("Cover from")
       }
       .listRowBackground(Bow.card)
     }
-    .bowListBackground {
-      Bow.mist.overlay(alignment: .top) { SkyBackground(mood: isCovered ? .mint : .coral, height: 420) }
-    }
+    .bowSkyList(mood: isCovered ? .mint : .coral, height: 420)
     .animation(Bow.motion(reduceMotion: reduceMotion), value: remaining)
     .animation(Bow.motion(reduceMotion: reduceMotion), value: draft.donors.map(\.bucket))
     .navigationTitle("Cover overspending")
@@ -149,22 +151,30 @@ struct CoverEnvelopeScreen: View {
       get: { draft.amountMinor(for: donor.bucket) },
       set: { draft.setAmount($0, for: donor.bucket, in: snapshot) }
     )
+    let leftover = available - donor.amountMinor
+    let leftoverText = "\(BudgetMoney.formatted(leftover, currencyCode: currencyCode)) left"
     return VStack(alignment: .leading, spacing: Bow.Space.s2) {
       HStack(spacing: Bow.Space.s3) {
-        Text(name)
-          .font(.bowBody.weight(.semibold))
-          .foregroundStyle(Bow.ink)
-          .lineLimit(1)
+        Label {
+          VStack(alignment: .leading, spacing: 2) {
+            Text(name)
+              .foregroundStyle(Bow.ink)
+              .lineLimit(1)
+            Text(leftoverText)
+              .font(.bowSubhead)
+              .monospacedDigit()
+              .foregroundStyle(leftoverState(for: donor.bucket, leftover: leftover).ink)
+              .contentTransition(.numericText())
+          }
+        } icon: {
+          Image(systemName: donorSymbol(donor.bucket))
+        }
+        .labelStyle(.bowTile)
+        .accessibilityElement(children: .combine)
         Spacer(minLength: Bow.Space.s2)
         CurrencyAmountField("Amount from \(name)", minor: amount, currencyCode: currencyCode)
           .labelsHidden()
           .frame(width: 104)
-        StatusPill(
-          text: BudgetMoney.formatted(available - donor.amountMinor, currencyCode: currencyCode),
-          state: leftoverState(for: donor.bucket, leftover: available - donor.amountMinor)
-        )
-        .contentTransition(.numericText())
-        .accessibilityLabel("\(BudgetMoney.formatted(available - donor.amountMinor, currencyCode: currencyCode)) left")
       }
       Slider(
         value: Binding(
@@ -190,6 +200,15 @@ struct CoverEnvelopeScreen: View {
     let assignedAfter = snapshot.assigned[id, default: 0] - draft.amountMinor(for: bucket)
     if target > 0 && assignedAfter < target { return .needs }
     return leftover > 0 ? .funded : .empty
+  }
+
+  private func donorSymbol(_ bucket: BudgetBucket) -> String {
+    switch bucket {
+    case .readyToAssign: "square.grid.2x2"
+    case .envelope(let id):
+      TransactionIconSymbol.name(for: .expense, payee: "", envelope: envelopes.first { $0.id == id }?.name)
+    case .cardPayment: "creditcard"
+    }
   }
 
   private func donorName(_ bucket: BudgetBucket) -> String {

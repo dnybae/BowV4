@@ -44,7 +44,13 @@ struct TransactionDetailScreen: View {
   var body: some View {
     Form {
       Section {
-        VStack(spacing: Bow.Space.s2) {
+        BowIdentityHeader(
+          name: transaction.payee.isEmpty ? "Transaction" : transaction.payee,
+          context: "\(accountName), \(transaction.date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))",
+          amountMinor: transaction.amountMinor,
+          currencyCode: currencyCode,
+          pill: statusPill
+        ) {
           MerchantLogoView(
             merchantName: transaction.kind == .transfer ? "" : transaction.payee,
             domain: transaction.kind == .transfer ? nil : PayeeDirectory.logoDomain(
@@ -52,58 +58,28 @@ struct TransactionDetailScreen: View {
             ),
             kind: transaction.kind,
             envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name,
-            size: 52
+            size: 64, style: .glossy
           )
-          Text(transaction.payee.isEmpty ? "Transaction" : transaction.payee)
-            .font(.bowHeadline)
-            .foregroundStyle(Bow.ink)
-          MoneyText(minor: transaction.amountMinor, currencyCode: currencyCode)
-            .bowHeroFont()
-            .monospacedDigit()
-            .foregroundStyle(Bow.ink)
-            .lineLimit(1)
-            .minimumScaleFactor(0.5)
-          Text(transaction.date.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-            .font(.bowSubhead)
-            .foregroundStyle(Bow.inkSoft)
-          Text(statusTitle)
-            .font(.bowFootnote.weight(.medium))
-            .foregroundStyle(needsLegacyReview ? Bow.needsInk : Bow.inkSoft)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Bow.Space.s4)
-        .accessibilityElement(children: .combine)
       }
-      .listRowBackground(Bow.card)
+      .listRowBackground(Color.clear)
+      .listRowInsets(EdgeInsets())
 
       Section {
         payeeRow
-        LabeledContent("Envelope", value: envelopeName)
-        LabeledContent("Account", value: accountName)
+        BowTileValueRow("Envelope", systemImage: "square.grid.2x2", value: envelopeName)
+        BowTileValueRow("Account", systemImage: "creditcard", value: accountName)
+        BowTileValueRow("Date", systemImage: "calendar",
+                        value: transaction.date.formatted(date: .abbreviated, time: .omitted))
         if !transaction.notes.isEmpty {
-          LabeledContent("Notes", value: transaction.notes)
-        }
-        LabeledContent("Cleared") {
-          if transaction.isCleared {
-            Label("Cleared", systemImage: "checkmark")
-              .foregroundStyle(Bow.fundedInk)
-          } else {
-            Text("Not cleared")
-          }
+          BowTileValueRow("Notes", systemImage: "note.text", value: transaction.notes)
         }
       }
       .listRowBackground(Bow.card)
 
       if let record = bankRecord, record.status == .linked {
         Section {
-          LabeledContent("Bank description", value: record.payee)
-          LabeledContent("Posted amount") {
-          Text(BudgetMoney.formatted(
-              record.amountMinor, currencyCode: currencyCode
-          ))
-            .fontDesign(.rounded).monospacedDigit()
-        }
-          LabeledContent("Posted", value: record.date.formatted(date: .abbreviated, time: .omitted))
+          bankRows(record)
           LabeledContent("Matched", value: record.matchedAutomatically ? "Automatically" : "During review")
           Button("Unmatch bank transaction", role: .destructive) {
             showingUnmatchConfirmation = true
@@ -114,10 +90,13 @@ struct TransactionDetailScreen: View {
           Text("Unmatching keeps your entered transaction and returns the bank item to review.")
         }
         .listRowBackground(Bow.card)
-      } else if bankRecord?.status == .imported {
-        Section("From your bank") {
+      } else if let record = bankRecord, record.status == .imported {
+        Section {
+          bankRows(record)
+        } header: {
+          Text("From your bank")
+        } footer: {
           Text("Added from a posted bank transaction.")
-            .foregroundStyle(Bow.inkSoft)
         }
         .listRowBackground(Bow.card)
       }
@@ -145,7 +124,7 @@ struct TransactionDetailScreen: View {
         .listRowBackground(Bow.card)
       }
     }
-    .bowListBackground()
+    .bowSkyList(mood: needsLegacyReview || transaction.needsApproval ? .review : .dawn, height: 460)
     .navigationTitle("Transaction")
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
@@ -191,24 +170,36 @@ struct TransactionDetailScreen: View {
     if transaction.kind != .transfer, !transaction.payee.isEmpty {
       let key = PayeeDirectory.canonicalKey(for: transaction.payee, payees: payees)
       if key == currentPayeeKey {
-        LabeledContent("Payee", value: transaction.payee)
+        BowTileValueRow("Payee", systemImage: "person", value: transaction.payee)
       } else {
         NavigationLink {
           PayeeDetailScreen(payeeKey: key)
         } label: {
-          LabeledContent("Payee") {
-            HStack(spacing: Bow.Space.s2) {
-              MerchantLogoView(
-                merchantName: transaction.payee, domain: transaction.merchantDomain,
-                kind: transaction.kind, size: 24
-              )
-              Text(transaction.payee)
-                .lineLimit(1)
-            }
+          BowTileValueRow(title: "Payee", systemImage: "person") {
+            Text(transaction.payee).lineLimit(1)
           }
         }
         .accessibilityHint("Opens payee details")
       }
+    }
+  }
+
+  /// Cleared, Needs review, or how the transaction got here.
+  private var statusPill: StatusPill {
+    if needsLegacyReview || transaction.needsApproval
+      || (transaction.kind == .expense && transaction.envelopeID == nil) {
+      return .needsReview
+    }
+    if transaction.isCleared { return .cleared }
+    return StatusPill(text: statusTitle, state: .empty)
+  }
+
+  @ViewBuilder
+  private func bankRows(_ record: SimpleFINImportRecord) -> some View {
+    LabeledContent("Bank description", value: record.payee)
+    LabeledContent("Posted", value: record.date.formatted(date: .abbreviated, time: .omitted))
+    LabeledContent("Posted amount") {
+      MoneyText(minor: record.amountMinor, currencyCode: currencyCode, usesTrueMinus: true)
     }
   }
 

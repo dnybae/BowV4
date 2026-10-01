@@ -48,3 +48,24 @@ struct BowFieldTitle: View {
     }
   }
 }
+
+/// A read-only form row: icon-tile title on the leading side, its value trailing.
+struct BowTileValueRow<Value: View>: View {
+  var title: String
+  var systemImage: String
+  @ViewBuilder var value: () -> Value
+
+  var body: some View {
+    LabeledContent {
+      value()
+    } label: {
+      Label(title, systemImage: systemImage).labelStyle(.bowTile)
+    }
+  }
+}
+
+extension BowTileValueRow where Value == Text {
+  init(_ title: String, systemImage: String, value: String) {
+    self.init(title: title, systemImage: systemImage) { Text(value) }
+  }
+}

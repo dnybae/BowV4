@@ -547,28 +547,6 @@ private struct BudgetOverviewSection: View {
 
   var body: some View {
     VStack(spacing: Bow.Space.s2) {
-      // Most urgent first, above the totals: Ready to Assign is the screen's focal point.
-      ForEach(notices) { notice in
-        Group {
-          if notice.isActionable {
-            Button { onSelectNotice(notice) } label: {
-              banner(notice)
-            }
-            .buttonStyle(.bowPress)
-            .accessibilityHint(notice.accessibilityHint)
-          } else {
-            // Informational only (past months, nothing to move): full contrast, not a dimmed button.
-            banner(notice)
-          }
-        }
-        .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
-      }
-
-      if isFullyAssigned {
-        BudgetAllAssignedBanner()
-          .transition(.opacity)
-      }
-
       VStack(spacing: Bow.Space.s3) {
         metrics
         if isPastMonth {
@@ -590,6 +568,28 @@ private struct BudgetOverviewSection: View {
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
         .padding(.vertical, Bow.Space.s2)
+      }
+
+      // Below the totals, most urgent first.
+      ForEach(notices) { notice in
+        Group {
+          if notice.isActionable {
+            Button { onSelectNotice(notice) } label: {
+              banner(notice)
+            }
+            .buttonStyle(.bowPress)
+            .accessibilityHint(notice.accessibilityHint)
+          } else {
+            // Informational only (past months, nothing to move): full contrast, not a dimmed button.
+            banner(notice)
+          }
+        }
+        .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+      }
+
+      if isFullyAssigned {
+        BudgetAllAssignedBanner()
+          .transition(.opacity)
       }
     }
     .bowAnimation(value: notices.map(\.kind))

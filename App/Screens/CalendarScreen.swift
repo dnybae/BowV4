@@ -73,7 +73,7 @@ struct CalendarScreen: View {
           }
           .frame(maxWidth: .infinity, alignment: .leading)
           .padding(Bow.Space.s4)
-          .bowGlassCard()
+          .background(Bow.card, in: RoundedRectangle(cornerRadius: Bow.Radius.lg, style: .continuous))
         } else {
           monthCard
         }
@@ -137,7 +137,7 @@ struct CalendarScreen: View {
     }
   }
 
-  /// The month grid on one Liquid Glass card, like Budget's stat strip. Swipe sideways to change months.
+  /// A shadow-free month card that stays clean inside its list row. Swipe sideways to change months.
   private var monthCard: some View {
     VStack(spacing: 0) {
       CalendarWeekdayHeader(calendar: calendar)
@@ -155,7 +155,7 @@ struct CalendarScreen: View {
     .padding(.vertical, Bow.Space.s2)
     .clipped()
     .offset(x: monthSwipeOffset)
-    .bowGlassCard()
+    .background(Bow.card, in: RoundedRectangle(cornerRadius: Bow.Radius.lg, style: .continuous))
     .bowAnimation(value: selectedDate)
     .gesture(DragGesture(minimumDistance: 24)
       .onChanged { value in

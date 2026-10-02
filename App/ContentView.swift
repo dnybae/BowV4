@@ -89,6 +89,7 @@ private struct BudgetHomeView: View {
   @State private var logoDirectory = PayeeLogoDirectory()
   @State private var selectedMonth = Date()
   @State private var selectedCalendarDate = Date()
+  @Namespace private var transactionZoomNamespace
   @State private var selectedTab: HomeTab = .budget
   @State private var budgetPath: [BudgetRoute] = []
   @State private var accountsPath: [AccountRoute] = []
@@ -210,6 +211,8 @@ private struct BudgetHomeView: View {
                 onAddTransaction: { startNewTransaction() },
                 onConnectBank: { activeSheet = .bankSync }
               )
+              .environment(\.transactionZoomNamespace, transactionZoomNamespace)
+              .environment(\.transactionZoomPrefix, "spending-")
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                   Button { showingSettings = true } label: { BowToolbarLabel("Settings", systemImage: "gearshape") }
@@ -232,6 +235,8 @@ private struct BudgetHomeView: View {
                 onReviewBankRecord: { activeSheet = .bankItem($0, $1) },
                 onEnterPending: { activeSheet = .pendingItem($0) }
               )
+              .environment(\.transactionZoomNamespace, transactionZoomNamespace)
+              .environment(\.transactionZoomPrefix, "calendar-")
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                   Button { showingSettings = true } label: { BowToolbarLabel("Settings", systemImage: "gearshape") }
@@ -332,6 +337,11 @@ private struct BudgetHomeView: View {
                 )
               } else {
                 transactionSheet(.existing(transaction))
+                  .bowTransactionZoomDestination(
+                    (selectedTab == .calendar ? "calendar-" : "spending-") + "transaction-\(id)",
+                    namespace: transactionZoomNamespace,
+                    enabled: !reduceMotion && (selectedTab == .transactions || selectedTab == .calendar)
+                  )
               }
             } else {
               MissingItemSheet(title: "Transaction")

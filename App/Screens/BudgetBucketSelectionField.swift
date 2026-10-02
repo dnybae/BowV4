@@ -38,6 +38,7 @@ struct BudgetBucketSelectionField: View {
       }
       .contentShape(Rectangle())
     }
+    .sensoryFeedback(.selection, trigger: selection)
     .accessibilityLabel("\(title), \(selectedName)")
     .sheet(isPresented: $showingSelection) {
       BudgetBucketSelectionSheet(

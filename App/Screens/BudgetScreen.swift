@@ -1,7 +1,11 @@
 import SwiftUI
+import SwiftData
 
 struct BudgetScreen: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.modelContext) private var modelContext
+  @State private var envelopeToHide: BudgetEnvelope?
+  @State private var actionError: String?
   @Environment(\.bowToasts) private var toasts
   var currencyCode: String
   var groups: [BudgetGroup]
@@ -32,6 +36,8 @@ struct BudgetScreen: View {
   /// Set while a horizontal swipe is changing months, so lifting a finger over a card doesn't open it.
   @State private var isSwipingMonth = false
   @Namespace private var zoomNamespace
+  @State private var showingAssignment = false
+  @State private var customAssignment: UUID?
   @State private var collapseState = BudgetGroupCollapseState.saved
 
   /// Everything on screen describes the loaded snapshot's month. `selectedMonth` can briefly be
@@ -179,6 +185,30 @@ struct BudgetScreen: View {
     .sensoryFeedback(.selection, trigger: selectedMonth)
     .sensoryFeedback(.selection, trigger: collapseState)
     .sensoryFeedback(trigger: readyToAssignState, readyToAssignFeedback)
+    .sheet(isPresented: $showingAssignment, onDismiss: {
+      if let id = customAssignment {
+        customAssignment = nil
+        onMoveMoney(.readyToAssign, .envelope(id))
+      }
+    }) {
+      AssignMoneyScreen(month: displayedMonth, currencyCode: currencyCode) { id in
+        customAssignment = id
+        showingAssignment = false
+      }
+    }
+    .bowConfirmationDialog("Hide envelope?", item: $envelopeToHide) { envelope in
+      Button("Hide Envelope", role: .destructive) {
+        do {
+          let undo = try UndoableChanges.setHidden(envelope, hidden: true,
+            availableMinor: snapshot.available(for: envelope.id), in: modelContext)
+          toasts?.show(.deleted("Hidden · \(envelope.name)", undo: undo))
+        } catch { actionError = error.localizedDescription }
+      }
+      Button("Cancel", role: .cancel) {}
+    } message: { envelope in
+      Text("\(envelope.name) and its history stay in your budget. Any assigned money stays in this envelope. You can unhide it in Manage Envelopes.")
+    }
+    .bowErrorAlert("Couldn’t Hide Envelope", message: $actionError)
     .toolbar {
       ToolbarItem(placement: .principal) {
         BowMonthTitle(
@@ -413,6 +443,11 @@ struct BudgetScreen: View {
       Divider()
       Button("Edit Target", systemImage: "dollarsign") { onEditEnvelopeTarget(id) }
       Button("Edit Envelope", systemImage: "pencil") { onEditEnvelope(id) }
+      if available >= 0 {
+        Button("Hide Envelope", systemImage: "eye.slash") {
+          envelopeToHide = envelopes.first { $0.id == id }
+        }
+      }
     case .manageEnvelopes:
       EmptyView()
     case .cardPayment(let id):
@@ -454,8 +489,8 @@ struct BudgetScreen: View {
     guard notice.isActionable else { return }
     switch notice.kind {
     case .readyToAssign:
-      guard let envelope = assignableEnvelope else { onAddEnvelope(); return }
-      onMoveMoney(.readyToAssign, .envelope(envelope.id))
+      guard !budgetOrderedEnvelopes.isEmpty else { onAddEnvelope(); return }
+      showingAssignment = true
     case .deficit:
       guard let deficitSource else { return }
       onMoveMoney(deficitSource, .readyToAssign)

@@ -403,12 +403,15 @@ struct PulseTarget<Content: View>: View {
     var color: Color = Bow.bow
     var size: CGFloat = 190
     @ViewBuilder var content: () -> Content
+    @Environment(\.colorScheme) private var scheme
     var body: some View {
         ZStack {
             Circle().fill(color.opacity(0.10))
             Circle().fill(color.opacity(0.18)).padding(size * 0.12)
             Circle()
-                .fill(LinearGradient(colors: [.white, Color(red: 0.953, green: 0.965, blue: 0.992)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .fill(scheme == .dark
+                      ? LinearGradient(colors: [Color(red: 0.15, green: 0.17, blue: 0.23), Color(red: 0.10, green: 0.12, blue: 0.16)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                      : LinearGradient(colors: [.white, Color(red: 0.953, green: 0.965, blue: 0.992)], startPoint: .topLeading, endPoint: .bottomTrailing))
                 .shadow(color: color.opacity(0.35), radius: 15, y: 10)
                 .padding(size * 0.25)
             content()

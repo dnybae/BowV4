@@ -98,7 +98,7 @@ struct BudgetNotice: Identifiable, Equatable {
           ? "Left unassigned when this month ended."
           : hasEnvelopes ? "Give every dollar a job." : "Add an envelope to start assigning.",
         isActionable: !isPastMonth,
-        accessibilityHint: hasEnvelopes ? "Opens Move Money to assign it" : "Adds an envelope"
+        accessibilityHint: hasEnvelopes ? "Shows envelopes and their remaining targets" : "Adds an envelope"
       ))
     }
 

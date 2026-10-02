@@ -4,8 +4,11 @@ import SwiftData
 struct TransactionsScreen: View {
   @Environment(\.modelContext) private var modelContext
   @Environment(\.bowToasts) private var toasts
-  @Query
-  private var simpleFINRecords: [SimpleFINImportRecord]
+  @Query(filter: #Predicate<SimpleFINImportRecord> {
+    $0.statusRaw == "review" || ($0.bankStateRaw == "pending" && $0.isVisiblePending)
+  }) private var bankQueueRecords: [SimpleFINImportRecord]
+  @State private var importedReviewRecords: [SimpleFINImportRecord] = []
+  private var simpleFINRecords: [SimpleFINImportRecord] { bankQueueRecords + importedReviewRecords }
   @Query(filter: #Predicate<BudgetTransaction> { $0.needsApproval })
   private var approvals: [BudgetTransaction]
   @Query(filter: #Predicate<BudgetTransaction> {
@@ -61,6 +64,7 @@ struct TransactionsScreen: View {
   }
 
   var body: some View {
+    let timeline = timeline
     List {
       if filter.isActive {
         Section {
@@ -130,6 +134,9 @@ struct TransactionsScreen: View {
         try? await Task.sleep(for: .milliseconds(250))
       }
       guard !Task.isCancelled else { return }
+      do {
+        importedReviewRecords = try SpendingBankRecordLookup().records(for: reviewTransactions, in: modelContext)
+      } catch { swipeError = error.localizedDescription }
       scheduledRecords = (try? ScheduledRecordLookup().transactions(
         for: occurrences, in: modelContext
       )) ?? []
@@ -228,8 +235,13 @@ extension TransactionsScreen {
        transaction.reconciledAt == nil, !transaction.isBalanceAdjustment {
       Button(transaction.isCleared ? "Uncleared" : "Cleared",
              systemImage: transaction.isCleared ? "circle" : "checkmark.circle") {
-        transaction.isCleared.toggle()
-        try? modelContext.save()
+        do {
+          transaction.isCleared.toggle()
+          try modelContext.save()
+        } catch {
+          modelContext.rollback()
+          swipeError = error.localizedDescription
+        }
       }
       .tint(Bow.funded)
     }
@@ -248,9 +260,8 @@ extension TransactionsScreen {
 
   private func skip(_ occurrence: BudgetScheduleOccurrence, of schedule: BudgetSchedule) {
     do {
-      try BudgetCommands.skipScheduledDate(scheduleID: schedule.id, on: occurrence.scheduledFor, in: modelContext)
-      try modelContext.save()
-      toasts?.show(.deleted("Skipped · \(schedule.payee.isEmpty ? "Scheduled bill" : schedule.payee)"))
+      let undo = try UndoableChanges.skip(scheduleID: schedule.id, date: occurrence.scheduledFor, in: modelContext)
+      toasts?.show(.deleted("Skipped · \(schedule.payee.isEmpty ? "Scheduled bill" : schedule.payee)", undo: undo))
     } catch {
       swipeError = error.localizedDescription
     }
@@ -258,8 +269,8 @@ extension TransactionsScreen {
 
   private func ignore(_ record: SimpleFINImportRecord) {
     do {
-      try SimpleFINSyncCoordinator.shared.resolve(record, as: .ignore, in: modelContext)
-      toasts?.show(.deleted("Ignored · \(record.payee.isEmpty ? "Bank transaction" : record.payee)"))
+      let undo = try UndoableChanges.ignore(record, in: modelContext)
+      toasts?.show(.deleted("Ignored · \(record.payee.isEmpty ? "Bank transaction" : record.payee)", undo: undo))
     } catch {
       swipeError = error.localizedDescription
     }

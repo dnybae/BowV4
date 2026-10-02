@@ -17,6 +17,7 @@ struct ReleaseRegressionChecks {
     goalTargetsSpreadWhatsLeft()
     futureMonthsOpenWithMoneyToPlan()
     try backupsRestoreExactly()
+    try undoRestoresLedgerAndReviewState()
     print("Release regression checks passed")
   }
 
@@ -299,6 +300,55 @@ struct ReleaseRegressionChecks {
     let csv = try TransactionCSVExporter().csv(from: target)
     expect(csv.contains("\"Market, \"\"Downtown\"\"\""), "CSV quotes commas and quotes")
     expect(csv.contains("'=SUM(A1)"), "CSV never exports a live formula")
+  }
+
+  static func undoRestoresLedgerAndReviewState() throws {
+    let context = try makeContext()
+    try BudgetCommands.createBudget(currencyCode: "USD", withDefaults: true, in: context)
+    let account = try BudgetCommands.addAccount(name: "Checking", kind: .cash, currencyCode: "USD", openingBalanceMinor: 100_000, in: context)
+    let envelope = try context.fetch(FetchDescriptor<BudgetEnvelope>()).first!
+    let transaction = try BudgetCommands.addTransaction(kind: .expense, account: account, destination: nil,
+      envelopeID: envelope.id, amountMinor: 1_500, date: Date(), payee: "Market", notes: "", in: context)
+    let id = transaction.id
+    let record = SimpleFINImportRecord(remoteKey: "undo-test", localAccountID: account.id,
+      date: transaction.date, amountMinor: -1_500, payee: "Market")
+    record.transactionID = id
+    record.status = .imported
+    transaction.needsApproval = true
+    context.insert(record)
+    try context.save()
+    expect(try SpendingBankRecordLookup().records(for: [transaction], in: context).map(\.id) == [record.id],
+      "bank metadata for an unresolved transaction is included")
+    transaction.needsApproval = false
+    expect(try SpendingBankRecordLookup().records(for: [transaction], in: context).isEmpty,
+      "settled import history is excluded from the review lookup")
+    transaction.needsApproval = true
+    try context.save()
+    let undoIgnore = try UndoableChanges.ignore(record, in: context)
+    expect(try BudgetTransactionLookup.byID(id, in: context) == nil, "ignoring removes the imported transaction")
+    try undoIgnore()
+    expect(record.status == .imported && record.transactionID == id, "undo restores the review reference")
+    expect(try balance(of: account, in: context) == 98_500, "undo ignore restores the balance")
+    let restored = try BudgetTransactionLookup.byID(id, in: context)!
+    let undoDelete = try UndoableChanges.delete(restored, in: context)
+    try undoDelete()
+    expect(try BudgetTransactionLookup.byID(id, in: context) != nil, "undo delete restores the same transaction ID")
+    expect(record.transactionID == id && record.status == .imported, "undo delete restores the bank reference")
+    do { try undoDelete(); preconditionFailure("undo must not duplicate a transaction") }
+    catch UndoableChanges.UndoError.changed { }
+
+    let schedule = BudgetSchedule(payee: "Bill", amountMinor: 100, accountID: account.id,
+      envelopeID: envelope.id, startDate: Date(), frequency: .monthly, notes: "")
+    context.insert(schedule)
+    try context.save()
+    let undoSkip = try UndoableChanges.skip(scheduleID: schedule.id, date: Date(), in: context)
+    expect(try context.fetch(FetchDescriptor<BudgetScheduleOccurrence>()).contains { $0.isSkipped }, "skip creates an occurrence")
+    try undoSkip()
+    expect(try context.fetch(FetchDescriptor<BudgetScheduleOccurrence>()).isEmpty, "undo removes a newly created skipped occurrence")
+    let undoHide = try UndoableChanges.setHidden(envelope, hidden: true, availableMinor: 0, in: context)
+    expect(envelope.isHidden, "hide sets visibility")
+    try undoHide?()
+    expect(!envelope.isHidden, "undo reveals the envelope")
   }
 
   // MARK: - Helpers

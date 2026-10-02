@@ -17,6 +17,7 @@ struct AccountsScreen: View {
   @Query private var simpleFINLinks: [SimpleFINAccountLink]
   /// Held in @State, not @AppStorage, so collapsing animates; saved to UserDefaults on change.
   @State private var collapsedKinds = Self.savedCollapsedKinds
+  @State private var reconcilingAccount: BudgetAccount?
   @State private var editingAccount: BudgetAccount?
   @State private var showsClosedAccounts = false
   @Namespace private var zoomNamespace
@@ -110,6 +111,9 @@ struct AccountsScreen: View {
       ToolbarItem(placement: .topBarTrailing) {
         Button(action: onAddAccount) { BowToolbarLabel("Add Account", systemImage: "plus") }
       }
+    }
+    .sheet(item: $reconcilingAccount) { account in
+      ReconciliationScreen(account: account, currencyCode: currencyCode)
     }
     .sheet(item: $editingAccount) { account in
       NavigationStack {
@@ -271,6 +275,7 @@ struct AccountsScreen: View {
     .contextMenu {
       if account.closedAt == nil {
         Button("Add Transaction", systemImage: "plus") { onAddTransaction(account.id) }
+        Button("Reconcile", systemImage: "checkmark") { reconcilingAccount = account }
       }
       Button("Edit Account", systemImage: "pencil") { editingAccount = account }
     }

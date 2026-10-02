@@ -433,10 +433,11 @@ struct EnvelopeDetailScreen: View {
 
   private func setHidden(_ hidden: Bool) {
     do {
-      try BudgetCommands.setEnvelopeHidden(
+      let undo = try UndoableChanges.setHidden(
         envelope, hidden: hidden,
         availableMinor: snapshot.available(for: envelope.id), in: modelContext
       )
+      toasts?.show(.deleted("\(hidden ? "Hidden" : "Unhidden") · \(envelope.name)", undo: undo))
       dismiss()
     } catch { message = error.localizedDescription }
   }

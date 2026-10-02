@@ -2,6 +2,8 @@ import SwiftUI
 
 /// A Spending row. Every row, in every state, opens the same transaction sheet.
 struct SpendingTimelineEntryView: View {
+  @Environment(\.transactionZoomNamespace) private var zoomNamespace
+  @Environment(\.transactionZoomPrefix) private var zoomPrefix
   var item: SpendingTimelineItem
   var onSelect: (UUID) -> Void
   var onRecord: (ScheduledTransactionDraft) -> Void
@@ -14,6 +16,7 @@ struct SpendingTimelineEntryView: View {
     Button(action: open) {
       TransactionRowView(model: model, currencyCode: item.currencyCode)
     }
+    .bowTransactionZoomSource(item.id, namespace: zoomNamespace, prefix: zoomPrefix)
     .listRowBackground(model.state.rowStatus?.rowBackground ?? Bow.card)
   }
 

@@ -4,9 +4,7 @@ extension View {
   /// Editor sheets: the keyboard follows a downward drag, and a swipe down can't silently
   /// throw away changes. While there are changes, Cancel asks first (see `BowCancelButton`).
   func bowEditorSheet(hasChanges: Bool) -> some View {
-    self
-      .scrollDismissesKeyboard(.interactively)
-      .interactiveDismissDisabled(hasChanges)
+    modifier(BowEditorSheetModifier(hasChanges: hasChanges))
   }
 
   /// An error alert driven by an optional message: it shows while the message is set.
@@ -93,5 +91,25 @@ struct BowBottomAction<Label: View>: View {
 extension BowBottomAction where Label == Text {
   init(_ title: String, isEnabled: Bool = true, action: @escaping () -> Void) {
     self.init(isEnabled: isEnabled, action: action) { Text(title) }
+  }
+}
+
+private struct BowEditorSheetModifier: ViewModifier {
+  @Environment(\.dismiss) private var dismiss
+  var hasChanges: Bool
+  @State private var confirmingDiscard = false
+
+  func body(content: Content) -> some View {
+    content
+      .scrollDismissesKeyboard(.interactively)
+      .interactiveDismissDisabled(hasChanges)
+      .background {
+        EditorDismissGuard(hasChanges: hasChanges) { confirmingDiscard = true }
+          .frame(width: 0, height: 0)
+      }
+      .confirmationDialog("Discard your changes?", isPresented: $confirmingDiscard, titleVisibility: .visible) {
+        Button("Discard Changes", role: .destructive) { dismiss() }
+        Button("Keep Editing", role: .cancel) {}
+      }
   }
 }

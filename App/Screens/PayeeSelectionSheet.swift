@@ -69,6 +69,11 @@ struct PayeeSelectionSheet: View {
                 .foregroundStyle(Bow.ink)
             }
             .accessibilityLabel("Create payee named \(query)")
+            .disabled(query.count > 80)
+            if query.count > 80 {
+              Text("Use 80 characters or fewer for a new payee.")
+                .font(.bowFootnote).foregroundStyle(Bow.inkSoft)
+            }
           }
           .listRowBackground(Bow.card)
         }
@@ -132,7 +137,7 @@ struct PayeeSelectionSheet: View {
   }
 
   private func createNamedPayee() {
-    guard !query.isEmpty else { return }
+    guard !query.isEmpty, query.count <= 80 else { return }
     createPayee(name: query)
   }
 

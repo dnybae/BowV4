@@ -89,6 +89,10 @@ struct PayeeEditorScreen: View {
             }
           }
           .textInputAutocapitalization(.words)
+          if trimmedName.count > 80 {
+            Text("Use 80 characters or fewer for the payee name.")
+              .font(.bowFootnote).foregroundStyle(Bow.inkSoft)
+          }
         }
         .listRowBackground(Color.clear)
         .listRowInsets(EdgeInsets())
@@ -179,7 +183,7 @@ struct PayeeEditorScreen: View {
         BowCancelButton(hasChanges: hasChanges) { dismiss() }
         ToolbarItem(placement: .confirmationAction) {
           Button { Task { await save() } } label: { BowToolbarLabel("Save") }
-            .disabled(trimmedName.isEmpty || isSaving || isImportingLogo)
+            .disabled(trimmedName.isEmpty || trimmedName.count > 80 || isSaving || isImportingLogo)
         }
       }
       .confirmationDialog("Delete this payee?", isPresented: $showingDelete) {

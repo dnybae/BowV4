@@ -16,6 +16,7 @@ struct MoneyMoveScreen: View {
   @State private var snapshot: BudgetSnapshot?
   @State private var refreshVersion = 0
   @State private var isSaving = false
+  @State private var actionFeedback = 0
   @Environment(\.bowToasts) private var toasts
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -65,6 +66,7 @@ struct MoneyMoveScreen: View {
             }
             Button("Move all") {
               amountMinor = max(0, sourceAvailable)
+              actionFeedback += 1
             }
             .fontWeight(.semibold)
             .bowSecondaryButton(size: .regular)
@@ -90,6 +92,7 @@ struct MoneyMoveScreen: View {
             let oldSource = source
             source = target
             target = oldSource
+            actionFeedback += 1
           } label: {
             Label("Swap direction", systemImage: "arrow.up.arrow.down").labelStyle(.bowTile)
           }
@@ -121,10 +124,12 @@ struct MoneyMoveScreen: View {
       .bowSkyList(mood: .dawn, height: 420)
       .bowEditorSheet(hasChanges: amountMinor != 0)
       .bowAnimation(value: isOverAvailable)
+      .sensoryFeedback(.impact(weight: .light), trigger: actionFeedback)
       .sensoryFeedback(.warning, trigger: isOverAvailable) { wasOver, isOver in !wasOver && isOver }
       .navigationTitle("Move money")
       .task(id: refreshVersion) {
         let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
+        await repository.invalidate()
         snapshot = try? await repository.snapshot(month: month)
       }
       .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in

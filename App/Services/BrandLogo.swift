@@ -53,7 +53,7 @@ enum BrandLogoStore {
     if let cached = cached(key) { return cached }
     guard let image = UIImage(data: data) else { return nil }
     // A photo with no transparency fills the tile as-is, whatever its proportions.
-    let opaque = [.none, .noneSkipFirst, .noneSkipLast].contains(image.cgImage?.alphaInfo)
+    let opaque = image.cgImage.map { [CGImageAlphaInfo.none, .noneSkipFirst, .noneSkipLast].contains($0.alphaInfo) } ?? false
     let logo = opaque ? BrandLogo(image: image, background: .white) : BrandLogo.prepare(image)
     return store(logo, key: key)
   }

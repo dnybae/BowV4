@@ -39,6 +39,7 @@ struct EnvelopeSelectionField: View {
       }
       .contentShape(Rectangle())
     }
+    .sensoryFeedback(.selection, trigger: selection)
     .accessibilityLabel("\(title), \(selectedName)")
     .sheet(isPresented: $showingSelection) {
       EnvelopeSelectionSheet(

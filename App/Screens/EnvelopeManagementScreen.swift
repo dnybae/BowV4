@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct EnvelopeManagementScreen: View {
+  @Environment(\.bowToasts) private var toasts
   @Environment(\.modelContext) private var modelContext
   @Environment(\.budgetSnapshotRepository) private var sharedRepository
   @Query private var profiles: [BudgetProfile]
@@ -33,24 +34,6 @@ struct EnvelopeManagementScreen: View {
 
   var body: some View {
     List {
-      Section {
-        HStack(spacing: Bow.Space.s2) {
-          Button("New envelope") { editor = .newEnvelope }
-            .bowPrimaryButton(size: .regular)
-            .disabled(orderedGroups.isEmpty)
-          Button("New group") { editor = .newGroup }
-            .bowSecondaryButton(size: .regular)
-          Button("Browse ideas") { showingDirectory = true }
-            .bowSecondaryButton(size: .regular)
-            .accessibilityHint("Add envelopes from the envelope directory")
-        }
-        .lineLimit(1)
-        .minimumScaleFactor(0.8)
-        .frame(maxWidth: .infinity)
-        .listRowBackground(Color.clear)
-        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-      }
-
       if groups.isEmpty {
         ContentUnavailableView(
           "No groups yet", systemImage: "folder",
@@ -102,8 +85,17 @@ struct EnvelopeManagementScreen: View {
     .navigationTitle("Groups and envelopes")
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
-        Button { showingGroupOrder = true } label: { BowToolbarLabel("Reorder groups") }
-          .disabled(orderedGroups.count < 2)
+        Menu {
+          Button("New Envelope", systemImage: "plus") { editor = .newEnvelope }
+            .disabled(orderedGroups.isEmpty)
+          Button("New Group", systemImage: "folder.badge.plus") { editor = .newGroup }
+          Button("Browse Ideas", systemImage: "tray") { showingDirectory = true }
+          Divider()
+          Button("Reorder Groups") { showingGroupOrder = true }
+            .disabled(orderedGroups.count < 2)
+        } label: {
+          Label("Manage Envelopes", systemImage: "plus").labelStyle(.iconOnly)
+        }
       }
     }
     .sheet(isPresented: $showingGroupOrder) { GroupOrderScreen() }
@@ -171,10 +163,11 @@ struct EnvelopeManagementScreen: View {
   private func setHidden(_ envelope: BudgetEnvelope, _ hidden: Bool) {
     do {
       guard let snapshot else { return }
-      try BudgetCommands.setEnvelopeHidden(
+      let undo = try UndoableChanges.setHidden(
         envelope, hidden: hidden,
         availableMinor: snapshot.available(for: envelope.id), in: modelContext
       )
+      toasts?.show(.deleted("\(hidden ? "Hidden" : "Unhidden") · \(envelope.name)", undo: undo))
     } catch { message = error.localizedDescription }
   }
 }

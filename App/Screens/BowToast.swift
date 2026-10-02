@@ -35,12 +35,12 @@ struct BowToast: Identifiable, Equatable {
   var systemImage: String
   var feedback: Feedback = .success
   /// Puts back what the toast confirms. Shown as an Undo button; the toast stays up longer.
-  var undo: (@MainActor () -> Void)? = nil
+  var undo: UndoableChanges.Action? = nil
 
   static func == (lhs: BowToast, rhs: BowToast) -> Bool { lhs.id == rhs.id }
 
   /// Long enough to reach Undo, short enough not to linger.
-  var duration: Duration { undo == nil ? .seconds(2.4) : .seconds(5) }
+  var duration: Duration { undo == nil ? .seconds(2.4) : .seconds(10) }
 
   enum Feedback: Equatable {
     /// A save or a goal reached.
@@ -57,7 +57,7 @@ struct BowToast: Identifiable, Equatable {
     BowToast(message: message, systemImage: "checkmark.circle.fill")
   }
 
-  static func deleted(_ message: String, undo: (@MainActor () -> Void)? = nil) -> BowToast {
+  static func deleted(_ message: String, undo: UndoableChanges.Action? = nil) -> BowToast {
     BowToast(message: message, systemImage: "trash.circle.fill", feedback: .removed, undo: undo)
   }
 
@@ -81,6 +81,7 @@ extension View {
 private struct BowToastHost: ViewModifier {
   @Environment(\.bowToasts) private var center
   @State private var hostID = UUID()
+  @State private var undoError: String?
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   /// Height of an inline navigation bar, so the toast clears it.
   private static let navigationBarClearance: CGFloat = 58
@@ -92,7 +93,7 @@ private struct BowToastHost: ViewModifier {
     content
       .overlay(alignment: .top) {
         if let toast = visibleToast {
-          BowToastView(toast: toast) { center?.dismiss(toast) }
+          BowToastView(toast: toast, onDismiss: { center?.dismiss(toast) }, onUndoError: { undoError = $0 })
             .padding(.horizontal, Bow.Space.s4)
             // Just below the navigation bar, so glass never sits on the bar's own glass controls.
             .padding(.top, Self.navigationBarClearance)
@@ -103,7 +104,8 @@ private struct BowToastHost: ViewModifier {
             }
         }
       }
-      .bowAnimation(value: visibleToast?.id)
+      .bowErrorAlert("Couldn’t Undo", message: $undoError)
+    .bowAnimation(value: visibleToast?.id)
       .sensoryFeedback(trigger: center?.current?.id) { _, _ in
         // Moving a toast from a closing sheet to its parent must not replay its haptic.
         guard isFrontmost else { return nil }
@@ -123,6 +125,7 @@ private struct BowToastView: View {
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   var toast: BowToast
   var onDismiss: () -> Void
+  var onUndoError: (String) -> Void
 
   var body: some View {
     HStack(spacing: Bow.Space.s2) {
@@ -144,8 +147,12 @@ private struct BowToastView: View {
       .accessibilityHint("Dismisses the message")
       if let undo = toast.undo {
         Button("Undo") {
-          undo()
-          onDismiss()
+          do {
+            try undo()
+            onDismiss()
+          } catch {
+            onUndoError(error.localizedDescription)
+          }
         }
         .font(.bowSubhead.weight(.semibold))
         .foregroundStyle(Bow.bowInk)

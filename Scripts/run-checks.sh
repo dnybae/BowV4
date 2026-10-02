@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 
 BUILD_DIR="${TMPDIR:-/tmp}/bow-checks"
 JOBS="${JOBS:-4}"
-mkdir -p "$BUILD_DIR"
+mkdir -p "$BUILD_DIR" "$BUILD_DIR/ModuleCache"
 
 # Build from a snapshot, so edits made while checks run can't break the build mid-way.
 SNAPSHOT="$BUILD_DIR/src"
@@ -34,7 +34,7 @@ run_check() {
   local check=$1 name output
   name=$(basename "$check" .swift)
   rm -f "$BUILD_DIR/$name.result"
-  if ! xcrun swiftc -parse-as-library -swift-version 5 -target arm64-apple-macos27.0 \
+  if ! xcrun swiftc -module-cache-path "$BUILD_DIR/ModuleCache" -parse-as-library -swift-version 5 -target arm64-apple-macos27.0 \
       -module-name BowChecks "${SOURCES[@]}" "$check" -o "$BUILD_DIR/$name" 2> "$BUILD_DIR/$name.log"; then
     { echo "BUILD FAILED  $name"; grep -E "error:" "$BUILD_DIR/$name.log" | head -10; } > "$BUILD_DIR/$name.result"
     return

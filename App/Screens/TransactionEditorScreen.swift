@@ -445,6 +445,7 @@ struct TransactionEditorScreen: View {
           }
         }
       }
+      .sensoryFeedback(.selection, trigger: payee)
       .navigationTitle(purpose == .add ? "New transaction" : "Transaction")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -1001,31 +1002,24 @@ struct TransactionEditorScreen: View {
   /// budget; the schedule stays active either way.
   private func skipScheduledDate() {
     do {
+      let undo: UndoableChanges.Action
       if purpose == .enterScheduled, let scheduledDraft {
-        try BudgetCommands.skipScheduledDate(
-          scheduleID: scheduledDraft.scheduleID, on: scheduledDraft.scheduledFor, in: modelContext
-        )
-        try modelContext.save()
+        undo = try UndoableChanges.skip(scheduleID: scheduledDraft.scheduleID, date: scheduledDraft.scheduledFor, in: modelContext)
       } else if let transaction {
-        // Deleting a bill's transaction marks its date skipped.
-        try BudgetCommands.deleteTransaction(transaction, in: modelContext)
-      }
-      toasts?.show(.deleted("Skipped · \(payee.isEmpty ? "Scheduled bill" : payee)"))
+        undo = try UndoableChanges.delete(transaction, in: modelContext)
+      } else { return }
+      toasts?.show(.deleted("Skipped · \(payee.isEmpty ? "Scheduled bill" : payee)", undo: undo))
       dismiss()
-    } catch {
-      errorMessage = error.localizedDescription
-    }
+    } catch { errorMessage = error.localizedDescription }
   }
 
   private func ignoreImport() {
     guard let bankRecord else { return }
     do {
-      try SimpleFINSyncCoordinator.shared.resolve(bankRecord, as: .ignore, in: modelContext)
-      toasts?.show(.deleted("Ignored · \(payee.isEmpty ? "Bank transaction" : payee)"))
+      let undo = try UndoableChanges.ignore(bankRecord, in: modelContext)
+      toasts?.show(.deleted("Ignored · \(payee.isEmpty ? "Bank transaction" : payee)", undo: undo))
       dismiss()
-    } catch {
-      errorMessage = error.localizedDescription
-    }
+    } catch { errorMessage = error.localizedDescription }
   }
 
   private func delete() {

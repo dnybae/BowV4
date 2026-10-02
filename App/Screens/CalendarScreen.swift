@@ -6,7 +6,11 @@ struct CalendarScreen: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.calendar) private var calendar
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-  @Query private var bankRecords: [SimpleFINImportRecord]
+  @Query(filter: #Predicate<SimpleFINImportRecord> {
+    $0.statusRaw == "review" || ($0.bankStateRaw == "pending" && $0.isVisiblePending)
+  }) private var bankQueueRecords: [SimpleFINImportRecord]
+  @State private var importedReviewRecords: [SimpleFINImportRecord] = []
+  private var bankRecords: [SimpleFINImportRecord] { bankQueueRecords + importedReviewRecords }
   @Query(filter: #Predicate<BudgetTransaction> {
     $0.needsApproval || ($0.kindRaw == "expense" && $0.envelopeID == nil
       && $0.sourceRaw != "balanceAdjustment" && !$0.isBeforeStart)
@@ -420,6 +424,7 @@ struct CalendarScreen: View {
         items.append(contentsOf: page.items)
         request.cursor = page.nextCursor
       } while request.cursor != nil
+      importedReviewRecords = try SpendingBankRecordLookup().records(for: reviewTransactions, in: modelContext)
       monthTransactions = transactions
       monthItems = items
       scheduledRecords = recorded

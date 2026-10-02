@@ -25,6 +25,24 @@ struct DemoDataChecks {
     expect(Set(schedules.map(\.frequency)) == Set(ScheduleFrequency.allCases), "every recurrence is present")
     expect(schedules.contains { !$0.isActive }, "paused schedule is present")
     expect(!rules.isEmpty, "payee rules are present")
+    expect(Set(rules.map { PayeeDirectory.key($0.name) }).count == rules.count,
+           "repeated demo transactions share one payee")
+    let brandedTransactions = transactions.filter { $0.merchantDomain != nil && $0.kind != .transfer }
+    expect(brandedTransactions.count > transactions.count / 2,
+           "most demo transactions have brands")
+    for transaction in brandedTransactions {
+      let payee = PayeeDirectory.matchingPayee(for: transaction.payee, payees: rules)
+      expect(payee?.logoSource == .logoDev && payee?.merchantDomain == transaction.merchantDomain,
+             "every branded transaction resolves to an enabled payee logo")
+    }
+    expect(rules.filter { $0.logoSource == .logoDev }.count > rules.count / 2,
+           "most saved demo payees use brand logos")
+    for name in ["Instacart", "GEICO", "Disney+", "Planet Fitness", "Delta Air Lines", "Blue Bottle Coffee", "The Home Depot"] {
+      expect(PayeeDirectory.matchingPayee(for: name, payees: rules)?.logoSource == .logoDev,
+             "schedule and import brands have enabled logos")
+    }
+    expect(PayeeDirectory.matchingPayee(for: "Apartment Rent", payees: rules)?.logoSource == .system,
+           "generic demo payees keep their default icon")
     expect(reviews.filter { $0.bankState == .posted && $0.status == .review }.count == 2,
            "bank review has matching and unmatched rows")
     expect(reviews.filter { $0.bankState == .pending && $0.isVisiblePending }.count == 1,

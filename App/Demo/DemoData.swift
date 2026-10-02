@@ -98,6 +98,19 @@ enum DemoData {
     func allocate(_ amount: Int64, to target: BudgetEnvelope, in month: Int) {
       insert(BudgetAllocation(date: date(month, 2), amountMinor: amount, targetEnvelopeID: target.id))
     }
+    var brandedPayees: [String: BudgetPayee] = [:]
+    @discardableResult
+    func brandedPayee(_ name: String, domain: String, envelope: BudgetEnvelope?) -> BudgetPayee {
+      let key = PayeeDirectory.key(name)
+      if let existing = brandedPayees[key] { return existing }
+      let payee = insert(BudgetPayee(
+        name: name, defaultEnvelopeID: envelope?.id, merchantDomain: domain
+      ))
+      payee.logoSource = .logoDev
+      brandedPayees[key] = payee
+      return payee
+    }
+
     @discardableResult
     func transaction(
       _ payee: String, _ amount: Int64, _ kind: BudgetTransactionKind,
@@ -105,6 +118,9 @@ enum DemoData {
       envelope category: BudgetEnvelope? = nil, month: Int = 0, day: Int,
       notes: String = "", domain: String? = nil, cleared: Bool = true
     ) -> BudgetTransaction {
+      if let domain, kind != .transfer {
+        brandedPayee(payee, domain: domain, envelope: category)
+      }
       let item = insert(BudgetTransaction(
         accountID: account.id,
         transferAccountID: destination?.id,
@@ -168,10 +184,19 @@ enum DemoData {
     imported.externalKey = "demo|bookstore"
     imported.needsApproval = false
 
-    insert(BudgetPayee(name: "Whole Foods Market", defaultEnvelopeID: groceries.id, exactMatchText: "WHOLE FOODS", merchantDomain: "wholefoodsmarket.com"))
+    brandedPayees[PayeeDirectory.key("Whole Foods Market")]?.exactMatchText = "WHOLE FOODS"
     insert(BudgetPayee(name: "Apartment Rent", defaultEnvelopeID: housing.id, exactMatchText: "APARTMENT RENT ACH"))
-    insert(BudgetPayee(name: "Starbucks", defaultEnvelopeID: dining.id, exactMatchText: "STARBUCKS", merchantDomain: "starbucks.com"))
-    insert(BudgetPayee(name: "Netflix", defaultEnvelopeID: fun.id, exactMatchText: "NETFLIX", merchantDomain: "netflix.com"))
+    brandedPayees[PayeeDirectory.key("Starbucks")]?.exactMatchText = "STARBUCKS"
+    brandedPayees[PayeeDirectory.key("Netflix")]?.exactMatchText = "NETFLIX"
+
+    // Include brands used by schedules, bank review, and the sample CSV import.
+    brandedPayee("Instacart", domain: "instacart.com", envelope: groceries)
+    brandedPayee("GEICO", domain: "geico.com", envelope: transport)
+    brandedPayee("Disney+", domain: "disneyplus.com", envelope: fun)
+    brandedPayee("Planet Fitness", domain: "planetfitness.com", envelope: fun)
+    brandedPayee("Delta Air Lines", domain: "delta.com", envelope: travel)
+    brandedPayee("Blue Bottle Coffee", domain: "bluebottlecoffee.com", envelope: dining)
+    brandedPayee("The Home Depot", domain: "homedepot.com", envelope: nil)
 
     let rentSchedule = insert(BudgetSchedule(payee: "Apartment Rent", amountMinor: 145_000, accountID: everyday.id, envelopeID: housing.id, startDate: date(-5, 3), frequency: .monthly, notes: "Due on the 3rd"))
     previousRent?.scheduleID = rentSchedule.id

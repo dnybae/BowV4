@@ -6,13 +6,16 @@ struct GroupEditorScreen: View {
   @Environment(\.modelContext) private var modelContext
   var nextOrder: Int
   var group: BudgetGroup?
+  /// Called with a newly added group, e.g. to select it in the envelope sheet that opened this one.
+  var onAdded: ((BudgetGroup) -> Void)?
   @State private var name = ""
   @State private var errorMessage: String?
   @State private var showingDelete = false
 
-  init(nextOrder: Int, group: BudgetGroup? = nil) {
+  init(nextOrder: Int, group: BudgetGroup? = nil, onAdded: ((BudgetGroup) -> Void)? = nil) {
     self.nextOrder = nextOrder
     self.group = group
+    self.onAdded = onAdded
     _name = State(initialValue: group?.name ?? "")
   }
 
@@ -65,7 +68,8 @@ struct GroupEditorScreen: View {
         group.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         try modelContext.save()
       } else {
-        try BudgetCommands.addGroup(name: name, order: nextOrder, in: modelContext)
+        let added = try BudgetCommands.addGroup(name: name, order: nextOrder, in: modelContext)
+        onAdded?(added)
       }
       dismiss()
     } catch {

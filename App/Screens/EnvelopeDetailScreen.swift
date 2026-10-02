@@ -6,6 +6,7 @@ struct EnvelopeDetailScreen: View {
   @Environment(\.modelContext) private var modelContext
   @Query private var payees: [BudgetPayee]
   @Query private var groups: [BudgetGroup]
+  @Query(filter: #Predicate<BudgetScheduleOccurrence> { $0.isSkipped }) private var skippedOccurrences: [BudgetScheduleOccurrence]
   var envelope: BudgetEnvelope
   var currencyCode: String
   var snapshot: BudgetSnapshot
@@ -122,6 +123,20 @@ struct EnvelopeDetailScreen: View {
       || accounts.contains { $0.kind == .credit && snapshot.paymentAvailable[$0.id, default: 0] > 0 })
   }
 
+  private var monthName: String { snapshot.month.formatted(.dateTime.month(.wide)) }
+
+  private var moneyMoves: MoneyMoveHistory {
+    MoneyMoveHistory(subject: .envelope(envelope.id), month: snapshot.month)
+  }
+
+  private var moneyMoveCount: Int { moneyMoves.count(allocations: allocations) }
+
+  /// Each recurring bill's next date; past months have nothing upcoming.
+  private var upcoming: [UpcomingSchedule] {
+    guard !isPastMonth else { return [] }
+    return UpcomingSchedules().items(for: envelopeSchedules, skipped: skippedOccurrences)
+  }
+
   private var groupName: String {
     groups.first { $0.id == envelope.groupID }?.name ?? ""
   }
@@ -179,95 +194,37 @@ struct EnvelopeDetailScreen: View {
         .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: Bow.Space.s2, trailing: 0))
       }
 
+      targetSection
+
       Section {
-        if let totalTarget {
-          LabeledContent("Fund this month") {
-            MoneyText(minor: totalTarget, currencyCode: currencyCode)
-          }
-            .fontWeight(.semibold)
-          if !scheduledContributions.isEmpty && envelope.targetDate == nil {
-            LabeledContent("Your target") {
-              MoneyText(minor: envelope.targetMinor ?? 0, currencyCode: currencyCode)
-            }
-            ForEach(scheduledContributions) { contribution in
-              ScheduledTargetRow(contribution: contribution, currencyCode: currencyCode)
-            }
-          }
-          if let date = envelope.targetDate, let goal = envelope.targetMinor {
-            LabeledContent("Goal") {
-              Text("\(BudgetMoney.formatted(goal, currencyCode: currencyCode)) by \(date.formatted(.dateTime.month(.wide).year()))")
-            }
-            let months = EnvelopeTargetPlanner().monthsLeft(from: snapshot.month, through: date)
-            Text("Spread over \(months) \(months == 1 ? "month" : "months"), including this one. The amount adjusts as you save.")
-              .font(.bowFootnote)
-              .foregroundStyle(Bow.inkSoft)
-          }
-          let remaining = max(0, totalTarget - max(0, snapshot.assigned[envelope.id, default: 0]))
-          Text(remaining == 0
-            ? "Monthly target met"
-            : "\(BudgetMoney.formatted(remaining, currencyCode: currencyCode)) left to assign this month")
-            .font(.bowFootnote)
-            .foregroundStyle(Bow.inkSoft)
-        } else {
-          Text("No target yet")
-            .foregroundStyle(Bow.inkSoft)
+        NavigationLink {
+          MoneyMoveHistoryScreen(
+            title: envelope.name, month: snapshot.month,
+            entries: moneyMoves.moves(allocations: allocations, envelopes: envelopes, accounts: accounts),
+            currencyCode: currencyCode
+          )
+        } label: {
+          EnvelopeDetailValueRow(
+            title: "Money moves", detail: "In \(monthName)",
+            value: moneyMoveCount == 0 ? "None" : "\(moneyMoveCount)"
+          )
         }
-        if let suggestedTarget {
-          LabeledContent("Suggested from spending") {
-            MoneyText(minor: suggestedTarget, currencyCode: currencyCode)
-          }
-          if envelope.targetMinor != suggestedTarget && !isPastMonth {
-            Button {
-              envelope.targetMinor = suggestedTarget
-              do {
-                try modelContext.save()
-                toasts?.show(.saved("Target set to \(BudgetMoney.formatted(suggestedTarget, currencyCode: currencyCode))"))
-              } catch { message = error.localizedDescription }
-            } label: {
-              Label("Use \(BudgetMoney.formatted(suggestedTarget, currencyCode: currencyCode)) as the target",
-                    systemImage: "checkmark.circle")
-                .labelStyle(.bowTile)
-            }
-          }
-        }
-      } header: {
-        Text("Funding target")
-      } footer: {
-        Group {
-          if !scheduledContributions.isEmpty {
-            Text("Scheduled transactions add \(BudgetMoney.formatted(scheduledTotal, currencyCode: currencyCode)) to this month’s target, on top of your own.")
-          } else if suggestedTarget != nil {
-            Text("Suggestion is average monthly spending across up to six completed months.")
-          }
-        }
-        .font(.bowFootnote)
       }
       .listRowBackground(Bow.card)
 
-      Section("Recurring transactions") {
-        ForEach(envelopeSchedules) { schedule in
-          Button { onEditSchedule(schedule.id) } label: {
-            ScheduleSummaryRow(schedule: schedule, currencyCode: currencyCode)
+      if !upcoming.isEmpty {
+        Section("Upcoming") {
+          ForEach(upcoming) { item in
+            Button { onEditSchedule(item.scheduleID) } label: {
+              TransactionRowView(
+                model: item.rowModel(accountName: "", envelopeName: envelope.name),
+                currencyCode: currencyCode, options: .hidesEnvelope
+              )
+            }
           }
-          .disabled(isPastMonth)
         }
-        if !isPastMonth {
-          Button {
-            scheduleDraft = ScheduleDraft(
-              payee: "", amountMinor: 0, accountID: nil, envelopeID: envelope.id,
-              startDate: Date(), frequency: .monthly
-            )
-          } label: {
-            Label(envelopeSchedules.isEmpty ? "Add a recurring bill" : "Add another", systemImage: "plus")
-              .labelStyle(.bowTile)
-              .foregroundStyle(Bow.bowInk)
-          }
-        } else if envelopeSchedules.isEmpty {
-          Text("No recurring transactions")
-            .foregroundStyle(Bow.inkSoft)
-        }
+        .listRowBackground(Bow.card)
       }
-      .listRowBackground(Bow.card)
 
       if feed.items.isEmpty && (!hasLoadedFeed || feed.isLoading) {
         Section("Transactions") {
@@ -276,7 +233,7 @@ struct EnvelopeDetailScreen: View {
         .listRowBackground(Bow.card)
       } else if feed.items.isEmpty {
         Section("Transactions") {
-          Text("Nothing spent from \(envelope.name) this month.")
+          Text("Nothing spent from \(envelope.name) in \(monthName).")
             .font(.bowBody)
             .foregroundStyle(Bow.inkSoft)
         }
@@ -305,22 +262,6 @@ struct EnvelopeDetailScreen: View {
           .listRowBackground(Bow.card)
         }
       }
-
-      if !envelopeAllocations.isEmpty {
-        Section("Money moves") {
-          ForEach(envelopeAllocations) { allocation in
-            VStack(alignment: .leading, spacing: 3) {
-              LabeledContent(allocation.targetEnvelopeID == envelope.id ? "Moved in" : "Moved out") {
-                MoneyText(minor: allocation.amountMinor, currencyCode: currencyCode)
-              }
-              Text(allocation.date.formatted(date: .abbreviated, time: .omitted))
-                .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
-            }
-          }
-        }
-        .listRowBackground(Bow.card)
-      }
-
     }
     .bowListBackground {
       Bow.mist.overlay(alignment: .top) { SkyBackground(mood: status.state.sky) }
@@ -353,6 +294,12 @@ struct EnvelopeDetailScreen: View {
       }
     }
     .bowToolbarOverflow(isEnabled: !isPastMonth) {
+      Button("Add Recurring Bill", systemImage: "calendar.badge.plus") {
+        scheduleDraft = ScheduleDraft(
+          payee: "", amountMinor: 0, accountID: nil, envelopeID: envelope.id,
+          startDate: Date(), frequency: .monthly
+        )
+      }
       Button(envelope.isHidden ? "Unhide Envelope" : "Hide Envelope",
              systemImage: envelope.isHidden ? "eye" : "eye.slash") {
         if !envelope.isHidden && snapshot.available(for: envelope.id) > 0 {
@@ -390,6 +337,62 @@ struct EnvelopeDetailScreen: View {
       Text("The balance stays in this envelope and remains part of your budget.")
     }
     .bowErrorAlert("Envelope", message: $message)
+  }
+
+  /// Where this month's number comes from: your target, scheduled bills, and what they add up to.
+  /// Every row opens the target sheet.
+  private var targetSection: some View {
+    Section("Target") {
+      let ownTarget = envelope.targetMinor ?? 0
+      if ownTarget == 0 && scheduledTotal == 0 {
+        targetRow(
+          title: isPastMonth ? "No target" : "Set a target",
+          detail: suggestedTarget.map { "You usually spend about \(BudgetMoney.formatted($0, currencyCode: currencyCode)) a month" }
+        )
+      } else {
+        if ownTarget > 0 {
+          if let date = envelope.targetDate {
+            let months = EnvelopeTargetPlanner().monthsLeft(from: snapshot.month, through: date)
+            targetRow(
+              title: "Goal",
+              detail: "By \(date.formatted(.dateTime.month(.wide).year())) · \(months) \(months == 1 ? "month" : "months") left",
+              minor: ownTarget
+            )
+          } else {
+            targetRow(title: "Monthly target", minor: ownTarget)
+          }
+        }
+        if scheduledTotal > 0 {
+          let count = scheduledContributions.reduce(0) { $0 + $1.occurrences }
+          targetRow(
+            title: "Scheduled bills",
+            detail: "\(count) due in \(monthName)",
+            minor: scheduledTotal, showsPlusSign: ownTarget > 0
+          )
+        }
+        if let totalTarget, (ownTarget > 0 && scheduledTotal > 0) || envelope.targetDate != nil {
+          targetRow(title: "Needed this month", minor: totalTarget, isEmphasized: true)
+        }
+      }
+    }
+    .listRowBackground(Bow.card)
+  }
+
+  @ViewBuilder
+  private func targetRow(
+    title: String, detail: String? = nil, minor: Int64? = nil,
+    showsPlusSign: Bool = false, isEmphasized: Bool = false
+  ) -> some View {
+    let row = EnvelopeDetailValueRow(title: title, detail: detail, isEmphasized: isEmphasized) {
+      if let minor {
+        MoneyText(minor: minor, currencyCode: currencyCode, showsPlusSign: showsPlusSign)
+      }
+    }
+    if isPastMonth {
+      row
+    } else {
+      Button(action: onEditTarget) { row }
+    }
   }
 
   /// Assign / Move out / target; when overspent, Cover leads instead.

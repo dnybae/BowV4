@@ -178,11 +178,14 @@ struct BudgetCommands {
     context.insert(payment)
   }
 
-  static func addGroup(name: String, order: Int, in context: ModelContext) throws {
+  @discardableResult
+  static func addGroup(name: String, order: Int, in context: ModelContext) throws -> BudgetGroup {
     guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else { throw BudgetCommandError.missingName }
-    context.insert(BudgetGroup(name: name.trimmingCharacters(in: .whitespacesAndNewlines), sortOrder: order))
+    let group = BudgetGroup(name: name.trimmingCharacters(in: .whitespacesAndNewlines), sortOrder: order)
+    context.insert(group)
     try context.save()
+    return group
   }
 
   /// Adds an envelope at the end of its group. An envelope of the same name that was hidden in

@@ -560,7 +560,9 @@ struct TransactionEditorScreen: View {
       EnvelopeSelectionField(
         title: "Envelope", selection: $envelopeID,
         envelopes: envelopes, noneTitle: envelopeNoneTitle, systemImage: "square.grid.2x2",
-        highlightsNone: kind == .expense
+        // A new expense simply hasn't been given one yet; flag it only on saved transactions.
+        highlightsNone: kind == .expense && purpose != .add,
+        prompt: kind != .inflow && purpose == .add ? "Choose an envelope" : nil
       )
     }
     if kind != .transfer {
@@ -722,6 +724,9 @@ struct TransactionEditorScreen: View {
     let lastUsed = try? await PayeeDirectoryRepository(modelContainer: modelContext.container)
       .lastUsed(payee: payee, kind: kind, excluding: transaction?.id)
     guard !Task.isCancelled else { return }
+    // Filling in on open isn't a change of yours, so Cancel shouldn't ask about it.
+    let wasUnchanged = initialFields == nil || !hasChanges
+    defer { if wasUnchanged { initialFields = fields } }
 
     // Only a new transaction's account is a guess; everything else already has its account.
     if purpose == .add && (accountID == defaultAccountID || accountID == autoFilledAccountID) {

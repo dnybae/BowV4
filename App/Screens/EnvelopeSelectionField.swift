@@ -10,6 +10,8 @@ struct EnvelopeSelectionField: View {
   var systemImage: String? = nil
   /// Shows the empty choice in amber, when saving needs an envelope.
   var highlightsNone = false
+  /// Shown in place of the empty choice's title while nothing is chosen, e.g. on a new transaction.
+  var prompt: String? = nil
   @State private var showingSelection = false
 
   private var valueStyle: Color {
@@ -19,7 +21,7 @@ struct EnvelopeSelectionField: View {
 
   private var selectedName: String {
     if let envelope = envelopes.first(where: { $0.id == selection }) { return envelope.name }
-    return noneTitle ?? "Choose an envelope"
+    return prompt ?? noneTitle ?? "Choose an envelope"
   }
 
   var body: some View {

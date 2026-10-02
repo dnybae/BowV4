@@ -89,6 +89,8 @@ struct CalendarScreen: View {
     .bowListBackground {
       Bow.mist.overlay(alignment: .top) { SkyBackground(mood: .dawn) }
     }
+    .contentMargins(.top, Bow.Space.s2, for: .scrollContent)
+    .listSectionSpacing(Bow.Space.s2)
     .bowSoftScrollEdge()
     .bowAnimation(value: scheduleEntries.map(\.id))
     .bowAnimation(value: dayTransactions.map(\.id))

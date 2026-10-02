@@ -50,6 +50,7 @@ struct BudgetCommands {
     openingBalanceMinor: Int64,
     type: BudgetAccountType? = nil,
     note: String = "",
+    logoSettings: AccountLogoSettings = AccountLogoSettings(),
     in context: ModelContext
   ) throws -> BudgetAccount {
     guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -67,6 +68,7 @@ struct BudgetCommands {
       type: type,
       note: note.trimmingCharacters(in: .whitespacesAndNewlines)
     )
+    account.logoSettings = logoSettings
     context.insert(account)
     if kind == .credit {
       try ensureCardPaymentEnvelope(for: account, in: context)
@@ -82,6 +84,7 @@ struct BudgetCommands {
     note: String,
     currentBalanceMinor: Int64,
     existingBalanceMinor: Int64,
+    logoSettings: AccountLogoSettings? = nil,
     in context: ModelContext
   ) throws {
     let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -103,6 +106,7 @@ struct BudgetCommands {
       account.lastReconciledAt = nil
       account.lastReconciledBalanceMinor = nil
     }
+    if let logoSettings { account.logoSettings = logoSettings }
     account.name = trimmedName
     account.typeRaw = type.rawValue
     account.note = note.trimmingCharacters(in: .whitespacesAndNewlines)

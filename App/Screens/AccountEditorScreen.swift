@@ -21,6 +21,8 @@ struct AccountEditorScreen: View {
   @State private var showingStopBankSync = false
   @State private var initialFields: AccountEditorFields?
   @State private var isSaving = false
+  @State private var logoSettings: AccountLogoSettings
+  @State private var isImportingLogo = false
   @Environment(\.bowToasts) private var toasts
 
   init(currencyCode: String, account: BudgetAccount? = nil,
@@ -33,10 +35,11 @@ struct AccountEditorScreen: View {
     _type = State(initialValue: account?.accountType ?? .checking)
     _openingBalanceMinor = State(initialValue: account?.openingBalanceMinor ?? suggestedBalanceMinor ?? 0)
     _note = State(initialValue: account?.note ?? "")
+    _logoSettings = State(initialValue: account?.logoSettings ?? AccountLogoSettings())
   }
 
   private var fields: AccountEditorFields {
-    AccountEditorFields(name: name, type: type, balance: openingBalanceMinor, note: note)
+    AccountEditorFields(name: name, type: type, balance: openingBalanceMinor, note: note, logoSettings: logoSettings)
   }
 
   private var hasChanges: Bool { initialFields.map { fields != $0 } ?? false }
@@ -52,7 +55,11 @@ struct AccountEditorScreen: View {
   var body: some View {
     Form {
       Section {
-        BowNameHeader("Account name", name: $name, systemImage: type.kind.systemImage)
+        BowNameHeader(placeholder: "Account name", name: $name) {
+          AccountLogoView(appearance: logoSettings.appearance(
+            institutionName: account?.institutionName, institutionDomain: account?.institutionDomain),
+            systemImage: type.kind.systemImage, size: 64, style: .glossy)
+        }
       }
       .listRowBackground(Color.clear)
       .listRowInsets(EdgeInsets())
@@ -88,6 +95,10 @@ struct AccountEditorScreen: View {
         .font(.bowFootnote)
       }
       .listRowBackground(Bow.card)
+
+      AccountLogoControls(settings: $logoSettings, isImporting: $isImportingLogo,
+                          accountName: name, institutionName: account?.institutionName,
+                          institutionDomain: account?.institutionDomain)
 
       if let account, !isDemoMode, !simpleFINConnections.isEmpty {
         Section {
@@ -153,7 +164,7 @@ struct AccountEditorScreen: View {
     .navigationBarBackButtonHidden(hasChanges)
     // One primary action at the bottom, creating or editing.
     .safeAreaInset(edge: .bottom) {
-      BowBottomAction(account == nil ? "Create account" : "Save changes", isEnabled: canSave && !isSaving) {
+      BowBottomAction(account == nil ? "Create account" : "Save changes", isEnabled: canSave && !isSaving && !isImportingLogo) {
         Task { await save() }
       }
     }
@@ -206,6 +217,7 @@ struct AccountEditorScreen: View {
         try BudgetCommands.updateAccount(
           account, name: name, type: type, note: note,
           currentBalanceMinor: minor, existingBalanceMinor: existingBalance,
+          logoSettings: logoSettings,
           in: modelContext
         )
         saved = account
@@ -217,6 +229,7 @@ struct AccountEditorScreen: View {
           openingBalanceMinor: minor,
           type: type,
           note: note,
+          logoSettings: logoSettings,
           in: modelContext
         )
       }
@@ -234,4 +247,5 @@ private struct AccountEditorFields: Equatable {
   var type: BudgetAccountType
   var balance: Int64
   var note: String
+  var logoSettings: AccountLogoSettings
 }

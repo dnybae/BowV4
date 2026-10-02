@@ -357,8 +357,16 @@ final class SimpleFINSyncCoordinator {
   private func updateAccounts(_ accounts: [SimpleFINRemoteAccount], in context: ModelContext) {
     let existing = (try? context.fetch(FetchDescriptor<SimpleFINAccountLink>())) ?? []
     let byKey = Dictionary(uniqueKeysWithValues: existing.map { ($0.remoteKey, $0) })
+    let localAccounts = (try? context.fetch(FetchDescriptor<BudgetAccount>())) ?? []
     for account in accounts {
       if let link = byKey[account.remoteKey] {
+        if let institution = account.institution {
+          link.institutionName = institution.name
+          link.institutionDomain = institution.logoDomain
+          if let local = localAccounts.first(where: { $0.id == link.localAccountID }) {
+            link.applyInstitution(to: local)
+          }
+        }
         link.name = account.name
         link.currencyCode = account.currency
         link.reportedBalance = account.balance
@@ -371,6 +379,8 @@ final class SimpleFINSyncCoordinator {
         )
         link.reportedBalance = account.balance
         link.reportedAt = account.balanceDate.map { Date(timeIntervalSince1970: $0) }
+        link.institutionName = account.institution?.name
+        link.institutionDomain = account.institution?.logoDomain
         context.insert(link)
       }
     }

@@ -3,13 +3,15 @@ import SwiftUI
 struct PayeeLogoFinderSheet: View {
   @Environment(\.dismiss) private var dismiss
   var payeeName: String
+  var isBank: Bool = false
   var onSelect: (String?) -> Void
   @State private var domain: String
   @State private var previewImage: BrandLogo?
   @State private var isLoading = false
 
-  init(payeeName: String, domain: String?, onSelect: @escaping (String?) -> Void) {
+  init(payeeName: String, domain: String?, isBank: Bool = false, onSelect: @escaping (String?) -> Void) {
     self.payeeName = payeeName
+    self.isBank = isBank
     self.onSelect = onSelect
     _domain = State(initialValue: domain ?? "")
   }
@@ -46,7 +48,7 @@ struct PayeeLogoFinderSheet: View {
                   .frame(width: 54, height: 54)
                   .bowShimmer()
               } else {
-                Image(systemName: "storefront.fill")
+                Image(systemName: isBank ? "building.columns" : "storefront.fill")
                   .bowScaledIcon(frame: 54, glyph: 25, weight: .regular)
                   .foregroundStyle(Bow.inkSoft)
               }
@@ -78,12 +80,12 @@ struct PayeeLogoFinderSheet: View {
             .autocorrectionDisabled()
             .keyboardType(.URL)
           if !validDomain {
-            Text("Enter a domain like starbucks.com.")
+            Text(isBank ? "Enter a domain like chase.com." : "Enter a domain like starbucks.com.")
               .font(.bowFootnote)
               .foregroundStyle(Bow.needsInk)
           }
         } footer: {
-          Text("Optional. A website domain gives a more precise result than the payee name.")
+          Text("Optional. A website domain gives a more precise result than the name.")
             .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)

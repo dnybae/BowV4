@@ -50,6 +50,27 @@ struct SimpleFINClientChecks {
     precondition(messyTransactions[2].memo == "Birthday gift")
     precondition(messyTransactions[2].extraJSON.flatMap { String(data: $0, encoding: .utf8) }
       == #"{"category":"5411","memo":"Birthday gift"}"#)
+    let institutions = Data("""
+      {"connections":[
+        {"conn_id":"bank-login","name":"Bank Login","org_url":"https://www.chase.com/login"},
+        {"conn_id":"broken","org_url":42}
+      ],"accounts":[
+        {"id":"modern","conn_id":"bank-login","name":"Checking","currency":"USD"},
+        {"id":"legacy","name":"Savings","currency":"USD","org":{"name":"Legacy Bank","domain":"legacy.example"}},
+        {"id":"website","name":"Card","currency":"USD","org":{"url":"https://www.bank.example/home"}},
+        {"id":"missing","name":"Cash","currency":"USD"},
+        {"id":"malformed","name":"Savings","currency":"USD","org":42}
+      ]}
+      """.utf8)
+    let banks = try JSONDecoder().decode(SimpleFINAccountSet.self, from: institutions).accounts
+    precondition(banks.count == 5)
+    precondition(banks[0].institution?.logoDomain == "chase.com")
+    precondition(banks[0].institution?.name == "Bank Login")
+    precondition(banks[1].institution?.logoDomain == "legacy.example")
+    precondition(banks[2].institution?.logoDomain == "bank.example")
+    precondition(banks[3].institution == nil && banks[4].institution == nil)
+    precondition(SimpleFINInstitution.domain(from: "not a domain") == nil)
+    precondition(SimpleFINInstitution.domain(from: "file:///tmp/logo") == nil)
     print("SimpleFIN client checks passed")
   }
 }

@@ -8,6 +8,7 @@ struct MerchantLogoView: View {
   var kind: BudgetTransactionKind? = nil
   var envelopeName: String? = nil
   var appearanceOverride: PayeeLogoAppearance? = nil
+  var fallbackSymbol: String? = nil
   var size: CGFloat = 38
   var style: Style = .plain
   @ScaledMetric private var scale: CGFloat = 1
@@ -79,7 +80,7 @@ struct MerchantLogoView: View {
   }
 
   private var systemIcon: some View {
-    Image(systemName: TransactionIconSymbol.name(
+    Image(systemName: fallbackSymbol ?? TransactionIconSymbol.name(
       for: kind, payee: merchantName, envelope: envelopeName
     ))
       .font(.system(size: side * 0.44, weight: .medium))

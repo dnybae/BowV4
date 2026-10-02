@@ -183,6 +183,7 @@ struct SimpleFINAccountSetupScreen: View {
     let key = link.remoteKey
     if let localID = link.localAccountID {
       HStack(alignment: .center, spacing: 12) {
+        AccountLogoView(appearance: accounts.first { $0.id == localID }?.logoAppearance ?? link.logoAppearance)
         VStack(alignment: .leading, spacing: 4) {
           Text(link.name)
             .font(.bowHeadline)
@@ -211,14 +212,17 @@ struct SimpleFINAccountSetupScreen: View {
             else { selectedKeys.remove(key) }
           }
         )) {
-          VStack(alignment: .leading, spacing: 3) {
-            Text(link.name)
-            if let reported = link.reportedBalance {
-              Text("Bank-reported balance: \(BudgetMoney.formatted(bankAmount: reported, currencyCode: link.currencyCode))")
-                .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
-            } else {
-              Text("Balance unavailable")
-                .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
+          HStack(spacing: 12) {
+            AccountLogoView(appearance: link.logoAppearance)
+            VStack(alignment: .leading, spacing: 3) {
+              Text(link.name)
+              if let reported = link.reportedBalance {
+                Text("Bank-reported balance: \(BudgetMoney.formatted(bankAmount: reported, currencyCode: link.currencyCode))")
+                  .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
+              } else {
+                Text("Balance unavailable")
+                  .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
+              }
             }
           }
         }
@@ -291,6 +295,7 @@ struct SimpleFINAccountSetupScreen: View {
           openingBalanceMinor: balance, type: type, in: modelContext
         )
         createdCount += 1
+        link.applyInstitution(to: account)
         link.localAccountID = account.id
         link.importStartDate = startDate
       }

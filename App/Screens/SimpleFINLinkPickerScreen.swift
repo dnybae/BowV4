@@ -40,6 +40,7 @@ struct SimpleFINLinkPickerScreen: View {
                 Task { await select(link) }
               } label: {
                 HStack {
+                  AccountLogoView(appearance: link.logoAppearance)
                   VStack(alignment: .leading, spacing: 3) {
                     Text(link.name).foregroundStyle(Bow.ink)
                     if let balance = link.reportedBalance {
@@ -79,6 +80,8 @@ struct SimpleFINLinkPickerScreen: View {
     guard let connection = connections.first else { return }
     isWorking = true
     defer { isWorking = false }
+    let previousName = account.institutionName
+    let previousDomain = account.institutionDomain
     let previousLink = currentLink
     let previousStart = link.importStartDate
     let previousChange = connection.lastMappingChangeAt
@@ -88,6 +91,7 @@ struct SimpleFINLinkPickerScreen: View {
     connection.lastMappingChangeAt = Date()
     var linkSaved = false
     do {
+      link.applyInstitution(to: account)
       try modelContext.save()
       linkSaved = true
       _ = try await SimpleFINSyncCoordinator.shared.sync(in: modelContext, manual: true)
@@ -96,6 +100,8 @@ struct SimpleFINLinkPickerScreen: View {
       if linkSaved {
         message = "The bank link was saved, but the first sync could not finish. Try Sync Now in Settings → SimpleFIN. \(error.localizedDescription)"
       } else {
+        account.institutionName = previousName
+        account.institutionDomain = previousDomain
         previousLink?.localAccountID = account.id
         link.localAccountID = nil
         link.importStartDate = previousStart

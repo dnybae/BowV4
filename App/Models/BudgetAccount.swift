@@ -17,6 +17,30 @@ final class BudgetAccount {
   var debtGoalDate: Date? = nil
   var debtMonthlyTargetMinor: Int64? = nil
   var paymentEnvelopeID: UUID? = nil
+  var institutionName: String? = nil
+  var institutionDomain: String? = nil
+  /// Nil follows the bank identity; explicit choices always survive sync.
+  var logoSourceRaw: String? = nil
+  var logoDomain: String? = nil
+  var logoLookupName: String? = nil
+  @Attribute(.externalStorage) var customLogoData: Data? = nil
+
+  var logoSettings: AccountLogoSettings {
+    get {
+      AccountLogoSettings(source: logoSourceRaw.flatMap(PayeeLogoSource.init(rawValue:)),
+                          domain: logoDomain ?? "", lookupName: logoLookupName ?? "", imageData: customLogoData)
+    }
+    set {
+      logoSourceRaw = newValue.source?.rawValue
+      logoDomain = newValue.domain
+      logoLookupName = newValue.lookupName
+      customLogoData = newValue.imageData
+    }
+  }
+
+  var logoAppearance: PayeeLogoAppearance {
+    logoSettings.appearance(institutionName: institutionName, institutionDomain: institutionDomain)
+  }
 
   var kind: BudgetAccountKind {
     BudgetAccountKind(rawValue: kindRaw) ?? .cash

@@ -61,9 +61,11 @@ struct SimpleFINRemoteAccount: Decodable, Sendable {
   var balance: String? = nil
   var balanceDate: TimeInterval? = nil
   var transactions: [SimpleFINRemoteTransaction]?
+  var institution: SimpleFINInstitution? = nil
 
   enum CodingKeys: String, CodingKey {
     case id, name, currency, balance, transactions
+    case institution = "org"
     case connID = "conn_id"
     case balanceDate = "balance-date"
   }
@@ -130,12 +132,24 @@ struct SimpleFINRemoteTransaction: Decodable, Sendable {
 // account or transaction is skipped instead of failing the whole sync.
 
 extension SimpleFINAccountSet {
-  enum CodingKeys: String, CodingKey { case accounts, errlist, errors }
+  enum CodingKeys: String, CodingKey { case accounts, errlist, errors, connections }
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     accounts = try container.decode([SimpleFINLossy<SimpleFINRemoteAccount>].self, forKey: .accounts)
       .compactMap(\.value)
+    let connections = (try? container.decode([SimpleFINLossy<SimpleFINRemoteConnection>].self, forKey: .connections))?
+      .compactMap(\.value) ?? []
+    for index in accounts.indices {
+      if let connection = connections.first(where: { $0.connID == accounts[index].connID }) {
+        let legacy = accounts[index].institution
+        accounts[index].institution = SimpleFINInstitution(
+          name: legacy?.name ?? connection.name,
+          domain: SimpleFINInstitution.domain(from: connection.orgURL) ?? legacy?.logoDomain,
+          url: nil
+        )
+      }
+    }
     errlist = (try? container.decode([SimpleFINLossy<SimpleFINRemoteError>].self, forKey: .errlist))?
       .compactMap(\.value)
     errors = (try? container.decode([SimpleFINLossy<String>].self, forKey: .errors))?
@@ -149,6 +163,7 @@ extension SimpleFINRemoteAccount {
     id = try container.decodeLenientString(forKey: .id)
     name = (try? container.decodeLenientString(forKey: .name)) ?? ""
     connID = try? container.decodeLenientString(forKey: .connID)
+    institution = try? container.decode(SimpleFINInstitution.self, forKey: .institution)
     currency = try container.decodeLenientString(forKey: .currency)
     balance = try? container.decodeLenientString(forKey: .balance)
     balanceDate = container.decodeLenientTimestamp(forKey: .balanceDate)

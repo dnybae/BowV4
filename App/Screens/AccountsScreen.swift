@@ -212,11 +212,7 @@ struct AccountsScreen: View {
       BowItemCard {
         layout {
           if !dynamicTypeSize.isAccessibilitySize {
-            Image(systemName: account.kind.systemImage)
-              .bowScaledIcon(frame: 36, glyph: 15, weight: .semibold)
-              .foregroundStyle(Bow.bowInk)
-              .background(Bow.bowTint, in: Circle())
-              .accessibilityHidden(true)
+            AccountLogoView(appearance: account.logoAppearance, systemImage: account.kind.systemImage, size: 36)
           }
           VStack(alignment: .leading, spacing: 2) {
             Text(account.name)
@@ -303,7 +299,7 @@ private struct AccountDetailScreen: View {
             amountMinor: balanceMinor,
             currencyCode: currencyCode
           ) {
-            BowGlossyTile(systemImage: account.kind.systemImage)
+            AccountLogoView(appearance: account.logoAppearance, systemImage: account.kind.systemImage, size: 64, style: .glossy)
           }
           if !reconcileStats.isEmpty {
             BowStatStrip(stats: reconcileStats, currencyCode: currencyCode)

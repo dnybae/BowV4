@@ -41,9 +41,9 @@ struct BudgetWorkflowChecks {
     precondition(paymentEnvelopes.count == 2 && card.paymentEnvelopeID != nil && extraCard.paymentEnvelopeID != nil,
                  "each card has exactly one persistent payment envelope")
 
-    func snapshot() throws -> BudgetSnapshot {
+    func snapshot(for month: Date = now) throws -> BudgetSnapshot {
       BudgetLedger.snapshot(
-        month: now,
+        month: month,
         accounts: try context.fetch(FetchDescriptor<BudgetAccount>()),
         envelopes: try context.fetch(FetchDescriptor<BudgetEnvelope>()),
         allocations: try context.fetch(FetchDescriptor<BudgetAllocation>()),
@@ -61,11 +61,11 @@ struct BudgetWorkflowChecks {
 
     try BudgetCommands.moveMoney(
       amountMinor: 6_000, from: .readyToAssign, to: .envelope(food.id),
-      date: now, in: context
+      date: now, snapshot: try snapshot(), in: context
     )
     try BudgetCommands.moveMoney(
       amountMinor: 1_000, from: .envelope(food.id), to: .envelope(travel.id),
-      date: now, in: context
+      date: now, snapshot: try snapshot(), in: context
     )
     let afterAssignments = try summary()
     precondition(afterAssignments.readyToAssignMinor == 4_000)
@@ -74,7 +74,7 @@ struct BudgetWorkflowChecks {
     do {
       try BudgetCommands.moveMoney(
         amountMinor: 5_000, from: .readyToAssign, to: .envelope(food.id),
-        date: now, in: context
+        date: now, snapshot: try snapshot(), in: context
       )
       preconditionFailure("the command must check current funds")
     } catch BudgetCommandError.insufficientFunds {
@@ -104,16 +104,18 @@ struct BudgetWorkflowChecks {
 
     try BudgetCommands.moveMoney(
       amountMinor: 1_000, from: .readyToAssign, to: .cardPayment(card.id),
-      date: now, in: context
+      date: now, snapshot: try snapshot(), in: context
     )
     try BudgetCommands.moveMoney(
       amountMinor: 1_000, from: .readyToAssign, to: .cardPayment(extraCard.id),
-      date: now, in: context
+      date: now, snapshot: try snapshot(), in: context
     )
     let afterCardAssignments = try summary()
     precondition(afterCardAssignments.creditUncoveredMinor == 4_000,
                  "excess on one card cannot conceal another card's shortfall")
-    try BudgetCommands.setEnvelopeHidden(food, hidden: true, in: context)
+    try BudgetCommands.setEnvelopeHidden(
+      food, hidden: true, availableMinor: try snapshot().available(for: food.id), in: context
+    )
     let afterHide = try snapshot()
     precondition(afterHide.available(for: food.id) == 3_000,
                  "hiding must preserve envelope funds")
@@ -134,36 +136,15 @@ struct BudgetWorkflowChecks {
     try ScheduleReviewPlanner().refresh(in: context, today: now)
     let occurrences = try context.fetch(FetchDescriptor<BudgetScheduleOccurrence>())
     precondition(occurrences.count == 1, "repeated refresh must not duplicate occurrences")
-    let beforeRecord = try snapshot()
-    let inbox = ReviewInbox(
-      transactions: try context.fetch(FetchDescriptor<BudgetTransaction>()),
-      records: [], occurrences: occurrences, schedules: [due]
-    )
-    precondition(inbox.items.count == 1)
-    let bankRecord = SimpleFINImportRecord(
-      remoteKey: "gym-posted", localAccountID: checking.id,
-      date: now, amountMinor: -500, payee: "Gym"
-    )
-    let groupedInbox = ReviewInbox(
-      transactions: try context.fetch(FetchDescriptor<BudgetTransaction>()),
-      records: [bankRecord], occurrences: occurrences, schedules: [due]
-    )
-    precondition(groupedInbox.items.count == 1,
-                 "an exact bank and schedule match should have one review action")
-    let afterDue = try snapshot()
-    precondition(afterDue.readyToAssignMinor == beforeRecord.readyToAssignMinor,
-                 "unrecorded schedules must not affect the ledger")
-
-    try BudgetCommands.addTransaction(
-      kind: .expense, account: checking, destination: nil, envelopeID: travel.id,
-      amountMinor: 500, date: now, payee: "Gym", notes: "",
-      scheduleID: due.id, scheduledFor: now, in: context
-    )
+    // A bill with an account and envelope enters itself on its due date.
+    let entered = try context.fetch(FetchDescriptor<BudgetTransaction>()).filter { $0.scheduleID == due.id }
+    precondition(entered.count == 1 && entered[0].envelopeID == travel.id,
+                 "a due bill is entered once, like a transaction you entered")
     let afterRecord = ReviewInbox(
       transactions: try context.fetch(FetchDescriptor<BudgetTransaction>()),
       records: [], occurrences: occurrences, schedules: [due]
     )
-    precondition(afterRecord.items.isEmpty, "recording resolves the due occurrence")
+    precondition(afterRecord.items.isEmpty, "an entered bill leaves nothing to review")
     do {
       try BudgetCommands.addTransaction(
         kind: .expense, account: checking, destination: nil, envelopeID: travel.id,
@@ -178,7 +159,7 @@ struct BudgetWorkflowChecks {
     let futureMonth = Calendar.current.date(byAdding: .month, value: 1,
       to: Calendar.current.dateInterval(of: .month, for: now)!.start)!
     try BudgetCommands.moveMoney(amountMinor: 500, from: .readyToAssign,
-      to: .envelope(travel.id), date: futureMonth, in: context)
+      to: .envelope(travel.id), date: futureMonth, snapshot: try snapshot(for: futureMonth), in: context)
     let currentAfterFuture = try snapshot()
     let futureSnapshot = BudgetLedger.snapshot(month: futureMonth,
       accounts: try context.fetch(FetchDescriptor<BudgetAccount>()),
@@ -192,7 +173,7 @@ struct BudgetWorkflowChecks {
     let previousMonth = Calendar.current.date(byAdding: .month, value: -1, to: now)!
     do {
       try BudgetCommands.moveMoney(amountMinor: 100, from: .readyToAssign,
-        to: .envelope(travel.id), date: previousMonth, in: context)
+        to: .envelope(travel.id), date: previousMonth, snapshot: try snapshot(for: previousMonth), in: context)
       preconditionFailure("past budget months must be read only")
     } catch BudgetCommandError.pastMonthLocked {
       // Expected.

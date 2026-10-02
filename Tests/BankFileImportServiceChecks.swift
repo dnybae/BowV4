@@ -85,7 +85,8 @@ struct BankFileImportServiceChecks {
     )
     precondition(review.status == .imported && review.transactionID != nil)
     let reviewed = try BudgetTransactionLookup.byID(review.transactionID!, in: context)!
-    precondition(reviewed.notes == "Debit card purchase")
+    // Notes are only what you type; the bank's memo stays on the bank record.
+    precondition(reviewed.notes.isEmpty && review.memo == "Debit card purchase")
 
     let legacy = BudgetTransaction(
       accountID: account.id, date: day, amountMinor: -700,

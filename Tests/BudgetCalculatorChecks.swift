@@ -74,13 +74,15 @@ struct BudgetCalculatorChecks {
     )
     expect(cashSnapshot.cashTotalMinor == 5_000, "cash balance reflects posted expense")
     expect(cashSnapshot.available(for: groceriesID) == -3_000, "cash envelope shows overspending")
-    expect(cashSnapshot.readyToAssignMinor == -3_000, "cash shortfall cannot inflate ready money")
+    expect(cashSnapshot.readyToAssignMinor == 0,
+           "cash overspending waits for the month to end before leaving Ready to Assign")
     expect(
       cashSnapshot.cashTotalMinor
         == cashSnapshot.readyToAssignMinor
           + cashSnapshot.cashAvailable.values.reduce(0, +)
-          + cashSnapshot.paymentAvailable.values.reduce(0, +),
-      "cash-backed accounting identity"
+          + cashSnapshot.paymentAvailable.values.reduce(0, +)
+          - cashSnapshot.cashShortfall.values.reduce(0, +),
+      "cash-backed accounting identity, with this month's overspending still to come out"
     )
 
     let nextMonth = calculator.calculate(
@@ -113,7 +115,8 @@ struct BudgetCalculatorChecks {
       allocations: [startingAllocations[0]],
       transactions: [cashOverspend]
     )
-    expect(partlyAssigned.readyToAssignMinor == 5_000, "ready money never exceeds cash on hand")
+    expect(partlyAssigned.readyToAssignMinor == 8_000,
+           "until the month ends, overspending is on its envelope, not Ready to Assign")
 
     let coverFromDining = allocation(3_000, from: .envelope(diningID), to: .envelope(groceriesID))
     let coveredCash = calculator.calculate(

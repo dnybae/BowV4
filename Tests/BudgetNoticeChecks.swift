@@ -17,7 +17,7 @@ struct BudgetNoticeChecks {
     let ready = notices(readyToAssign: 124_000, overspending: none)
     precondition(ready.map(\.kind) == [.readyToAssign])
     precondition(ready[0].amountMinor == 124_000 && ready[0].isActionable)
-    precondition(ready[0].tone == .brand)
+    precondition(ready[0].tone == .positive)
 
     // A cent still counts: every dollar gets a job.
     precondition(notices(readyToAssign: 1, overspending: none).map(\.kind) == [.readyToAssign])

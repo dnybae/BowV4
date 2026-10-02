@@ -23,13 +23,13 @@ struct BudgetNotice: Identifiable, Equatable {
     case readyToAssign
   }
 
-  enum Tone { case brand, caution, critical }
+  enum Tone { case positive, caution, critical }
 
   var tone: Tone {
     switch kind {
     case .deficit: .critical
     case .overspent: .caution
-    case .readyToAssign: .brand
+    case .readyToAssign: .positive
     }
   }
 

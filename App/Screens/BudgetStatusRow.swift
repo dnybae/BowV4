@@ -1,7 +1,9 @@
 import SwiftUI
 
 /// A Budget screen row: status ring, name and a color-coded status pill. Nothing else.
-/// Used for envelopes and card payments. At accessibility text sizes the pill moves under the name.
+/// Used for envelopes and card payments. When the name and pill don't fit on one line
+/// (a narrow phone, a long name, larger text) the pill moves under the name instead of
+/// breaking the name mid-word.
 struct BudgetStatusRow: View {
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   var name: String
@@ -12,26 +14,52 @@ struct BudgetStatusRow: View {
   var accessibilityStatus: String
 
   var body: some View {
-    let layout = dynamicTypeSize.isAccessibilitySize
-      ? AnyLayout(VStackLayout(alignment: .leading, spacing: Bow.Space.s2))
-      : AnyLayout(HStackLayout(spacing: Bow.Space.s3))
-    layout {
-      HStack(spacing: Bow.Space.s3) {
-        StatusRing(fraction: status.ringFraction, state: status.state)
-        Text(name)
-          .font(.bowHeadline)
-          .foregroundStyle(Bow.ink)
-          .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+    Group {
+      if dynamicTypeSize.isAccessibilitySize {
+        VStack(alignment: .leading, spacing: Bow.Space.s2) {
+          HStack(spacing: Bow.Space.s3) {
+            ring
+            nameText
+          }
+          pill
+        }
+      } else {
+        ViewThatFits(in: .horizontal) {
+          HStack(spacing: Bow.Space.s3) {
+            ring
+            nameText.lineLimit(1)
+            Spacer(minLength: Bow.Space.s2)
+            pill
+          }
+          HStack(spacing: Bow.Space.s3) {
+            ring
+            VStack(alignment: .leading, spacing: Bow.Space.s1) {
+              nameText.lineLimit(2)
+              pill
+            }
+            Spacer(minLength: 0)
+          }
+        }
       }
-      if !dynamicTypeSize.isAccessibilitySize {
-        Spacer(minLength: Bow.Space.s2)
-      }
-      StatusPill(text: status.pillText, state: status.state, symbol: pillSymbol)
     }
     .frame(minHeight: 44)
     .padding(.vertical, Bow.Space.s1)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(name)
     .accessibilityValue(accessibilityStatus)
+  }
+
+  private var ring: some View {
+    StatusRing(fraction: status.ringFraction, state: status.state)
+  }
+
+  private var nameText: some View {
+    Text(name)
+      .font(.bowHeadline)
+      .foregroundStyle(Bow.ink)
+  }
+
+  private var pill: some View {
+    StatusPill(text: status.pillText, state: status.state, symbol: pillSymbol)
   }
 }

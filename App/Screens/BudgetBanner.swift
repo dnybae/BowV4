@@ -4,7 +4,7 @@ import SwiftUI
 /// each kind also has its own symbol so the meaning never depends on color alone.
 /// Ready to Assign is the screen's focal point: green like a funded envelope's pill, larger,
 /// and just the amount with a small ring showing how much of this month's cash has a job.
-/// Overspending gets the same solid tint in red, matching an overspent envelope's pill.
+/// Warnings (overspending, over budget) get the same solid tint in red, matching an overspent envelope's pill.
 struct BudgetBanner: View {
   @Environment(\.colorSchemeContrast) private var contrast
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -16,13 +16,9 @@ struct BudgetBanner: View {
   /// Ready to Assign shows only its amount; warnings also explain what to do.
   private var isHero: Bool { notice.tone == .positive }
 
-  /// Ready to Assign and overspending sit on a solid tint; other warnings use a plain card.
-  private var isFilled: Bool { notice.tone != .caution }
-
   private var ink: Color {
     switch notice.tone {
     case .positive: Bow.fundedInk
-    case .caution: Bow.needsInk
     case .critical: Bow.overInk
     }
   }
@@ -30,7 +26,6 @@ struct BudgetBanner: View {
   private var tint: Color {
     switch notice.tone {
     case .positive: Bow.fundedTint
-    case .caution: Bow.needsTint
     case .critical: Bow.overTint
     }
   }
@@ -38,7 +33,6 @@ struct BudgetBanner: View {
   private var accent: Color {
     switch notice.tone {
     case .positive: Bow.funded
-    case .caution: Bow.needs
     case .critical: Bow.over
     }
   }
@@ -84,15 +78,15 @@ struct BudgetBanner: View {
       if notice.isActionable {
         Image(systemName: "chevron.right")
           .font(.bowFootnote.weight(.semibold))
-          .foregroundStyle(isFilled ? ink.opacity(0.7) : Bow.inkFaint)
+          .foregroundStyle(ink.opacity(0.7))
           .frame(maxHeight: isHero ? nil : .infinity)
           .accessibilityHidden(true)
       }
     }
     .padding(Bow.Space.s4)
-    .background(isFilled ? tint : Bow.card, in: shape)
+    .background(tint, in: shape)
     .overlay {
-      shape.strokeBorder(accent.opacity(contrast == .increased ? 0.9 : isFilled ? 0.3 : 0.45),
+      shape.strokeBorder(accent.opacity(contrast == .increased ? 0.9 : 0.3),
                          lineWidth: contrast == .increased ? 2 : 1.5)
     }
     .contentShape(shape)
@@ -116,7 +110,7 @@ struct BudgetBanner: View {
     Image(systemName: notice.symbol)
       .bowScaledIcon(frame: 34, glyph: 16)
       .foregroundStyle(ink)
-      .background(isFilled ? accent.opacity(0.18) : tint, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+      .background(accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
       .accessibilityHidden(true)
   }
 }

@@ -64,8 +64,8 @@ enum DemoData {
     }
 
     let everyday = insert(BudgetAccount(name: "Everyday Checking", kind: .cash, currencyCode: "USD", openingBalanceMinor: 185_000))
-    let savings = insert(BudgetAccount(name: "High-Yield Savings", kind: .cash, currencyCode: "USD", openingBalanceMinor: 375_000))
-    let wallet = insert(BudgetAccount(name: "Cash Wallet", kind: .cash, currencyCode: "USD", openingBalanceMinor: 8_000))
+    let savings = insert(BudgetAccount(name: "High-Yield Savings", kind: .cash, currencyCode: "USD", openingBalanceMinor: 375_000, type: .savings))
+    let wallet = insert(BudgetAccount(name: "Cash Wallet", kind: .cash, currencyCode: "USD", openingBalanceMinor: 8_000, type: .cash))
     let card = insert(BudgetAccount(name: "Travel Card", kind: .credit, currencyCode: "USD", openingBalanceMinor: -92_000))
     let floatingCard = insert(BudgetAccount(name: "Everyday Rewards", kind: .credit, currencyCode: "USD", openingBalanceMinor: 0))
     let investments = insert(BudgetAccount(name: "Investment Account", kind: .asset, currencyCode: "USD", openingBalanceMinor: 640_000))

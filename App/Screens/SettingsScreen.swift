@@ -149,24 +149,21 @@ struct SettingsScreen: View {
         .listRowBackground(Bow.card)
 
         Section {
-          HStack(spacing: 12) {
-            Toggle("Demo mode", systemImage: "play.rectangle", isOn: $isDemoMode)
-            if isDemoMode {
-              Menu {
-                Picker("Situation", selection: $demoScenarioRaw) {
-                  ForEach(DemoScenario.allCases) { scenario in
-                    Text(scenario.title).tag(scenario.rawValue)
-                  }
-                }
-                Button("Reset demo data", systemImage: "arrow.counterclockwise", role: .destructive) {
-                  showingResetDemo = true
-                }
-              } label: {
-                Image(systemName: "ellipsis")
-                  .frame(minWidth: 32, minHeight: 44)
-                  .contentShape(Rectangle())
+          Toggle("Demo mode", systemImage: "play.rectangle", isOn: $isDemoMode)
+          if isDemoMode {
+            Picker(selection: $demoScenarioRaw) {
+              ForEach(DemoScenario.allCases) { scenario in
+                Text(scenario.title).tag(scenario.rawValue)
               }
-              .accessibilityLabel("Demo options")
+            } label: {
+              HStack(spacing: Bow.Space.s3) {
+                BowTileIcon(systemImage: "theatermasks")
+                Text("Situation")
+              }
+            }
+            .pickerStyle(.menu)
+            Button("Reset demo data", systemImage: "arrow.counterclockwise", role: .destructive) {
+              showingResetDemo = true
             }
           }
         } footer: {

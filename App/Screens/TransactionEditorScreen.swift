@@ -158,6 +158,20 @@ struct TransactionEditorScreen: View {
   /// The posted bank item being approved.
   private var bankRecord: SimpleFINImportRecord? { reviewRecord ?? importRecord }
 
+  /// Preserve the bank's original values alongside the editable budget transaction.
+  private var bankDetailRecords: [SimpleFINImportRecord] {
+    var records = importRecords
+    for record in [reviewRecord, pendingRecord].compactMap({ $0 }) {
+      if !records.contains(where: { $0.id == record.id }) { records.append(record) }
+    }
+    return records.filter {
+      $0.status != .ignored && ($0.bankState == .posted || $0.isVisiblePending)
+    }.sorted {
+      if $0.date != $1.date { return $0.date > $1.date }
+      return $0.id.uuidString < $1.id.uuidString
+    }
+  }
+
   private var matchedCandidate: BudgetTransaction? {
     candidates.first { $0.id == matchedID }
   }
@@ -385,6 +399,14 @@ struct TransactionEditorScreen: View {
             )
           }
           .listRowBackground(Bow.card)
+        }
+
+        ForEach(bankDetailRecords) { record in
+          BankTransactionDetailsSection(
+            record: record,
+            accountName: accounts.first { $0.id == record.localAccountID }?.name ?? "Account",
+            currencyCode: accounts.first { $0.id == record.localAccountID }?.currencyCode ?? currencyCode
+          )
         }
 
         if purpose == .approve && bankRecord != nil {

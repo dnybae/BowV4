@@ -12,6 +12,7 @@ struct CalendarSpendingParityChecks {
     )
     var categorized = entered
     categorized.envelopeID = UUID()
+    categorized.sourceRaw = "manualLinked"
     let pending = SimpleFINImportRecord(remoteKey: "pending", localAccountID: account.id,
       date: day, amountMinor: -1200, payee: "Coffee")
     pending.bankState = .pending
@@ -32,6 +33,7 @@ struct CalendarSpendingParityChecks {
     precondition(rows.count == 3, "Entered pending items must not duplicate the ledger row")
     precondition(rows.first?.status == .bankReview, "Review rows sort first on both screens")
     let enteredRow = TransactionRowModel(rows.first { $0.id == "transaction-\(entered.id)" }!)
+    precondition(enteredRow.isMatched, "Both calendar and spending retain the matched indicator")
     precondition(enteredRow.state == .normal && enteredRow.amountSymbol == "clock")
     let pendingRow = TransactionRowModel(rows.first { $0.id == "pending-\(unentered.id)" }!)
     precondition(pendingRow.state == .pending("Pending") && pendingRow.amountSymbol == "clock")

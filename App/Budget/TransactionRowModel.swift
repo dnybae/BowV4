@@ -17,6 +17,7 @@ struct TransactionRowModel: Identifiable, Equatable {
   var isPendingAtBank = false
   /// Entered by Bow from a schedule and not confirmed by the bank yet. Shown with a calendar.
   var isScheduledEntry = false
+  var isMatched = false
 
   /// The small symbol by the amount: pending at the bank wins over a scheduled entry.
   var amountSymbol: String? {
@@ -84,6 +85,7 @@ extension TransactionRowModel {
       amountMinor: amountMinor ?? item.amountMinor,
       state: Self.state(needsApproval: item.needsApproval, kind: item.kind, envelopeID: item.envelopeID)
     )
+    isMatched = item.sourceRaw == "manualLinked"
     isScheduledEntry = item.scheduleID != nil && !item.isCleared
   }
 
@@ -101,6 +103,7 @@ extension TransactionRowModel {
         needsApproval: transaction.needsApproval, kind: transaction.kind, envelopeID: transaction.envelopeID
       )
     )
+    isMatched = transaction.sourceRaw == "manualLinked"
     isScheduledEntry = transaction.scheduleID != nil && !transaction.isCleared
   }
 
@@ -126,6 +129,7 @@ extension TransactionRowModel {
       state: state
     )
     isPendingAtBank = item.status == .pending || item.status == .pendingEntered
+    isMatched = item.isMatched
     isScheduledEntry = item.isScheduledEntry
   }
 }

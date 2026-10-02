@@ -23,6 +23,14 @@ struct SimpleFINMatchPlannerChecks {
     precondition(planner.decide(for: samePayee, among: [manual]) == .linkManual(manual.id),
                  "a unique same-amount and same-payee entry can match automatically")
 
+    var tomorrow = manual
+    tomorrow.date = date.addingTimeInterval(86_400)
+    tomorrow.scheduleID = UUID()
+    var today = samePayee
+    today.postedAt = date
+    precondition(planner.decide(for: today, among: [tomorrow]) == .linkManual(tomorrow.id),
+                 "a bank posting today can match an existing scheduled entry dated tomorrow")
+
     var repeatedAmount = manual
     repeatedAmount.id = UUID()
     precondition(planner.decide(for: incoming, among: [manual, repeatedAmount])

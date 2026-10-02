@@ -53,6 +53,12 @@ struct TransactionRowModelChecks {
     precondition(BudgetMoney.formatted(1_000, currencyCode: "USD", showsPlusSign: true).hasPrefix("+"))
     precondition(!BudgetMoney.formatted(0, currencyCode: "USD", showsPlusSign: true).hasPrefix("+"))
 
+    var linked = item()
+    linked.sourceRaw = "manualLinked"
+    precondition(TransactionRowModel(linked).isMatched)
+    linked.sourceRaw = "simplefin"
+    precondition(!TransactionRowModel(linked).isMatched, "Bank imports alone are not manual matches")
+
     print("Transaction row model checks passed")
   }
 }

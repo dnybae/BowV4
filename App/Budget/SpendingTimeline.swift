@@ -143,6 +143,7 @@ struct SpendingTimeline {
         merchantDomain: transaction.merchantDomain, kind: transaction.kind,
         status: transaction.kind == .expense && transaction.envelopeID == nil
           ? .chooseEnvelope : .transactionReview,
+        isMatched: transaction.sourceRaw == "manualLinked",
         source: .transaction(transaction.id)
       ))
       visibleIDs.insert(id)

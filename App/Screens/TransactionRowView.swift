@@ -58,6 +58,12 @@ struct TransactionRowView: View {
           MoneyText(minor: model.amountMinor, currencyCode: currencyCode, showsPlusSign: model.isInflow)
             .font(.bowAmount)
             .foregroundStyle(model.isInflow ? Bow.fundedInk : Bow.ink)
+          if model.isMatched {
+            Image(systemName: "link")
+              .font(.bowFootnote.weight(.semibold))
+              .foregroundStyle(Bow.inkSoft)
+              .accessibilityHidden(true)
+          }
           if let symbol = model.amountSymbol {
             Image(systemName: symbol)
               .font(.bowFootnote.weight(.semibold))
@@ -73,7 +79,7 @@ struct TransactionRowView: View {
     .contentShape(Rectangle())
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(model.title)
-    .accessibilityValue([amountText, accessibilityDetail].filter { !$0.isEmpty }.joined(separator: ", "))
+    .accessibilityValue([amountText, accessibilityDetail, model.isMatched ? "Matched with bank transaction" : ""].filter { !$0.isEmpty }.joined(separator: ", "))
   }
 
   private var logo: some View {

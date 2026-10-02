@@ -248,8 +248,9 @@ struct CalendarScreen: View {
         }
       }
       .bowSwipeActionsContainer()
+      // No card fill: each row paints its own background, so a swiped row reveals the sky behind its actions.
       .clipShape(RoundedRectangle(cornerRadius: Bow.Radius.lg, style: .continuous))
-      .bowCard(radius: Bow.Radius.lg)
+      .shadow(color: .black.opacity(0.05), radius: 10, y: 6)
       .bowAnimation(value: scheduleEntries.map(\.id))
       .bowAnimation(value: dayTransactions.map(\.id))
     }
@@ -552,6 +553,12 @@ private struct CalendarAgendaRow<MenuItems: View>: View {
         .padding(.vertical, Bow.Space.s2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(model.state.rowStatus?.rowBackground ?? Bow.card)
+        // The divider slides with the row, so nothing is drawn behind the revealed actions.
+        .overlay(alignment: .bottom) {
+          if showsDivider {
+            Rectangle().fill(Bow.line).frame(height: 0.5).padding(.leading, Bow.Space.s4)
+          }
+        }
         .contentShape(.rect)
     }
     .buttonStyle(.bowRowPress)
@@ -571,10 +578,5 @@ private struct CalendarAgendaRow<MenuItems: View>: View {
     .accessibilityHint(accessibilityHint)
     // Swipeable rows clip to their container shape; a rectangle keeps them full-width bands, as in Spending.
     .containerShape(.rect)
-    .overlay(alignment: .bottom) {
-      if showsDivider {
-        Rectangle().fill(Bow.line).frame(height: 0.5).padding(.leading, Bow.Space.s4)
-      }
-    }
   }
 }

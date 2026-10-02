@@ -373,6 +373,7 @@ private struct BudgetHomeView: View {
     .environment(\.payeeLogoDirectory, PayeeLogoDirectory(payees: payees))
     .task {
       try? BudgetCommands.ensureCardPaymentEnvelopes(in: modelContext)
+      try? BankMemoNotesCleanup().runOnce(in: modelContext)
       try? ScheduleReviewPlanner().refresh(in: modelContext)
       try? ScheduleTargetSynchronizer().refresh(in: modelContext)
       if !isDemoMode { await refreshSimpleFINIfConnected() }

@@ -115,7 +115,7 @@ struct BankFileImportService {
         && (row.amountMinor >= 0 || selectedEnvelopeID != nil):
         let transaction = BudgetTransaction(
           accountID: account.id, envelopeID: selectedEnvelopeID, date: row.date,
-          amountMinor: row.amountMinor, payee: row.payee, notes: row.memo,
+          amountMinor: row.amountMinor, payee: row.payee, notes: "",
           kind: row.amountMinor < 0 ? .expense : .inflow
         )
         transaction.externalKey = proposal.externalKey

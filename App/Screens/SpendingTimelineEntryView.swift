@@ -38,7 +38,7 @@ struct SpendingTimelineEntryView: View {
         transferAccountID: schedule.transferAccountID,
         envelopeID: schedule.envelopeID, kind: schedule.kind,
         amountMinor: schedule.amountMinor, payee: schedule.payee,
-        notes: schedule.notes, date: occurrence.scheduledFor
+        date: occurrence.scheduledFor
       ))
     }
   }

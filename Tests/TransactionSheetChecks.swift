@@ -30,10 +30,9 @@ struct TransactionSheetChecks {
     calendar.timeZone = TimeZone(identifier: "UTC")!
     let now = Date(timeIntervalSince1970: 1_790_000_000)
     precondition(TransactionSheetStatus(purpose: .add) == nil)
-    precondition(TransactionSheetStatus(purpose: .approve, isMatched: true) == .needsReview)
+    precondition(TransactionSheetStatus(purpose: .approve, isCleared: true) == .needsReview)
     precondition(TransactionSheetStatus(purpose: .enterPending) == .pendingAtBank)
     precondition(TransactionSheetStatus(purpose: .edit, isPendingAtBank: true, isCleared: true) == .pendingAtBank)
-    precondition(TransactionSheetStatus(purpose: .edit, isMatched: true, isCleared: true) == .matched)
     precondition(TransactionSheetStatus(purpose: .edit, isCleared: true) == .cleared)
     precondition(TransactionSheetStatus(purpose: .edit) == .uncleared)
     precondition(TransactionSheetStatus(
@@ -74,6 +73,13 @@ struct TransactionSheetChecks {
       .init(id: a, bankAmountMinor: -4_011)
     ]) == a)
 
-    print("TransactionSheetChecks passed")
+    // Notes: a short single-paragraph memo.
+    precondition(NoteText.limited("Lunch with Sam") == "Lunch with Sam")
+    precondition(NoteText.limited("Lunch with Sam\n") == "Lunch with Sam")
+    precondition(NoteText.limited("Line one\nLine two") == "Line one Line two")
+    precondition(NoteText.limited(String(repeating: "a", count: 120)).count == NoteText.maxLength)
+    precondition(NoteText.limited("") == "")
+
+        print("TransactionSheetChecks passed")
   }
 }

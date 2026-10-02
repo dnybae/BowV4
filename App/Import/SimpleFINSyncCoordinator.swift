@@ -180,7 +180,6 @@ final class SimpleFINSyncCoordinator {
           amount: record.amountMinor, payee: record.payee,
           envelopeID: envelopeID, origin: record.origin
         )
-        transaction.notes = record.memo
         transaction.externalKey = record.remoteKey
         try Self.adjustOpeningBalance(for: transaction, account: account)
         context.insert(transaction)
@@ -256,7 +255,7 @@ final class SimpleFINSyncCoordinator {
             .first(where: { $0.id == record.localAccountID }) else { return }
     let transaction = BudgetTransaction(
       accountID: account.id, envelopeID: envelopeID, date: record.date,
-      amountMinor: record.amountMinor, payee: record.payee, notes: record.memo,
+      amountMinor: record.amountMinor, payee: record.payee, notes: "",
       kind: record.amountMinor < 0 ? .expense : .inflow
     )
     context.insert(transaction)
@@ -604,7 +603,6 @@ final class SimpleFINSyncCoordinator {
             envelopeID: envelopeID, origin: .simplefin
           )
           transaction.externalKey = key
-          transaction.notes = record.memo
           if let scheduledExpense, envelopeID != nil {
             transaction.scheduleID = scheduledExpense.id
             transaction.scheduledFor = transactionDate

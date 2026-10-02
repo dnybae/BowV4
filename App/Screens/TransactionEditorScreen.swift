@@ -131,7 +131,8 @@ struct TransactionEditorScreen: View {
     _payee = State(initialValue: transaction?.payee ?? scheduledDraft?.payee
       ?? scheduledTransfer?.payee ?? bank?.payee ?? "")
     _merchantDomain = State(initialValue: transaction?.merchantDomain)
-    _notes = State(initialValue: transaction?.notes ?? scheduledDraft?.notes ?? bank?.memo ?? "")
+    // Notes are only ever what you type: never the bank's memo or the schedule's note.
+    _notes = State(initialValue: transaction?.notes ?? "")
     _date = State(initialValue: transaction?.date ?? scheduledDraft?.date ?? bank?.date ?? Date())
     // A new transaction has no bank records; the placeholder ID matches none.
     let transactionID: UUID? = transaction?.id ?? UUID()
@@ -170,8 +171,8 @@ struct TransactionEditorScreen: View {
     TransactionSheetStatus(
       purpose: purpose,
       isPendingAtBank: pendingAtBankRecord != nil,
-      isMatched: linkedRecord != nil || transaction?.sourceRaw == "manualLinked",
-      isCleared: transaction?.isCleared == true,
+      // A bank match clears it, including a transfer matched on its receiving side.
+      isCleared: transaction?.isCleared == true || linkedRecord != nil,
       dueDate: scheduledDraft?.scheduledFor
     )
   }
@@ -183,7 +184,6 @@ struct TransactionEditorScreen: View {
     case .pendingAtBank: return .pendingAtBank
     case .dueToday, .due: return .scheduled(status.text)
     case .overdue: return StatusPill(text: status.text, state: .needs)
-    case .matched: return StatusPill(text: status.text, state: .funded, symbol: "link")
     case .cleared: return .cleared
     case .uncleared: return StatusPill(text: status.text, state: .empty)
     }
@@ -291,6 +291,9 @@ struct TransactionEditorScreen: View {
                                 focusOnAppear: purpose == .add)
               // A match uses the posted bank amount.
               .disabled(matchedID != nil)
+            if let statusPill {
+              statusPill
+            }
             Picker("Type", selection: $kind) {
               ForEach(BudgetTransactionKind.allCases) { option in
                 Text(option.title).tag(option)
@@ -298,9 +301,6 @@ struct TransactionEditorScreen: View {
             }
             .pickerStyle(.segmented)
             .disabled(purpose.locksType || matchedID != nil)
-            if let statusPill {
-              statusPill
-            }
           }
           .padding(.bottom, Bow.Space.s2)
           .listRowBackground(Color.clear)
@@ -897,7 +897,7 @@ struct TransactionEditorScreen: View {
 
   /// Once a bank item is in the budget, applies anything changed in the sheet.
   private func applyEdits(madeTo record: SimpleFINImportRecord, account: BudgetAccount) throws {
-    let edited = payee != record.payee || notes != record.memo || merchantDomain != nil
+    let edited = payee != record.payee || !notes.isEmpty || merchantDomain != nil
       || amountMinor != abs(record.amountMinor)
       || !Calendar.current.isDate(date, inSameDayAs: record.date)
     guard edited,
@@ -983,7 +983,6 @@ struct ScheduledTransactionDraft {
   var kind: BudgetTransactionKind = .expense
   var amountMinor: Int64
   var payee: String
-  var notes: String
   var date: Date
 }
 

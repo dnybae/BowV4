@@ -332,7 +332,7 @@ struct CalendarScreen: View {
       accountID: schedule.accountID, transferAccountID: schedule.transferAccountID,
       envelopeID: schedule.envelopeID, kind: schedule.kind,
       amountMinor: schedule.amountMinor, payee: schedule.payee,
-      notes: schedule.notes, date: selectedDate
+      date: selectedDate
     )
   }
 

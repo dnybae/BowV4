@@ -13,10 +13,12 @@ struct TransactionRowModel: Identifiable, Equatable {
   var envelopeName: String?
   var amountMinor: Int64
   var state: State
+  /// The bank has it as pending. Shown with a clock by the amount, whether or not it's in the budget.
+  var isPendingAtBank = false
 
   enum State: Equatable {
     case normal
-    /// At the bank but not settled. The row is dimmed.
+    /// Pending at the bank and not in the budget yet. The row is greyed out.
     case pending(String)
     /// The user needs to do something. Shown with an amber status line.
     case attention(String, symbol: String)
@@ -95,7 +97,9 @@ extension TransactionRowModel {
     let state: State
     switch item.status {
     case .none: state = .normal
-    case .pending, .pendingEntered: state = .pending(item.status?.rowLabel ?? "Pending")
+    case .pending: state = .pending(SpendingTimelineStatus.pending.rowLabel)
+    // Entered already, so it counts in the budget: a normal row, with the clock by its amount.
+    case .pendingEntered: state = .normal
     case .scheduled: state = .scheduled(SpendingTimelineStatus.scheduled.rowLabel)
     case .some(let status): state = .attention(status.rowLabel, symbol: status.systemImage)
     }
@@ -110,5 +114,6 @@ extension TransactionRowModel {
       amountMinor: item.amountMinor,
       state: state
     )
+    isPendingAtBank = item.status == .pending || item.status == .pendingEntered
   }
 }

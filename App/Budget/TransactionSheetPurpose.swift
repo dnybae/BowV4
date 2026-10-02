@@ -53,15 +53,15 @@ enum TransactionSheetStatus: Equatable {
   case dueToday
   case overdue
   case due(Date)
-  case matched
+  /// Confirmed by the bank: imported, matched, or ticked off while reconciling.
   case cleared
+  /// Only in Bow so far. Without a bank connection, you clear it when you reconcile.
   case uncleared
 
   /// Nil while adding a transaction: there's no state to show yet.
   init?(
     purpose: TransactionSheetPurpose,
     isPendingAtBank: Bool = false,
-    isMatched: Bool = false,
     isCleared: Bool = false,
     dueDate: Date? = nil,
     now: Date = Date(),
@@ -86,8 +86,6 @@ enum TransactionSheetStatus: Equatable {
     case .edit:
       if isPendingAtBank {
         self = .pendingAtBank
-      } else if isMatched {
-        self = .matched
       } else if isCleared {
         self = .cleared
       } else {
@@ -103,7 +101,6 @@ enum TransactionSheetStatus: Equatable {
     case .dueToday: "Due today"
     case .overdue: "Overdue"
     case .due(let date): "Due \(date.formatted(.dateTime.month(.abbreviated).day()))"
-    case .matched: "Matched with bank"
     case .cleared: "Cleared"
     case .uncleared: "Uncleared"
     }

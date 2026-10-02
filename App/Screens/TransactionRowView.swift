@@ -29,7 +29,8 @@ struct TransactionRowView: View {
   private var accessibilityDetail: String {
     let subtitle = model.subtitle(hiding: options)
     switch model.state {
-    case .normal: return subtitle ?? ""
+    case .normal:
+      return [subtitle, model.isPendingAtBank ? "Pending at bank" : nil].compactMap { $0 }.joined(separator: ", ")
     case .pending(let label), .attention(let label, _), .scheduled(let label):
       return [subtitle, label].compactMap { $0 }.joined(separator: ", ")
     }
@@ -45,18 +46,28 @@ struct TransactionRowView: View {
         VStack(alignment: .leading, spacing: 2) {
           Text(model.title)
             .font(.bowHeadline)
-            .foregroundStyle(isPending ? Bow.inkSoft : Bow.ink)
+            .foregroundStyle(Bow.ink)
             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
           secondaryLine
         }
         if !dynamicTypeSize.isAccessibilitySize {
           Spacer(minLength: Bow.Space.s2)
         }
-        MoneyText(minor: model.amountMinor, currencyCode: currencyCode, showsPlusSign: model.isInflow)
-          .font(.bowAmount)
-          .foregroundStyle(isPending ? Bow.inkSoft : model.isInflow ? Bow.fundedInk : Bow.ink)
+        HStack(spacing: Bow.Space.s1) {
+          MoneyText(minor: model.amountMinor, currencyCode: currencyCode, showsPlusSign: model.isInflow)
+            .font(.bowAmount)
+            .foregroundStyle(model.isInflow ? Bow.fundedInk : Bow.ink)
+          if model.isPendingAtBank {
+            Image(systemName: "clock")
+              .font(.bowFootnote.weight(.semibold))
+              .foregroundStyle(Bow.inkSoft)
+              .accessibilityHidden(true)
+          }
+        }
       }
     }
+    // Not in the budget yet: the whole row is greyed out, like YNAB.
+    .opacity(isPending ? 0.45 : 1)
     .padding(.vertical, Bow.Space.s1)
     .contentShape(Rectangle())
     .accessibilityElement(children: .ignore)
@@ -73,7 +84,6 @@ struct TransactionRowView: View {
       size: 40,
       style: isHighlighted ? .glossy : .plain
     )
-    .opacity(isPending ? 0.6 : 1)
   }
 
   /// One line only: a status line replaces the subtitle rather than adding a line.

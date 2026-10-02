@@ -158,7 +158,6 @@ enum DemoData {
     transaction("CVS Pharmacy", -4_600, .expense, from: everyday, envelope: health, month: 0, day: 18, domain: "cvs.com")
     transaction("Netflix", -1_599, .expense, from: card, envelope: fun, day: 21, domain: "netflix.com")
     let match = transaction("Whole Foods Market", -3_200, .expense, from: everyday, envelope: groceries, day: 22, domain: "wholefoodsmarket.com", cleared: false)
-    match.notes = "Manually entered before bank import"
     let linked = transaction("Dunkin", -650, .expense, from: everyday, envelope: dining, day: 23, domain: "dunkindonuts.com", cleared: false)
     let linkedSnapshot = try JSONEncoder().encode(ManualTransactionSnapshot(linked))
     linked.sourceRaw = "manualLinked"

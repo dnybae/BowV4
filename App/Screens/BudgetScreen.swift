@@ -238,6 +238,8 @@ struct BudgetScreen: View {
   @ViewBuilder
   private func destination(for route: BudgetRoute) -> some View {
     switch route {
+    case .manageEnvelopes:
+      EnvelopeManagementScreen()
     case .envelope(let id):
       if let envelope = envelopes.first(where: { $0.id == id }) {
         EnvelopeDetailScreen(
@@ -364,7 +366,7 @@ struct BudgetScreen: View {
         Divider().padding(.leading, Bow.Space.s4)
         actionRow("Add Group", systemImage: "folder.badge.plus", action: onAddGroup)
         Divider().padding(.leading, Bow.Space.s4)
-        actionRow("Import YNAB Categories", systemImage: "square.and.arrow.down", action: onImportYNAB)
+        actionRow("Manage Envelopes", systemImage: "slider.horizontal.3") { open(.manageEnvelopes) }
       }
       .clipShape(RoundedRectangle(cornerRadius: Bow.Radius.lg, style: .continuous))
       .bowCard()
@@ -411,6 +413,8 @@ struct BudgetScreen: View {
       Divider()
       Button("Edit Target", systemImage: "dollarsign") { onEditEnvelopeTarget(id) }
       Button("Edit Envelope", systemImage: "pencil") { onEditEnvelope(id) }
+    case .manageEnvelopes:
+      EmptyView()
     case .cardPayment(let id):
       Button("Assign to Payment", systemImage: "plus") { onMoveMoney(.readyToAssign, .cardPayment(id)) }
       if snapshot.paymentAvailable[id, default: 0] > 0 {
@@ -487,6 +491,8 @@ private struct ReadyToAssignState: Equatable {
 enum BudgetRoute: Hashable {
   case envelope(UUID)
   case cardPayment(UUID)
+  /// Reorder, hide, rename and browse ideas, without leaving Budget for Settings.
+  case manageEnvelopes
 }
 
 /// The top of the Budget screen: this month's totals, then banners that only appear when there's

@@ -79,7 +79,10 @@ struct CardDebtGoalEditorScreen: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         BowCancelButton(hasChanges: hasChanges) { dismiss() }
-        ToolbarItem(placement: .confirmationAction) { Button { save() } label: { BowToolbarLabel("Save") } }
+      }
+      // A money sheet: one primary action at the bottom, like the other money editors.
+      .safeAreaInset(edge: .bottom) {
+        BowBottomAction("Save goal", isEnabled: hasChanges) { save() }
       }
       .bowErrorAlert("Couldn’t save goal", message: $message)
     }

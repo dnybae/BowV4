@@ -12,6 +12,10 @@ struct CurrencyAmountField: View {
   var systemImage: String? = nil
   /// Puts the cursor here as soon as the field is on screen, e.g. a new transaction's amount.
   var focusOnAppear = false
+  /// "−$0.00": a negative sign chosen before any digits are typed.
+  @State private var isNegativeZero = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   enum Style {
     /// A form row with the title on the leading side and the amount trailing.
@@ -65,15 +69,34 @@ struct CurrencyAmountField: View {
 
   private var field: some View {
     CurrencyTextFieldRepresentable(
-      title: title, minor: $minor, currencyCode: currencyCode, allowsNegative: allowsNegative,
-      heroSize: style.heroSize, focusOnAppear: focusOnAppear
+      title: title, minor: $minor, isNegativeZero: $isNegativeZero, currencyCode: currencyCode,
+      allowsNegative: allowsNegative, heroSize: style.heroSize, focusOnAppear: focusOnAppear
     )
+    // The text field takes the typing but draws no glyphs; this draws the amount so each
+    // digit rolls in like every other number in the app.
+    .overlay {
+      Text(CurrencyTextFieldRepresentable.displayText(
+        minor: minor, isNegativeZero: isNegativeZero && allowsNegative, currencyCode: currencyCode
+      ))
+      .font(Font(CurrencyTextFieldRepresentable.font(heroSize: style.heroSize)))
+      .foregroundStyle(minor == 0 ? Bow.inkSoft : Bow.ink)
+      .lineLimit(1)
+      .minimumScaleFactor(style.heroSize.map { 24 / $0 } ?? 1)
+      .contentTransition(reduceMotion ? .identity : .numericText(value: Double(minor)))
+      .bowAnimation(value: minor)
+      .frame(maxWidth: .infinity, alignment: style.heroSize == nil ? .trailing : .center)
+      // A new currency or text size is a different rendering, not a value to roll to.
+      .id("\(currencyCode)-\(dynamicTypeSize)")
+      .allowsHitTesting(false)
+      .accessibilityHidden(true)
+    }
   }
 }
 
 private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
   var title: String
   @Binding var minor: Int64
+  @Binding var isNegativeZero: Bool
   var currencyCode: String
   var allowsNegative: Bool
   /// Point size of a hero amount; nil for a form row.
@@ -90,6 +113,13 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
   /// Bow's hero number: SF Pro Rounded Semibold (44pt, or 50pt in editor sheets), scaled for Dynamic Type.
   private static func heroFont(size: CGFloat) -> UIFont { roundedMoneyFont(size: size, weight: .semibold, textStyle: .largeTitle) }
 
+  static func font(heroSize: CGFloat?) -> UIFont { heroSize.map(heroFont(size:)) ?? moneyFont }
+
+  static func displayText(minor: Int64, isNegativeZero: Bool, currencyCode: String) -> String {
+    let formatted = BudgetMoney.formatted(minor, currencyCode: currencyCode)
+    return isNegativeZero && minor == 0 ? "\u{2212}" + formatted : formatted
+  }
+
   private static func roundedMoneyFont(size: CGFloat, weight: UIFont.Weight, textStyle: UIFont.TextStyle) -> UIFont {
     let base = UIFont.systemFont(ofSize: size, weight: weight)
     let descriptor = (base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor)
@@ -105,7 +135,9 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
     field.delegate = context.coordinator
     field.keyboardType = .numberPad
     field.textAlignment = isHero ? .center : .right
-    field.font = heroSize.map(Self.heroFont(size:)) ?? Self.moneyFont
+    field.font = Self.font(heroSize: heroSize)
+    // The SwiftUI overlay draws the amount; the field keeps the text for the caret and VoiceOver.
+    field.textColor = .clear
     if isHero {
       field.adjustsFontSizeToFitWidth = true
       field.minimumFontSize = 24
@@ -134,17 +166,20 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
 
   final class Coordinator: NSObject, UITextFieldDelegate {
     var parent: CurrencyTextFieldRepresentable
-    /// Lets someone choose a negative sign before typing any digits.
-    private var isNegativeZero = false
 
     init(parent: CurrencyTextFieldRepresentable) { self.parent = parent }
 
+    /// Lets someone choose a negative sign before typing any digits.
+    private var isNegativeZero: Bool {
+      get { parent.allowsNegative && parent.minor == 0 && parent.isNegativeZero }
+      set { if parent.isNegativeZero != newValue { parent.isNegativeZero = newValue } }
+    }
+
     func render(in field: UITextField) {
-      if parent.minor != 0 || !parent.allowsNegative { isNegativeZero = false }
-      let formatted = BudgetMoney.formatted(parent.minor, currencyCode: parent.currencyCode)
-      let text = isNegativeZero ? "\u{2212}" + formatted : formatted
+      let text = CurrencyTextFieldRepresentable.displayText(
+        minor: parent.minor, isNegativeZero: isNegativeZero, currencyCode: parent.currencyCode
+      )
       if field.text != text { field.text = text }
-      field.textColor = parent.minor == 0 ? UIColor(Bow.inkSoft) : UIColor(Bow.ink)
     }
 
     func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange,
@@ -160,6 +195,7 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
         let appended = CurrencyInputEditor.appending(string, to: current)
         updated = isNegativeZero ? -appended : appended
       }
+      if updated != 0 { isNegativeZero = false }
       if updated != current { parent.minor = updated }
       render(in: textField)
       moveCaretToEnd(textField)

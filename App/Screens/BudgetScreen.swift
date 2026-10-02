@@ -30,7 +30,7 @@ struct BudgetScreen: View {
   /// Set while a horizontal swipe is changing months, so lifting a finger over a card doesn't open it.
   @State private var isSwipingMonth = false
   @Namespace private var zoomNamespace
-  @AppStorage("budgetCollapsedGroups") private var collapseState = BudgetGroupCollapseState()
+  @State private var collapseState = BudgetGroupCollapseState.saved
 
   /// Everything on screen describes the loaded snapshot's month. `selectedMonth` can briefly be
   /// ahead of it while the next month calculates.
@@ -377,6 +377,7 @@ struct BudgetScreen: View {
 
   private func toggleGroup(_ key: String) {
     withAnimation(Bow.stackMotion(reduceMotion: reduceMotion)) { collapseState.toggle(key) }
+    collapseState.save()
   }
 
   private func handle(_ notice: BudgetNotice) {

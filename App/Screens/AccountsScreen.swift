@@ -13,7 +13,8 @@ struct AccountsScreen: View {
   /// Opens a new transaction already set to this account.
   var onAddTransaction: (UUID) -> Void
   @Query private var simpleFINLinks: [SimpleFINAccountLink]
-  @AppStorage("bow.collapsedAccountGroups") private var collapsedAccountGroups = ""
+  /// Held in @State, not @AppStorage, so collapsing animates; saved to UserDefaults on change.
+  @State private var collapsedKinds = Self.savedCollapsedKinds
   @State private var editingAccount: BudgetAccount?
   @Namespace private var zoomNamespace
 
@@ -27,10 +28,11 @@ struct AccountsScreen: View {
     accounts.contains { $0.kind == .asset || $0.kind == .liability }
   }
 
-  private var collapsedKinds: Set<BudgetAccountKind> {
-    Set(collapsedAccountGroups.split(separator: ",").compactMap {
-      BudgetAccountKind(rawValue: String($0))
-    })
+  private static let collapsedGroupsKey = "bow.collapsedAccountGroups"
+
+  private static var savedCollapsedKinds: Set<BudgetAccountKind> {
+    let saved = UserDefaults.standard.string(forKey: collapsedGroupsKey) ?? ""
+    return Set(saved.split(separator: ",").compactMap { BudgetAccountKind(rawValue: String($0)) })
   }
 
   var body: some View {
@@ -76,7 +78,7 @@ struct AccountsScreen: View {
     }
     .bowSoftScrollEdge()
     .navigationTitle("Accounts")
-    .sensoryFeedback(.selection, trigger: collapsedAccountGroups)
+    .sensoryFeedback(.selection, trigger: collapsedKinds)
     .navigationBarTitleDisplayMode(.inline)
     .navigationDestination(for: AccountRoute.self) { route in
       if let account = accounts.first(where: { $0.id == route.id }) {
@@ -180,13 +182,14 @@ struct AccountsScreen: View {
   }
 
   private func toggleGroup(_ kind: BudgetAccountKind) {
-    var updated = collapsedKinds
-    if !updated.insert(kind).inserted {
-      updated.remove(kind)
-    }
     withAnimation(Bow.stackMotion(reduceMotion: reduceMotion)) {
-      collapsedAccountGroups = updated.map(\.rawValue).sorted().joined(separator: ",")
+      if !collapsedKinds.insert(kind).inserted {
+        collapsedKinds.remove(kind)
+      }
     }
+    UserDefaults.standard.set(
+      collapsedKinds.map(\.rawValue).sorted().joined(separator: ","), forKey: Self.collapsedGroupsKey
+    )
   }
 
   private func syncDescription(for account: BudgetAccount) -> String {

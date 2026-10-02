@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A collapsible group's header, on Budget and Accounts: the group name, a trailing detail
-/// ("4 envelopes", a group total) and a glass chevron that collapses or expands the group.
+/// ("4 envelopes", a group total) and a chevron that collapses or expands the group.
 struct BowGroupHeader<Detail: View>: View {
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   var name: String
@@ -38,11 +38,10 @@ struct BowGroupHeader<Detail: View>: View {
         }
         .labelStyle(.iconOnly)
         .frame(minWidth: 28, minHeight: 28)
+        // The chevron stays small; the tap area meets the 44pt minimum.
+        .contentShape(.rect.inset(by: -Bow.Space.s2))
       }
-      .buttonStyle(.glass)
-      .buttonBorderShape(.circle)
-      // The glass circle stays small; the tap area meets the 44pt minimum.
-      .contentShape(.rect.inset(by: -Bow.Space.s2))
+      .buttonStyle(.plain)
       .foregroundStyle(Bow.inkSoft)
       .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
     }

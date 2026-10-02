@@ -5,7 +5,7 @@ struct PayeeLogoFinderSheet: View {
   var payeeName: String
   var onSelect: (String?) -> Void
   @State private var domain: String
-  @State private var previewImage: UIImage?
+  @State private var previewImage: BrandLogo?
   @State private var isLoading = false
 
   init(payeeName: String, domain: String?, onSelect: @escaping (String?) -> Void) {
@@ -39,10 +39,7 @@ struct PayeeLogoFinderSheet: View {
           HStack(spacing: 16) {
             Group {
               if let previewImage {
-                Image(uiImage: previewImage)
-                  .resizable()
-                  .scaledToFill()
-                  .frame(width: 64, height: 64)
+                BrandLogoImage(logo: previewImage, side: 64)
               } else if isLoading {
                 RoundedRectangle(cornerRadius: Bow.Radius.sm)
                   .fill(Bow.well)
@@ -117,14 +114,12 @@ struct PayeeLogoFinderSheet: View {
         isLoading = true
         do {
           try await Task.sleep(for: .milliseconds(300))
-          let (data, response) = try await URLSession.shared.data(from: previewURL)
-          guard !Task.isCancelled,
-                (response as? HTTPURLResponse)?.statusCode == 200,
-                let image = UIImage(data: data) else {
+          let logo = await BrandLogoStore.logo(for: previewURL)
+          guard !Task.isCancelled, let logo else {
             isLoading = false
             return
           }
-          previewImage = image
+          previewImage = logo
           isLoading = false
         } catch {
           if !Task.isCancelled { isLoading = false }

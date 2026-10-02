@@ -11,6 +11,7 @@ struct MerchantLogoView: View {
   var size: CGFloat = 38
   var style: Style = .plain
   @ScaledMetric private var scale: CGFloat = 1
+  @State private var remoteLogo: BrandLogo?
 
   enum Style {
     /// A grey well, for list rows.
@@ -41,41 +42,40 @@ struct MerchantLogoView: View {
     }
   }
 
+  private var logoURL: URL? {
+    guard kind != .transfer, appearance?.source == .logoDev else { return nil }
+    return LogoDev.logoURL(
+      domain: appearance?.domain ?? domain,
+      merchantName: appearance?.name ?? merchantName
+    )
+  }
+
+  private var customData: Data? {
+    guard kind != .transfer, appearance?.source == .custom else { return nil }
+    return appearance?.imageData
+  }
+
   private var logo: some View {
     Group {
-      if kind == .transfer {
-        systemIcon
-      } else if appearance?.source == .custom,
-                let data = appearance?.imageData,
-                let image = CustomLogoCache.image(for: data) {
-        Image(uiImage: image)
-          .resizable()
-          .scaledToFill()
-          .frame(width: side, height: side)
-      } else if appearance?.source == .logoDev {
+      if let customData, let custom = BrandLogoStore.logo(for: customData) {
+        BrandLogoImage(logo: custom, side: side)
+      } else if let remoteLogo = remoteLogo ?? logoURL.flatMap({ BrandLogoStore.cached($0.absoluteString) }) {
         // The logo fades in over the fallback symbol instead of popping in.
-        AsyncImage(
-          url: LogoDev.logoURL(
-            domain: appearance?.domain ?? domain,
-            merchantName: appearance?.name ?? merchantName
-          ),
-          transaction: Transaction(animation: Bow.motion(reduceMotion: reduceMotion))
-        ) { phase in
-          if let image = phase.image {
-            image.resizable()
-              .scaledToFill()
-              .frame(width: side, height: side)
-              .transition(.opacity)
-          } else {
-            systemIcon
-              .transition(.opacity)
-          }
-        }
+        BrandLogoImage(logo: remoteLogo, side: side)
+          .transition(.opacity)
       } else {
         systemIcon
+          .transition(.opacity)
       }
     }
     .frame(width: side, height: side)
+    .task(id: logoURL) {
+      remoteLogo = nil
+      guard let logoURL, BrandLogoStore.cached(logoURL.absoluteString) == nil else { return }
+      let loaded = await BrandLogoStore.logo(for: logoURL)
+      guard !Task.isCancelled else { return }
+      withAnimation(Bow.motion(reduceMotion: reduceMotion)) { remoteLogo = loaded }
+    }
   }
 
   private var systemIcon: some View {
@@ -85,18 +85,5 @@ struct MerchantLogoView: View {
       .font(.system(size: side * 0.44, weight: .medium))
       .foregroundStyle(Bow.inkSoft)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-  }
-}
-
-/// Decoded custom logos, so a row doesn't decode its image data on every render.
-private enum CustomLogoCache {
-  private static let cache = NSCache<NSData, UIImage>()
-
-  static func image(for data: Data) -> UIImage? {
-    let key = data as NSData
-    if let cached = cache.object(forKey: key) { return cached }
-    guard let image = UIImage(data: data) else { return nil }
-    cache.setObject(image, forKey: key)
-    return image
   }
 }

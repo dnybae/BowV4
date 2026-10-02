@@ -6,6 +6,10 @@ struct CalendarScreen: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.calendar) private var calendar
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @Query private var bankRecords: [SimpleFINImportRecord]
+  @Query(filter: #Predicate<BudgetTransaction> {
+    $0.needsApproval || ($0.kindRaw == "expense" && $0.envelopeID == nil)
+  }) private var reviewTransactions: [BudgetTransaction]
   var schedules: [BudgetSchedule]
   var occurrences: [BudgetScheduleOccurrence]
   var accounts: [BudgetAccount]
@@ -15,6 +19,11 @@ struct CalendarScreen: View {
   var returnToTodayRequest: Int = 0
   var onRecord: (ScheduledTransactionDraft) -> Void
   var onSelectTransaction: (UUID) -> Void
+  var onReviewBankRecord: (SimpleFINImportRecord, BudgetScheduleOccurrence?) -> Void
+  var onEnterPending: (SimpleFINImportRecord) -> Void
+  @State private var monthItems: [TransactionListItem] = []
+  @State private var scheduledRecords: [BudgetTransaction] = []
+  @State private var loadError: String?
   @State private var displayedMonth = Calendar.current.dateInterval(of: .month, for: Date())?.start ?? Date()
   /// Which way the last month change went, so the title and grid slide the same way.
   @State private var monthDirection: Edge = .trailing
@@ -33,8 +42,29 @@ struct CalendarScreen: View {
     CalendarMonthPage(containing: displayedMonth, calendar: calendar)
   }
   private var recordedDays: Set<Date> {
-    Set(monthTransactions.map { calendar.startOfDay(for: $0.date) })
+    Set(timeline.days.filter { day in
+      day.items.contains { if case .scheduled = $0.source { return false }; return true }
+    }.map(\.day))
   }
+  private var timeline: SpendingTimeline {
+    let known = Set(reviewTransactions.map(\.id))
+    let reviews = reviewTransactions + scheduledRecords.filter { !known.contains($0.id) }
+    let inbox = ReviewInbox(transactions: reviews, records: bankRecords,
+                            occurrences: occurrences, schedules: schedules, calendar: calendar)
+    var filter = TransactionFilter()
+    filter.startDate = monthPage.start
+    filter.endDate = calendar.date(byAdding: .day, value: -1, to: monthPage.end)
+    return SpendingTimeline(
+      transactions: monthItems, reviewTransactions: reviews, inbox: inbox,
+      records: bankRecords, accounts: accounts, envelopes: envelopes,
+      currencyCode: currencyCode, searchText: "", filter: filter, calendar: calendar
+    )
+  }
+
+  private var dayItems: [SpendingTimelineItem] {
+    timeline.days.first { calendar.isDate($0.day, inSameDayAs: selectedDate) }?.items ?? []
+  }
+
   private var selectedSchedules: [BudgetSchedule] {
     schedules.filter {
       $0.isActive && ScheduleRecurrence(calendar: calendar).occurs(
@@ -173,10 +203,14 @@ struct CalendarScreen: View {
   }
 
   private var daySummary: String {
-    let scheduled = selectedSchedules.count
-    let recorded = dayTransactions.count
+    let scheduled = scheduleEntries.count + dayItems.filter {
+      if case .scheduled = $0.source { return true }; return false
+    }.count
+    let recorded = dayItems.filter {
+      if case .scheduled = $0.source { return false }; return true
+    }.count
     let scheduledText = scheduled == 0 ? "Nothing scheduled" : "\(scheduled) scheduled"
-    let recordedText = recorded == 0 ? "nothing recorded yet" : "\(recorded) recorded"
+    let recordedText = recorded == 0 ? "no transactions yet" : "\(recorded) transactions"
     return "\(scheduledText), \(recordedText)"
   }
 
@@ -212,7 +246,11 @@ struct CalendarScreen: View {
 
   @ViewBuilder
   private var agenda: some View {
-    if selectedSchedules.isEmpty && dayTransactions.isEmpty {
+    if let loadError {
+      ContentUnavailableView("Transactions Unavailable", systemImage: "exclamationmark.triangle",
+                             description: Text(loadError))
+        .listRowBackground(Color.clear)
+    } else if scheduleEntries.isEmpty && dayItems.isEmpty {
       if isLoadingMonth && loadedMonth == nil {
         Section {
           BowTransactionSkeletonRows(count: 2)
@@ -235,35 +273,34 @@ struct CalendarScreen: View {
         ForEach(scheduleEntries) { entry in
           scheduleRow(entry)
         }
-        ForEach(dayTransactions) { transaction in
-          let model = TransactionRowModel(
-            transaction,
-            accountName: accounts.first { $0.id == transaction.accountID }?.name ?? "Account",
-            envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name
+        ForEach(dayItems) { item in
+          SpendingTimelineEntryView(
+            item: item, onSelect: onSelectTransaction, onRecord: onRecord,
+            onReviewBankRecord: onReviewBankRecord, onEnterPending: onEnterPending
           )
-          Button { onSelectTransaction(transaction.id) } label: {
-            TransactionRowView(model: model, currencyCode: currencyCode)
-          }
-          .listRowBackground(model.state.rowStatus?.rowBackground ?? Bow.card)
         }
       }
     }
   }
 
-  /// The selected day's bills, except ones already recorded and listed among the day's transactions.
+  /// Preview bills that have not been recorded or represented in the shared timeline.
   private var scheduleEntries: [CalendarScheduleEntry] {
     selectedSchedules.compactMap { schedule in
-      let recorded = monthTransactions.first {
+      // A recorded bill belongs only to its actual transaction day, even across months.
+      if scheduledRecords.contains(where: {
         $0.scheduleID == schedule.id
           && $0.scheduledFor.map { calendar.isDate($0, inSameDayAs: selectedDate) } == true
-      }
-      if let recorded, dayTransactions.contains(where: { $0.id == recorded.id }) { return nil }
+      }) { return nil }
+      // Due occurrences (including ones grouped with bank reviews) are owned by Spending.
+      if schedule.accountID != nil, occurrences.contains(where: {
+        $0.scheduleID == schedule.id && !$0.isSkipped
+          && calendar.isDate($0.scheduledFor, inSameDayAs: selectedDate)
+      }) { return nil }
       return CalendarScheduleEntry(
         schedule: schedule,
         occurrence: occurrences.first {
           $0.scheduleID == schedule.id && calendar.isDate($0.scheduledFor, inSameDayAs: selectedDate)
-        },
-        recorded: recorded
+        }
       )
     }
   }
@@ -276,12 +313,10 @@ struct CalendarScreen: View {
   private func scheduleRow(_ entry: CalendarScheduleEntry) -> some View {
     let schedule = entry.schedule
     let isSkipped = entry.occurrence?.isSkipped == true
-    let canRecordBill = canRecord(schedule) && !isSkipped && entry.recorded == nil
+    let canRecordBill = canRecord(schedule) && !isSkipped
     let model = scheduleModel(entry)
     return Button {
-      if let recorded = entry.recorded {
-        onSelectTransaction(recorded.id)
-      } else if canRecordBill {
+      if canRecordBill {
         onRecord(draft(for: schedule))
       } else {
         editingSchedule = schedule
@@ -289,19 +324,16 @@ struct CalendarScreen: View {
     } label: {
       TransactionRowView(model: model, currencyCode: currencyCode)
     }
-    .accessibilityHint(entry.recorded != nil ? "Opens the recorded transaction"
-      : canRecordBill ? "Opens the bill to record it" : "Opens the schedule")
+    .accessibilityHint(canRecordBill ? "Opens the bill to record it" : "Opens the schedule")
     .listRowBackground(model.state.rowStatus?.rowBackground ?? Bow.card)
   }
 
   /// A bill as a Spending row. The status line carries what the old row said: skipped,
-  /// recorded, or whether its envelope can cover it.
+  /// or whether its envelope can cover it.
   private func scheduleModel(_ entry: CalendarScheduleEntry) -> TransactionRowModel {
     let schedule = entry.schedule
     let state: TransactionRowModel.State
-    if entry.recorded != nil {
-      state = .normal
-    } else if entry.occurrence?.isSkipped == true {
+    if entry.occurrence?.isSkipped == true {
       state = .pending("Skipped")
     } else if schedule.kind == .transfer && schedule.envelopeID == nil {
       state = .scheduled("Scheduled")
@@ -362,16 +394,42 @@ struct CalendarScreen: View {
     // A refresh of the month on screen keeps its rows until the new ones arrive, so nothing flashes.
     if loadedMonth != month {
       monthTransactions = []
+      monthItems = []
+      scheduledRecords = []
       selectedSnapshot = nil
       loadedMonth = nil
     }
     isLoadingMonth = true
     let next = calendar.date(byAdding: .month, value: 1, to: month) ?? .distantFuture
     let predicate = #Predicate<BudgetTransaction> { $0.date >= month && $0.date < next }
-    let transactions = (try? modelContext.fetch(FetchDescriptor(predicate: predicate))) ?? []
-    guard !Task.isCancelled else { return }
-    monthTransactions = transactions
-    loadedMonth = month
+    do {
+      let transactions = try modelContext.fetch(FetchDescriptor(predicate: predicate))
+      let scheduledPredicate = #Predicate<BudgetTransaction> {
+        $0.scheduledFor != nil && $0.scheduledFor! >= month && $0.scheduledFor! < next
+      }
+      let recorded = try modelContext.fetch(FetchDescriptor(predicate: scheduledPredicate))
+      let repository = TransactionPageRepository(modelContainer: modelContext.container)
+      var request = TransactionPageRepository.Request()
+      request.startDate = month
+      request.endDate = next
+      var items: [TransactionListItem] = []
+      repeat {
+        let page = try await repository.page(request)
+        guard !Task.isCancelled else { return }
+        items.append(contentsOf: page.items)
+        request.cursor = page.nextCursor
+      } while request.cursor != nil
+      monthTransactions = transactions
+      monthItems = items
+      scheduledRecords = recorded
+      loadedMonth = month
+      loadError = nil
+    } catch {
+      guard !Task.isCancelled else { return }
+      loadError = error.localizedDescription
+      isLoadingMonth = false
+      return
+    }
     if snapshotRepository == nil {
       snapshotRepository = BudgetSnapshotRepository(modelContainer: modelContext.container)
     }
@@ -500,8 +558,6 @@ private struct CalendarMonthDayButton: View {
 private struct CalendarScheduleEntry: Identifiable {
   var schedule: BudgetSchedule
   var occurrence: BudgetScheduleOccurrence?
-  /// Recorded on another day, so it isn't among the selected day's transactions.
-  var recorded: BudgetTransaction?
 
   var id: UUID { schedule.id }
 }

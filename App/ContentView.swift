@@ -222,7 +222,9 @@ private struct BudgetHomeView: View {
                 selectedDate: $selectedCalendarDate,
                 returnToTodayRequest: calendarReturnToTodayRequest,
                 onRecord: { activeSheet = .recordScheduled($0) },
-                onSelectTransaction: selectTransaction
+                onSelectTransaction: selectTransaction,
+                onReviewBankRecord: { activeSheet = .bankItem($0, $1) },
+                onEnterPending: { activeSheet = .pendingItem($0) }
               )
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

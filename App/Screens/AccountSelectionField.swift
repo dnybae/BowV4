@@ -110,7 +110,7 @@ struct AccountSelectionSheet: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }
+          Button { dismiss() } label: { BowToolbarLabel("Cancel") }
         }
       }
     }

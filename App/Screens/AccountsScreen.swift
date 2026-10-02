@@ -92,7 +92,7 @@ struct AccountsScreen: View {
     }
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
-        Button("Add Account", systemImage: "plus", action: onAddAccount)
+        Button(action: onAddAccount) { BowToolbarLabel("Add Account", systemImage: "plus") }
       }
     }
     .sheet(item: $editingAccount) { account in

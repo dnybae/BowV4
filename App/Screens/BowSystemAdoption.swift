@@ -35,7 +35,7 @@ extension View {
     } else {
       toolbar {
         ToolbarItem(placement: .topBarTrailing) {
-          Menu("More", systemImage: "ellipsis") { items }
+          Menu { items } label: { BowToolbarLabel("More", systemImage: "ellipsis") }
         }
       }
     }

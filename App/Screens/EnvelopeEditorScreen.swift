@@ -78,7 +78,7 @@ struct EnvelopeEditorScreen: View {
       .toolbar {
         BowCancelButton(hasChanges: hasChanges) { dismiss() }
         ToolbarItem(placement: .confirmationAction) {
-          Button(envelope == nil ? "Add" : "Save") { save() }
+          Button { save() } label: { BowToolbarLabel(envelope == nil ? "Add" : "Save") }
             .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
               || groupID == nil)
         }

@@ -179,7 +179,7 @@ private struct BudgetHomeView: View {
               .bowAnimation(value: loadedSnapshot == nil)
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                  Button("Settings", systemImage: "gearshape") { showingSettings = true }
+                  Button { showingSettings = true } label: { BowToolbarLabel("Settings", systemImage: "gearshape") }
                 }
               }
             }
@@ -206,7 +206,7 @@ private struct BudgetHomeView: View {
               )
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                  Button("Settings", systemImage: "gearshape") { showingSettings = true }
+                  Button { showingSettings = true } label: { BowToolbarLabel("Settings", systemImage: "gearshape") }
                 }
               }
             }
@@ -226,7 +226,7 @@ private struct BudgetHomeView: View {
               )
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                  Button("Settings", systemImage: "gearshape") { showingSettings = true }
+                  Button { showingSettings = true } label: { BowToolbarLabel("Settings", systemImage: "gearshape") }
                 }
               }
             }
@@ -260,7 +260,7 @@ private struct BudgetHomeView: View {
               }
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                  Button("Settings", systemImage: "gearshape") { showingSettings = true }
+                  Button { showingSettings = true } label: { BowToolbarLabel("Settings", systemImage: "gearshape") }
                 }
               }
             }
@@ -308,7 +308,7 @@ private struct BudgetHomeView: View {
               SimpleFINScreen()
                 .toolbar {
                   ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { activeSheet = nil }
+                    Button { activeSheet = nil } label: { BowToolbarLabel("Done") }
                   }
                 }
             }

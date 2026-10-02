@@ -101,13 +101,13 @@ struct CalendarScreen: View {
       }
       if !isShowingToday {
         ToolbarItem(placement: .topBarTrailing) {
-          Button("Today") { returnToToday() }
+          Button { returnToToday() } label: { BowToolbarLabel("Today") }
         }
       }
       ToolbarItemGroup(placement: .topBarTrailing) {
-        Button("Previous Month", systemImage: "chevron.left") { moveMonth(by: -1) }
+        Button { moveMonth(by: -1) } label: { BowToolbarLabel("Previous Month", systemImage: "chevron.left") }
           .labelStyle(.iconOnly)
-        Button("Next Month", systemImage: "chevron.right") { moveMonth(by: 1) }
+        Button { moveMonth(by: 1) } label: { BowToolbarLabel("Next Month", systemImage: "chevron.right") }
           .labelStyle(.iconOnly)
       }
     }

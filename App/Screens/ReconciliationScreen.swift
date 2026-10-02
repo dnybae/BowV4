@@ -79,7 +79,7 @@ struct ReconciliationScreen: View {
           .navigationTitle("Reconcile")
           .navigationBarTitleDisplayMode(.inline)
           .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            ToolbarItem(placement: .cancellationAction) { Button { dismiss() } label: { BowToolbarLabel("Cancel") } }
           }
         }
       }

@@ -73,10 +73,10 @@ struct EnvelopeDirectoryScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {
-            Button("Cancel") { selected = nil }
+            Button { selected = nil } label: { BowToolbarLabel("Cancel") }
           }
           ToolbarItem(placement: .confirmationAction) {
-            Button("Add") { add(suggestion) }
+            Button { add(suggestion) } label: { BowToolbarLabel("Add") }
           }
         }
       }

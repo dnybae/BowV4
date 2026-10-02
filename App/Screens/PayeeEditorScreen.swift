@@ -178,7 +178,7 @@ struct PayeeEditorScreen: View {
       .toolbar {
         BowCancelButton(hasChanges: hasChanges) { dismiss() }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Save") { Task { await save() } }
+          Button { Task { await save() } } label: { BowToolbarLabel("Save") }
             .disabled(trimmedName.isEmpty || isSaving || isImportingLogo)
         }
       }

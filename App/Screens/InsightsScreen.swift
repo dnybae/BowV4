@@ -479,7 +479,7 @@ struct InsightsScreen: View {
         }
         .navigationTitle(value.title)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { detail = nil } } }
+        .toolbar { ToolbarItem(placement: .confirmationAction) { Button { detail = nil } label: { BowToolbarLabel("Done") } } }
         .sheet(item: $editingTransaction) { transaction in
           TransactionEditorScreen(
             subject: .existing(transaction),

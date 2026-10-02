@@ -157,9 +157,9 @@ struct BudgetScreen: View {
         )
       }
       ToolbarItemGroup(placement: .topBarTrailing) {
-        Button("Previous Month", systemImage: "chevron.left") { changeMonth(-1) }
+        Button { changeMonth(-1) } label: { BowToolbarLabel("Previous Month", systemImage: "chevron.left") }
           .labelStyle(.iconOnly)
-        Button("Next Month", systemImage: "chevron.right") { changeMonth(1) }
+        Button { changeMonth(1) } label: { BowToolbarLabel("Next Month", systemImage: "chevron.right") }
           .labelStyle(.iconOnly)
           .disabled(!canAdvance)
           .accessibilityHint(canAdvance ? "" : "Assign money in this month to plan the next month")

@@ -197,6 +197,11 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
         self.render(in: field)
       })
       sign.accessibilityLabel = "Toggle Negative"
+      // Medium, like every SwiftUI toolbar button (see BowToolbarLabel).
+      let font = UIFontMetrics(forTextStyle: .body).scaledFont(for: .systemFont(ofSize: 17, weight: .medium))
+      for state in [UIControl.State.normal, .highlighted] {
+        sign.setTitleTextAttributes([.font: font], for: state)
+      }
       bar.items = [sign, .flexibleSpace()]
       return bar
     }

@@ -54,7 +54,7 @@ struct AddAccountFlowScreen: View {
       .toolbar {
         if path.isEmpty {
           ToolbarItem(placement: .cancellationAction) {
-            Button("Cancel") { dismiss() }
+            Button { dismiss() } label: { BowToolbarLabel("Cancel") }
           }
         }
       }

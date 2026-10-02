@@ -68,7 +68,7 @@ struct SimpleFINLinkPickerScreen: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Done") { dismiss() }
+          Button { dismiss() } label: { BowToolbarLabel("Done") }
         }
       }
       .bowErrorAlert("Bank sync", message: $message)

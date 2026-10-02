@@ -204,7 +204,7 @@ struct SettingsScreen: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {
-          Button("Done") { dismiss() }
+          Button { dismiss() } label: { BowToolbarLabel("Done") }
         }
       }
       .sheet(isPresented: $showingYNABImport) {

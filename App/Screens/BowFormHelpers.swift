@@ -56,8 +56,10 @@ struct BowCancelButton: ToolbarContent {
 
   var body: some ToolbarContent {
     ToolbarItem(placement: .cancellationAction) {
-      Button("Cancel") {
+      Button {
         if hasChanges { confirming = true } else { onCancel() }
+      } label: {
+        BowToolbarLabel("Cancel")
       }
       .confirmationDialog("Discard your changes?", isPresented: $confirming) {
         Button(discardTitle, role: .destructive, action: onCancel)

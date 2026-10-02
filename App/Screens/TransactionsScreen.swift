@@ -139,9 +139,9 @@ struct TransactionsScreen: View {
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
-        Button("Filter Transactions", systemImage: "line.3.horizontal.decrease") {
+        Button {
           showingFilters = true
-        }
+        } label: { BowToolbarLabel("Filter Transactions", systemImage: "line.3.horizontal.decrease") }
         .accessibilityLabel(filter.isActive
           ? "Filter Transactions, \(filter.activeCount) active"
           : "Filter Transactions")

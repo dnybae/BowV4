@@ -125,10 +125,10 @@ struct TransactionFilterScreen: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }
+          Button { dismiss() } label: { BowToolbarLabel("Cancel") }
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Apply") { apply() }
+          Button { apply() } label: { BowToolbarLabel("Apply") }
             .disabled(!canApply)
         }
       }

@@ -54,7 +54,7 @@ struct GroupOrderScreen: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {
-          Button("Done", systemImage: "checkmark") { dismiss() }
+          Button { dismiss() } label: { BowToolbarLabel("Done", systemImage: "checkmark") }
         }
       }
       .bowErrorAlert("Couldn’t reorder groups", message: $message)

@@ -88,6 +88,8 @@ extension Font {
     static let bowFootnote   = Font.footnote
     static let bowCaption    = Font.caption.weight(.medium)
     static let bowIconTitle  = Font.title3
+    /// Toolbar buttons, text and symbols alike. Apply it with `BowToolbarLabel`.
+    static let bowToolbar    = Font.body.weight(.medium)
 }
 // Always add .monospacedDigit() to money. Sentence case everywhere.
 

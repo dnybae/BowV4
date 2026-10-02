@@ -281,7 +281,7 @@ struct PayeeDetailScreen: View {
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
-        Button("Edit Payee", systemImage: "pencil") { showingEdit = true }
+        Button { showingEdit = true } label: { BowToolbarLabel("Edit Payee", systemImage: "pencil") }
           .disabled(entry == nil)
       }
     }

@@ -343,7 +343,7 @@ struct EnvelopeDetailScreen: View {
     .toolbar {
       if !isPastMonth {
         ToolbarItem(placement: .topBarTrailing) {
-          Button("Edit Envelope", systemImage: "pencil", action: onEdit)
+          Button(action: onEdit) { BowToolbarLabel("Edit Envelope", systemImage: "pencil") }
         }
       }
     }

@@ -75,7 +75,7 @@ struct CoverOverspendingScreen: View {
     .toolbar {
       if snapshot == nil {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }
+          Button { dismiss() } label: { BowToolbarLabel("Cancel") }
         }
       }
     }
@@ -114,7 +114,7 @@ struct CoverOverspendingScreen: View {
       .toolbar {
         if path.isEmpty {
           ToolbarItem(placement: .confirmationAction) {
-            Button("Done", systemImage: "checkmark") { dismiss() }
+            Button { dismiss() } label: { BowToolbarLabel("Done", systemImage: "checkmark") }
           }
         }
       }

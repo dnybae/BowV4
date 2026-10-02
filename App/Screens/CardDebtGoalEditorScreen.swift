@@ -79,7 +79,7 @@ struct CardDebtGoalEditorScreen: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         BowCancelButton(hasChanges: hasChanges) { dismiss() }
-        ToolbarItem(placement: .confirmationAction) { Button("Save") { save() } }
+        ToolbarItem(placement: .confirmationAction) { Button { save() } label: { BowToolbarLabel("Save") } }
       }
       .bowErrorAlert("Couldn’t save goal", message: $message)
     }

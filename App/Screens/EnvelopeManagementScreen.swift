@@ -102,7 +102,7 @@ struct EnvelopeManagementScreen: View {
     .navigationTitle("Groups and envelopes")
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
-        Button("Reorder groups") { showingGroupOrder = true }
+        Button { showingGroupOrder = true } label: { BowToolbarLabel("Reorder groups") }
           .disabled(orderedGroups.count < 2)
       }
     }

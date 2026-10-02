@@ -57,10 +57,10 @@ struct YNABImportScreen: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }
+          Button { dismiss() } label: { BowToolbarLabel("Cancel") }
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Import") { save() }
+          Button { save() } label: { BowToolbarLabel("Import") }
             .disabled(preview == nil)
         }
       }

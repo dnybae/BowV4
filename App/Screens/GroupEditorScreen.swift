@@ -42,7 +42,7 @@ struct GroupEditorScreen: View {
       .toolbar {
         BowCancelButton(hasChanges: name != (group?.name ?? "")) { dismiss() }
         ToolbarItem(placement: .confirmationAction) {
-          Button(group == nil ? "Add" : "Save") { save() }
+          Button { save() } label: { BowToolbarLabel(group == nil ? "Add" : "Save") }
             .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
       }

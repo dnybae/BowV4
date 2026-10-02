@@ -112,7 +112,7 @@ struct ManagePayeesScreen: View {
     }
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
-        Button("Add payee", systemImage: "plus") { showingAdd = true }
+        Button { showingAdd = true } label: { BowToolbarLabel("Add payee", systemImage: "plus") }
       }
     }
     .sheet(isPresented: $showingAdd) {

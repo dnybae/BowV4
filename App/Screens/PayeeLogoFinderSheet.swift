@@ -98,13 +98,13 @@ struct PayeeLogoFinderSheet: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") { dismiss() }
+          Button { dismiss() } label: { BowToolbarLabel("Cancel") }
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Use logo") {
+          Button {
             onSelect(trimmedDomain.isEmpty ? nil : trimmedDomain)
             dismiss()
-          }
+          } label: { BowToolbarLabel("Use logo") }
           .disabled(previewImage == nil || !validDomain)
         }
       }

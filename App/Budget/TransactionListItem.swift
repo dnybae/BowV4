@@ -15,6 +15,8 @@ struct TransactionListItem: Identifiable, Sendable, Equatable {
   var needsApproval: Bool
   var accountName: String
   var envelopeName: String?
+  var scheduleID: UUID? = nil
+  var isCleared = false
 
   var kind: BudgetTransactionKind {
     BudgetTransactionKind(rawValue: kindRaw) ?? .expense

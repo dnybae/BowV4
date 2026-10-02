@@ -327,8 +327,27 @@ struct BudgetCommands {
       record.originalManualSnapshot = nil
       record.matchedAutomatically = false
     }
+    // A bill's date that's deleted is skipped, so it isn't entered again.
+    if let scheduleID = transaction.scheduleID, let scheduledFor = transaction.scheduledFor {
+      try skipScheduledDate(scheduleID: scheduleID, on: scheduledFor, in: context)
+    }
     context.delete(transaction)
     try context.save()
+  }
+
+  /// Marks one date of a schedule skipped; the schedule stays active for future dates.
+  static func skipScheduledDate(scheduleID: UUID, on date: Date, in context: ModelContext) throws {
+    let calendar = Calendar.current
+    let occurrences = try context.fetch(FetchDescriptor<BudgetScheduleOccurrence>(
+      predicate: #Predicate { $0.scheduleID == scheduleID }
+    ))
+    if let occurrence = occurrences.first(where: { calendar.isDate($0.scheduledFor, inSameDayAs: date) }) {
+      occurrence.isSkipped = true
+    } else {
+      let skipped = BudgetScheduleOccurrence(scheduleID: scheduleID, scheduledFor: calendar.startOfDay(for: date))
+      skipped.isSkipped = true
+      context.insert(skipped)
+    }
   }
 
   private static func invalidateReconciliation(accountIDs: [UUID], from date: Date, in context: ModelContext) throws {

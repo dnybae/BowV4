@@ -425,6 +425,7 @@ extension View {
     /// Put on a List or Form so the Bow background (or a SkyBackground) shows through.
     func bowListBackground<Background: View>(@ViewBuilder _ background: () -> Background = { Bow.mist }) -> some View {
         self.listStyle(.insetGrouped)
+            .font(.headline)
             .scrollDismissesKeyboard(.interactively)
             .scrollContentBackground(.hidden)
             .background { background().ignoresSafeArea() }

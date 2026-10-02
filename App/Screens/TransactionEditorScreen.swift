@@ -177,6 +177,18 @@ struct TransactionEditorScreen: View {
     )
   }
 
+  /// A bill Bow entered on its due date that the bank hasn't confirmed yet: skipping undoes it.
+  private var enteredBillScheduleID: UUID? {
+    guard purpose == .edit, let transaction, transaction.scheduledFor != nil,
+          status == .uncleared else { return nil }
+    return transaction.scheduleID
+  }
+
+  /// The schedule whose date this sheet can skip: a bill waiting to be entered, or one Bow entered.
+  private var skippableScheduleID: UUID? {
+    purpose == .enterScheduled ? scheduledDraft?.scheduleID : enteredBillScheduleID
+  }
+
   private var statusPill: StatusPill? {
     guard let status else { return nil }
     switch status {
@@ -319,14 +331,16 @@ struct TransactionEditorScreen: View {
         }
         .listRowBackground(Bow.card)
         contextSection
-        if purpose == .enterScheduled, let scheduledDraft {
+        if let scheduleID = skippableScheduleID {
           Section {
-            Button("Skip this date") { skip(scheduledDraft) }
+            Button("Skip this date") { skipScheduledDate() }
             if let onEditSchedule {
-              Button("Edit schedule") { onEditSchedule(scheduledDraft.scheduleID) }
+              Button("Edit schedule") { onEditSchedule(scheduleID) }
             }
           } footer: {
-            Text("Skipping keeps the schedule active for future dates.")
+            Text(purpose == .enterScheduled
+              ? "Skipping keeps the schedule active for future dates."
+              : "Bow entered this bill on its due date. Skipping removes it from your budget; the schedule stays active for future dates.")
           }
           .listRowBackground(Bow.card)
         }
@@ -368,7 +382,8 @@ struct TransactionEditorScreen: View {
           BowDestructiveSection("Ignore bank transaction") {
             showingIgnoreConfirmation = true
           }
-        } else if transaction != nil {
+        } else if transaction != nil && enteredBillScheduleID == nil {
+          // An entered bill is removed with Skip this date instead, which does the same.
           BowDestructiveSection("Delete transaction") {
             showingDeleteConfirmation = true
           }
@@ -910,21 +925,20 @@ struct TransactionEditorScreen: View {
     )
   }
 
-  /// Skips this date of the bill, the same as Skip in Spending; the schedule stays active.
-  private func skip(_ draft: ScheduledTransactionDraft) {
-    let scheduleID = draft.scheduleID
+  /// Skips this date of the bill. One Bow already entered is removed, undoing its effect on the
+  /// budget; the schedule stays active either way.
+  private func skipScheduledDate() {
     do {
-      let occurrences = try modelContext.fetch(FetchDescriptor<BudgetScheduleOccurrence>(
-        predicate: #Predicate { $0.scheduleID == scheduleID }
-      ))
-      guard let occurrence = occurrences.first(where: {
-        Calendar.current.isDate($0.scheduledFor, inSameDayAs: draft.scheduledFor)
-      }) else {
-        errorMessage = "This date is no longer scheduled."
-        return
+      if purpose == .enterScheduled, let scheduledDraft {
+        try BudgetCommands.skipScheduledDate(
+          scheduleID: scheduledDraft.scheduleID, on: scheduledDraft.scheduledFor, in: modelContext
+        )
+        try modelContext.save()
+      } else if let transaction {
+        // Deleting a bill's transaction marks its date skipped.
+        try BudgetCommands.deleteTransaction(transaction, in: modelContext)
       }
-      occurrence.isSkipped = true
-      try modelContext.save()
+      toasts?.show(.saved("Skipped · \(payee.isEmpty ? "Scheduled bill" : payee)"))
       dismiss()
     } catch {
       errorMessage = error.localizedDescription

@@ -30,7 +30,8 @@ struct TransactionRowView: View {
     let subtitle = model.subtitle(hiding: options)
     switch model.state {
     case .normal:
-      return [subtitle, model.isPendingAtBank ? "Pending at bank" : nil].compactMap { $0 }.joined(separator: ", ")
+      let note = model.isPendingAtBank ? "Pending at bank" : model.isScheduledEntry ? "Entered from schedule" : nil
+      return [subtitle, note].compactMap { $0 }.joined(separator: ", ")
     case .pending(let label), .attention(let label, _), .scheduled(let label):
       return [subtitle, label].compactMap { $0 }.joined(separator: ", ")
     }
@@ -57,8 +58,8 @@ struct TransactionRowView: View {
           MoneyText(minor: model.amountMinor, currencyCode: currencyCode, showsPlusSign: model.isInflow)
             .font(.bowAmount)
             .foregroundStyle(model.isInflow ? Bow.fundedInk : Bow.ink)
-          if model.isPendingAtBank {
-            Image(systemName: "clock")
+          if let symbol = model.amountSymbol {
+            Image(systemName: symbol)
               .font(.bowFootnote.weight(.semibold))
               .foregroundStyle(Bow.inkSoft)
               .accessibilityHidden(true)

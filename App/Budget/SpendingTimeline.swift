@@ -109,6 +109,7 @@ struct SpendingTimeline {
         kind: transaction.kind,
         status: status,
         isMatched: transaction.sourceRaw == "manualLinked",
+        isScheduledEntry: transaction.scheduleID != nil && !transaction.isCleared,
         source: pendingRecord != nil && !needsReview
           ? .pending(pendingRecord!) : .transaction(transaction.id)
       ))
@@ -217,6 +218,8 @@ struct SpendingTimelineItem: Identifiable {
   var kind: BudgetTransactionKind
   var status: SpendingTimelineStatus?
   var isMatched = false
+  /// Entered by Bow from a schedule and not confirmed by the bank yet.
+  var isScheduledEntry = false
   var source: Source
 }
 
@@ -235,7 +238,7 @@ enum SpendingTimelineStatus {
     case .chooseEnvelope: "Review · Choose an envelope"
     case .pending: "Pending at bank · Not in budget"
     case .pendingEntered: "Pending at bank · Entered in budget"
-    case .scheduled: "Scheduled · Record or skip"
+    case .scheduled: "Scheduled · Finish entering or skip"
     }
   }
 
@@ -247,7 +250,8 @@ enum SpendingTimelineStatus {
     case .chooseEnvelope: "Choose an envelope"
     case .pending: "Pending"
     case .pendingEntered: "Pending · Entered"
-    case .scheduled: "Scheduled"
+    // Bills enter themselves on their date; one shown here needs details Bow doesn't have.
+    case .scheduled: "Scheduled · Needs details"
     }
   }
 

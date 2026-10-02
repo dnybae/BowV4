@@ -135,7 +135,9 @@ actor TransactionPageRepository {
         sourceRaw: item.sourceRaw,
         needsApproval: item.needsApproval,
         accountName: accountNames[item.accountID] ?? "Account",
-        envelopeName: item.envelopeID.flatMap { envelopeNames[$0] }
+        envelopeName: item.envelopeID.flatMap { envelopeNames[$0] },
+        scheduleID: item.scheduleID,
+        isCleared: item.isCleared
         ))
         if items.count == Self.pageSize { break }
       }

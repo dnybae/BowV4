@@ -27,6 +27,8 @@ enum SimpleFINBackgroundRefresh {
   static func run(container: ModelContainer) async {
     guard !UserDefaults.standard.bool(forKey: "bow.demoMode") else { return }
     defer { schedule(in: container.mainContext) }
+    // Bills due today enter themselves, even before the app is opened.
+    try? ScheduleReviewPlanner().refresh(in: container.mainContext)
     _ = try? await SimpleFINSyncCoordinator.shared.sync(in: container.mainContext)
   }
 }

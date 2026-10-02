@@ -10,7 +10,7 @@ struct BowNotesRow: View {
 
   var body: some View {
     // A plain HStack, so the list row grows with the text instead of clipping it.
-    HStack(alignment: .firstTextBaseline, spacing: Bow.Space.s3) {
+    HStack(spacing: Bow.Space.s3) {
       Label("Notes", systemImage: "note.text")
         .labelStyle(.bowTile)
         .foregroundStyle(Bow.ink)

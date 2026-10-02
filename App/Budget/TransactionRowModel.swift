@@ -15,6 +15,15 @@ struct TransactionRowModel: Identifiable, Equatable {
   var state: State
   /// The bank has it as pending. Shown with a clock by the amount, whether or not it's in the budget.
   var isPendingAtBank = false
+  /// Entered by Bow from a schedule and not confirmed by the bank yet. Shown with a calendar.
+  var isScheduledEntry = false
+
+  /// The small symbol by the amount: pending at the bank wins over a scheduled entry.
+  var amountSymbol: String? {
+    if isPendingAtBank { return "clock" }
+    if isScheduledEntry { return "calendar" }
+    return nil
+  }
 
   enum State: Equatable {
     case normal
@@ -75,6 +84,7 @@ extension TransactionRowModel {
       amountMinor: amountMinor ?? item.amountMinor,
       state: Self.state(needsApproval: item.needsApproval, kind: item.kind, envelopeID: item.envelopeID)
     )
+    isScheduledEntry = item.scheduleID != nil && !item.isCleared
   }
 
   init(_ transaction: BudgetTransaction, accountName: String, envelopeName: String?) {
@@ -91,6 +101,7 @@ extension TransactionRowModel {
         needsApproval: transaction.needsApproval, kind: transaction.kind, envelopeID: transaction.envelopeID
       )
     )
+    isScheduledEntry = transaction.scheduleID != nil && !transaction.isCleared
   }
 
   init(_ item: SpendingTimelineItem) {
@@ -115,5 +126,6 @@ extension TransactionRowModel {
       state: state
     )
     isPendingAtBank = item.status == .pending || item.status == .pendingEntered
+    isScheduledEntry = item.isScheduledEntry
   }
 }

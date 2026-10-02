@@ -264,7 +264,18 @@ struct TransactionEditorScreen: View {
   }
 
   private var canSave: Bool {
-    accountID != nil && amountMinor != 0 && !(kind == .expense && envelopeID == nil)
+    accountID != nil && amountMinor != 0 && !(kind == .expense && envelopeID == nil && !isHistory)
+      && (kind != .transfer || (destinationID != nil && selectedAccount?.kind != .credit
+        && (!needsEnvelopeForTransfer || envelopeID != nil)))
+  }
+
+  /// Dated before the account's starting balance: kept as history, so no envelope is needed.
+  private var isHistory: Bool {
+    guard let selectedAccount else { return false }
+    return BudgetCommands.isBeforeStart(
+      date: date, account: selectedAccount,
+      destination: kind == .transfer ? accounts.first { $0.id == destinationID } : nil
+    )
   }
 
   private var selectedAccount: BudgetAccount? {
@@ -488,7 +499,13 @@ struct TransactionEditorScreen: View {
         if initialFields == nil { initialFields = fields }
       }
       .onChange(of: payee) { _, _ in applyPayeeRule() }
-      .onChange(of: kind) { _, _ in applyPayeeRule() }
+      .onChange(of: kind) { _, newKind in
+        applyPayeeRule()
+        // A transfer starts from a cash account; move off a card if one was chosen.
+        if newKind == .transfer, selectedAccount?.kind == .credit, !locksAccount {
+          accountID = accounts.first { $0.kind == .cash && $0.closedAt == nil }?.id
+        }
+      }
       .task(id: PayeeDefaultsTrigger(payee: payee, kind: kind)) {
         await applyLastUsedDefaults()
       }
@@ -509,7 +526,9 @@ struct TransactionEditorScreen: View {
   @ViewBuilder
   private var fieldRows: some View {
     if kind == .transfer {
-      AccountSelectionField(title: "From account", selection: $accountID, accounts: accounts,
+      // Cards are paid by a transfer from a cash account, never the other way round.
+      AccountSelectionField(title: "From account", selection: $accountID,
+                            accounts: accounts.filter { $0.kind != .credit },
                             systemImage: "creditcard")
         .disabled(locksAccount)
       AccountSelectionField(
@@ -648,8 +667,17 @@ struct TransactionEditorScreen: View {
 
   /// Explains the fields when something needs it; shown under the main section.
   private var fieldsFootnote: String? {
-    if (kind != .transfer || needsEnvelopeForTransfer) && kind == .expense && envelopeID == nil {
+    if isHistory {
+      return "This is before \(selectedAccount?.name ?? "the account")’s starting balance date, so it’s kept as history and doesn’t change the balance or budget."
+    }
+    if kind == .expense && envelopeID == nil {
       return "Choose an envelope before saving this expense."
+    }
+    if kind == .transfer && destinationID == nil {
+      return "Choose the account the money goes to."
+    }
+    if needsEnvelopeForTransfer && envelopeID == nil {
+      return "Choose the envelope that pays for this transfer."
     }
     if kind != .transfer && (selectedAccount?.kind == .asset || selectedAccount?.kind == .liability) {
       return "Envelopes on tracking accounts are for reference and don't change your budget."

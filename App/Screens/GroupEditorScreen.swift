@@ -20,7 +20,7 @@ struct GroupEditorScreen: View {
     NavigationStack {
       Form {
         Section {
-          BowNameHeader("For example, Food & Home", name: $name, systemImage: "folder")
+          BowNameHeader(placeholder: "For example, Food & Home", name: $name) {}
         } footer: {
           Group {
             Text("Groups hold related envelopes on the Budget screen, like bills or everyday spending.")

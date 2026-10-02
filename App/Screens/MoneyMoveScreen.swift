@@ -81,12 +81,12 @@ struct MoneyMoveScreen: View {
           BudgetBucketSelectionField(
             title: "From", selection: $source,
             envelopes: currentEnvelopes, cardAccounts: cardAccounts,
-            snapshot: snapshot, currencyCode: currencyCode, systemImage: bucketSymbol(source)
+            snapshot: snapshot, currencyCode: currencyCode, systemImage: "tray.and.arrow.up"
           )
           BudgetBucketSelectionField(
             title: "To", selection: $target,
             envelopes: currentEnvelopes, cardAccounts: cardAccounts,
-            snapshot: snapshot, currencyCode: currencyCode, systemImage: bucketSymbol(target)
+            snapshot: snapshot, currencyCode: currencyCode, systemImage: "tray.and.arrow.down"
           )
           Button {
             let oldSource = source
@@ -189,14 +189,6 @@ struct MoneyMoveScreen: View {
     }
     MoneyText(minor: after, currencyCode: currencyCode)
       .foregroundStyle(after < 0 ? Bow.overInk : Bow.ink)
-  }
-
-  private func bucketSymbol(_ bucket: BudgetBucket) -> String {
-    switch bucket {
-    case .readyToAssign: "square.grid.2x2"
-    case .envelope(let id): currentEnvelopes.first { $0.id == id }?.symbol ?? "tray"
-    case .cardPayment: "creditcard"
-    }
   }
 
   private func bucketName(_ bucket: BudgetBucket) -> String {

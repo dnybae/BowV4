@@ -60,11 +60,7 @@ struct CoverEnvelopeScreen: View {
           pill: remaining > 0
             ? StatusPill(text: "\(BudgetMoney.formatted(remaining, currencyCode: currencyCode)) still to cover", state: .over)
             : StatusPill(text: "Fully covered", state: .funded, symbol: "checkmark")
-        ) {
-          BowGlossyTile(systemImage: TransactionIconSymbol.name(
-            for: .expense, payee: "", envelope: envelope?.name
-          ))
-        }
+        ) {}
       }
       .listRowBackground(Color.clear)
       .listRowInsets(EdgeInsets())
@@ -146,22 +142,17 @@ struct CoverEnvelopeScreen: View {
     let sliderStep = maximum > 0 ? Int((Double(donor.amountMinor) / Double(maximum) * 10).rounded()) : 0
     return VStack(alignment: .leading, spacing: Bow.Space.s2) {
       HStack(spacing: Bow.Space.s3) {
-        Label {
-          VStack(alignment: .leading, spacing: 2) {
-            Text(name)
-              .foregroundStyle(Bow.ink)
-              .lineLimit(1)
-            HStack(spacing: Bow.Space.s1) {
-              MoneyText(minor: leftover, currencyCode: currencyCode)
-              Text("left")
-            }
-            .font(.bowSubhead)
-            .foregroundStyle(leftoverState(for: donor.bucket, leftover: leftover).ink)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(name)
+            .foregroundStyle(Bow.ink)
+            .lineLimit(1)
+          HStack(spacing: Bow.Space.s1) {
+            MoneyText(minor: leftover, currencyCode: currencyCode)
+            Text("left")
           }
-        } icon: {
-          Image(systemName: donorSymbol(donor.bucket))
+          .font(.bowSubhead)
+          .foregroundStyle(leftoverState(for: donor.bucket, leftover: leftover).ink)
         }
-        .labelStyle(.bowTile)
         .accessibilityElement(children: .combine)
         Spacer(minLength: Bow.Space.s2)
         CurrencyAmountField("Amount from \(name)", minor: amount, currencyCode: currencyCode)
@@ -201,15 +192,6 @@ struct CoverEnvelopeScreen: View {
     let assignedAfter = snapshot.assigned[id, default: 0] - draft.amountMinor(for: bucket)
     if target > 0 && assignedAfter < target { return .needs }
     return leftover > 0 ? .funded : .empty
-  }
-
-  private func donorSymbol(_ bucket: BudgetBucket) -> String {
-    switch bucket {
-    case .readyToAssign: "square.grid.2x2"
-    case .envelope(let id):
-      TransactionIconSymbol.name(for: .expense, payee: "", envelope: envelopes.first { $0.id == id }?.name)
-    case .cardPayment: "creditcard"
-    }
   }
 
   private func donorName(_ bucket: BudgetBucket) -> String {

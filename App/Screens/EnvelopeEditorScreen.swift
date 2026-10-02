@@ -52,10 +52,6 @@ struct EnvelopeEditorScreen: View {
 
   private var hasChanges: Bool { initialFields.map { fields != $0 } ?? false }
 
-  private var tileSymbol: String {
-    TransactionIconSymbol.name(for: .expense, payee: "", envelope: name)
-  }
-
   private var isNew: Bool { envelope == nil }
 
   init(groups: [BudgetGroup], envelope: BudgetEnvelope? = nil, layout: Layout = .envelope,
@@ -133,9 +129,7 @@ struct EnvelopeEditorScreen: View {
   private var envelopeForm: some View {
     Form {
       Section {
-        BowNameHeader(placeholder: "Envelope name", name: $name, isFocused: $nameIsFocused) {
-          BowGlossyTile(systemImage: tileSymbol)
-        }
+        BowNameHeader(placeholder: "Envelope name", name: $name, isFocused: $nameIsFocused) {}
         .task {
           guard envelope == nil, idea == nil, !didRequestNameFocus else { return }
           await Task.yield()
@@ -158,9 +152,7 @@ struct EnvelopeEditorScreen: View {
   private var targetForm: some View {
     Form {
       Section {
-        BowContextCard {
-          BowGlossyTile(systemImage: tileSymbol, size: 44)
-        } title: {
+        BowContextCard {} title: {
           VStack(alignment: .leading, spacing: 2) {
             TextField("Name", text: $name)
               .font(.bowHeadline)

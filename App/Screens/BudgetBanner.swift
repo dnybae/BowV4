@@ -4,6 +4,7 @@ import SwiftUI
 /// each kind also has its own symbol so the meaning never depends on color alone.
 /// Ready to Assign is the screen's focal point: green like a funded envelope's pill, larger,
 /// and just the amount with a small ring showing how much of this month's cash has a job.
+/// Overspending gets the same solid tint in red, matching an overspent envelope's pill.
 struct BudgetBanner: View {
   @Environment(\.colorSchemeContrast) private var contrast
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -14,6 +15,9 @@ struct BudgetBanner: View {
 
   /// Ready to Assign shows only its amount; warnings also explain what to do.
   private var isHero: Bool { notice.tone == .positive }
+
+  /// Ready to Assign and overspending sit on a solid tint; other warnings use a plain card.
+  private var isFilled: Bool { notice.tone != .caution }
 
   private var ink: Color {
     switch notice.tone {
@@ -76,15 +80,15 @@ struct BudgetBanner: View {
       if notice.isActionable {
         Image(systemName: "chevron.right")
           .font(.bowFootnote.weight(.semibold))
-          .foregroundStyle(isHero ? ink.opacity(0.7) : Bow.inkFaint)
+          .foregroundStyle(isFilled ? ink.opacity(0.7) : Bow.inkFaint)
           .frame(maxHeight: isHero ? nil : .infinity)
           .accessibilityHidden(true)
       }
     }
     .padding(Bow.Space.s4)
-    .background(isHero ? tint : Bow.card, in: shape)
+    .background(isFilled ? tint : Bow.card, in: shape)
     .overlay {
-      shape.strokeBorder(accent.opacity(contrast == .increased ? 0.9 : isHero ? 0.3 : 0.45),
+      shape.strokeBorder(accent.opacity(contrast == .increased ? 0.9 : isFilled ? 0.3 : 0.45),
                          lineWidth: contrast == .increased ? 2 : 1.5)
     }
     .contentShape(shape)
@@ -110,7 +114,7 @@ struct BudgetBanner: View {
     Image(systemName: notice.symbol)
       .bowScaledIcon(frame: 34, glyph: 16)
       .foregroundStyle(ink)
-      .background(tint, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+      .background(isFilled ? accent.opacity(0.18) : tint, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
       .accessibilityHidden(true)
   }
 }

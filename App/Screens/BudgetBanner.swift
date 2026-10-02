@@ -41,8 +41,8 @@ struct BudgetBanner: View {
       if !dynamicTypeSize.isAccessibilitySize {
         icon
       }
-      // One line: the amount keeps its full width first and the title fades out if it's cut.
-      // At accessibility sizes they stack and wrap instead.
+      // One line: amount on the left, title against the right edge. The amount keeps its full
+      // width first and the title fades out if it's cut. At accessibility sizes they stack instead.
       if dynamicTypeSize.isAccessibilitySize {
         VStack(alignment: .leading, spacing: 0) {
           amount
@@ -50,13 +50,14 @@ struct BudgetBanner: View {
             .minimumScaleFactor(0.7)
           title
         }
+        Spacer(minLength: 0)
       } else {
-        HStack(alignment: .firstTextBaseline, spacing: 5) {
+        HStack(alignment: .firstTextBaseline, spacing: Bow.Space.s2) {
           amount.fadingTail().layoutPriority(1)
+          Spacer(minLength: 0)
           title.fadingTail()
         }
       }
-      Spacer(minLength: 0)
       if notice.isActionable {
         Image(systemName: "chevron.right")
           .font(.bowFootnote.weight(.semibold))

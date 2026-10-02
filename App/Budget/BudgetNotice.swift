@@ -55,7 +55,7 @@ struct BudgetNotice: Identifiable, Equatable {
       notices.append(BudgetNotice(
         kind: .deficit,
         amountMinor: -readyToAssignMinor,
-        title: "over budget",
+        title: "Over Budget",
         message: isPastMonth
           ? "More was assigned than you had when this month ended."
           : canMoveToReadyToAssign
@@ -82,7 +82,7 @@ struct BudgetNotice: Identifiable, Equatable {
       notices.append(BudgetNotice(
         kind: .overspent,
         amountMinor: overspending.totalMinor,
-        title: "overspent",
+        title: "Overspent",
         message: message,
         isActionable: !isPastMonth,
         accessibilityHint: "Choose envelopes to cover the overspending"

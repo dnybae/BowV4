@@ -63,6 +63,7 @@ struct EnvelopeDirectoryScreen: View {
           .listRowBackground(Bow.card)
           Section {
             Text("A directory envelope starts with no money assigned. You can edit its target later.")
+              .font(.bowBody)
               .foregroundStyle(Bow.inkSoft)
           }
           .listRowBackground(Bow.card)

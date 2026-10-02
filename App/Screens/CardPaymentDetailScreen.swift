@@ -237,7 +237,7 @@ struct CardPaymentDetailScreen: View {
         .listRowBackground(Bow.card)
       } else if feed.items.isEmpty {
         Section("Card activity") {
-          Text("Nothing charged to \(card.name) this month.").foregroundStyle(Bow.inkSoft)
+          Text("Nothing charged to \(card.name) this month.").font(.bowBody).foregroundStyle(Bow.inkSoft)
         }
         .listRowBackground(Bow.card)
       } else {

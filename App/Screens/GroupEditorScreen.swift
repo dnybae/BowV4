@@ -22,9 +22,12 @@ struct GroupEditorScreen: View {
         Section {
           BowNameHeader("For example, Food & Home", name: $name, systemImage: "folder")
         } footer: {
-          Text("Groups hold related envelopes on the Budget screen, like bills or everyday spending.")
-            .frame(maxWidth: .infinity)
-            .multilineTextAlignment(.center)
+          Group {
+            Text("Groups hold related envelopes on the Budget screen, like bills or everyday spending.")
+              .frame(maxWidth: .infinity)
+              .multilineTextAlignment(.center)
+          }
+          .font(.bowFootnote)
         }
         .listRowBackground(Color.clear)
         .listRowInsets(EdgeInsets())

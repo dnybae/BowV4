@@ -321,9 +321,12 @@ struct TransactionEditorScreen: View {
         Section {
           fieldRows
         } footer: {
-          if let fieldsFootnote {
-            Text(fieldsFootnote)
+          Group {
+            if let fieldsFootnote {
+              Text(fieldsFootnote)
+            }
           }
+          .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
         Section {
@@ -338,9 +341,12 @@ struct TransactionEditorScreen: View {
               Button("Edit schedule") { onEditSchedule(scheduleID) }
             }
           } footer: {
-            Text(purpose == .enterScheduled
-              ? "Skipping keeps the schedule active for future dates."
-              : "Bow entered this bill on its due date. Skipping removes it from your budget; the schedule stays active for future dates.")
+            Group {
+              Text(purpose == .enterScheduled
+                ? "Skipping keeps the schedule active for future dates."
+                : "Bow entered this bill on its due date. Skipping removes it from your budget; the schedule stays active for future dates.")
+            }
+            .font(.bowFootnote)
           }
           .listRowBackground(Bow.card)
         }
@@ -360,9 +366,12 @@ struct TransactionEditorScreen: View {
               .pickerStyle(.menu)
             }
           } footer: {
-            if isScheduled {
-              Text("Scheduled entries appear on the calendar and affect balances only when recorded.")
+            Group {
+              if isScheduled {
+                Text("Scheduled entries appear on the calendar and affect balances only when recorded.")
+              }
             }
+            .font(.bowFootnote)
           }
           .listRowBackground(Bow.card)
         }
@@ -573,6 +582,7 @@ struct TransactionEditorScreen: View {
         }
       } footer: {
         Text("Approving records the \(relatedOccurrence.scheduledFor.formatted(.dateTime.month(.abbreviated).day())) date of this schedule.")
+          .font(.bowFootnote)
       }
       .listRowBackground(Bow.card)
     } else if let matchingSchedule {
@@ -1012,6 +1022,7 @@ private struct ScheduledMatchSection: View {
       Text("Scheduled bill")
     } footer: {
       Text("Linking marks this bill recorded without creating another transaction.")
+        .font(.bowFootnote)
     }
     .listRowBackground(Bow.card)
   }

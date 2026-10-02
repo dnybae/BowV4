@@ -69,6 +69,7 @@ struct SimpleFINAccountSetupScreen: View {
           Text("Connect your bank")
         } footer: {
           Text("SimpleFIN is read-only and has a separate signup and fee. Bank updates may arrive about once a day.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
       } else {
@@ -103,6 +104,7 @@ struct SimpleFINAccountSetupScreen: View {
           Text("Accounts found in SimpleFIN")
         } footer: {
           Text("Accounts marked Already in Bow are already connected. Checking, savings, and credit cards affect your budget; investments and loans are tracked in net worth.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
 
@@ -118,9 +120,12 @@ struct SimpleFINAccountSetupScreen: View {
                 )
               }
             } footer: {
-              Text(importHistory
-                ? "Bow can request up to 90 days of available history. It adjusts the starting balance so past activity is not counted twice."
-                : "Bow starts with each bank’s latest reported balance and imports new activity from now on.")
+              Group {
+                Text(importHistory
+                  ? "Bow can request up to 90 days of available history. It adjusts the starting balance so past activity is not counted twice."
+                  : "Bow starts with each bank’s latest reported balance and imports new activity from now on.")
+              }
+              .font(.bowFootnote)
             }
             .listRowBackground(Bow.card)
           }
@@ -180,7 +185,7 @@ struct SimpleFINAccountSetupScreen: View {
       HStack(alignment: .center, spacing: 12) {
         VStack(alignment: .leading, spacing: 4) {
           Text(link.name)
-            .font(.bowBody.weight(.medium))
+            .font(.bowHeadline)
           Text("Already in Bow as \(accounts.first { $0.id == localID }?.name ?? "an existing account")")
             .font(.bowSubhead)
             .foregroundStyle(Bow.inkSoft)

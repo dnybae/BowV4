@@ -423,9 +423,11 @@ extension View {
         self.buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(size)
     }
     /// Put on a List or Form so the Bow background (or a SkyBackground) shows through.
+    /// Row text defaults to `.bowHeadline`, the weight of envelope names on Budget.
+    /// The font also reaches section footers, so give each footer `.font(.bowFootnote)`.
     func bowListBackground<Background: View>(@ViewBuilder _ background: () -> Background = { Bow.mist }) -> some View {
         self.listStyle(.insetGrouped)
-            .font(.headline)
+            .font(.bowHeadline)
             .scrollDismissesKeyboard(.interactively)
             .scrollContentBackground(.hidden)
             .background { background().ignoresSafeArea() }

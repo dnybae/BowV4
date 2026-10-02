@@ -20,7 +20,7 @@ struct GroupOrderScreen: View {
         if #available(iOS 27.0, *) {
           List {
             ForEach(orderedGroups) { group in
-              Text(group.name).font(.bowBody).listRowBackground(Bow.card)
+              Text(group.name).font(.bowHeadline).listRowBackground(Bow.card)
             }
             .reorderable()
           }
@@ -38,7 +38,7 @@ struct GroupOrderScreen: View {
         } else {
           List {
             ForEach(orderedGroups) { group in
-              Text(group.name).font(.bowBody).listRowBackground(Bow.card)
+              Text(group.name).font(.bowHeadline).listRowBackground(Bow.card)
             }
             .onMove { offsets, destination in
               var ordered = orderedGroups

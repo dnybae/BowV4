@@ -18,6 +18,7 @@ struct BowNotesRow: View {
       Spacer(minLength: Bow.Space.s2)
       VStack(alignment: .trailing, spacing: 2) {
         TextField("Add a note", text: $notes, axis: .vertical)
+          .font(.bowBody)
           .multilineTextAlignment(.trailing)
           .focused($isFocused)
           .submitLabel(.done)

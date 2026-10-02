@@ -73,7 +73,7 @@ struct CoverDonorPickerScreen: View {
     } label: {
       HStack(spacing: Bow.Space.s3) {
         Text(name)
-          .font(.bowBody)
+          .font(.bowHeadline)
           .foregroundStyle(Bow.ink)
         Spacer(minLength: Bow.Space.s2)
         StatusPill(text: BudgetMoney.formatted(amount, currencyCode: currencyCode), state: .funded)

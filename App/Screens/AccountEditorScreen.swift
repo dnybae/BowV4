@@ -80,9 +80,12 @@ struct AccountEditorScreen: View {
         }
         BowNotesRow(notes: $note)
       } footer: {
-        Text(type.explanation + " " + (account == nil
-          ? "Enter the balance this account should start with. New transactions will change it."
-          : "Changing the current balance records a dated adjustment. Earlier net worth history stays intact."))
+        Group {
+          Text(type.explanation + " " + (account == nil
+            ? "Enter the balance this account should start with. New transactions will change it."
+            : "Changing the current balance records a dated adjustment. Earlier net worth history stays intact."))
+        }
+        .font(.bowFootnote)
       }
       .listRowBackground(Bow.card)
 
@@ -110,6 +113,7 @@ struct AccountEditorScreen: View {
             }
           } else {
             Text("This account is not connected to a bank.")
+              .font(.bowBody)
               .foregroundStyle(Bow.inkSoft)
             Button("Link a bank account", systemImage: "link") {
               showingBankLinkPicker = true
@@ -119,6 +123,7 @@ struct AccountEditorScreen: View {
           Text("Bank sync")
         } footer: {
           Text("Changing or stopping sync keeps transactions already in Bow.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
       }

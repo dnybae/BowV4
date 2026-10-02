@@ -45,6 +45,7 @@ struct WelcomeScreen: View {
           Toggle("Add starter envelopes", isOn: $withDefaults)
         } footer: {
           Text("You can also import your YNAB groups and envelopes after creating the budget.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
 

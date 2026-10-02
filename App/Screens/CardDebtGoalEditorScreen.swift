@@ -53,6 +53,7 @@ struct CardDebtGoalEditorScreen: View {
           }
         } footer: {
           Text("A target guides your plan. It does not move money into the card payment envelope.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
         if card.debtGoalStartMinor != nil {
@@ -61,9 +62,12 @@ struct CardDebtGoalEditorScreen: View {
               resetBaseline = true
             }
           } footer: {
-            Text(resetBaseline
-              ? "Saving will restart progress from today’s debt balance."
-              : "Restarts progress from today’s debt balance when you save.")
+            Group {
+              Text(resetBaseline
+                ? "Saving will restart progress from today’s debt balance."
+                : "Restarts progress from today’s debt balance when you save.")
+            }
+            .font(.bowFootnote)
           }
           .listRowBackground(Bow.card)
         }

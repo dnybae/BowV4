@@ -228,11 +228,14 @@ struct EnvelopeDetailScreen: View {
       } header: {
         Text("Funding target")
       } footer: {
-        if !scheduledContributions.isEmpty {
-          Text("Scheduled transactions add \(BudgetMoney.formatted(scheduledTotal, currencyCode: currencyCode)) to this month’s target, on top of your own.")
-        } else if suggestedTarget != nil {
-          Text("Suggestion is average monthly spending across up to six completed months.")
+        Group {
+          if !scheduledContributions.isEmpty {
+            Text("Scheduled transactions add \(BudgetMoney.formatted(scheduledTotal, currencyCode: currencyCode)) to this month’s target, on top of your own.")
+          } else if suggestedTarget != nil {
+            Text("Suggestion is average monthly spending across up to six completed months.")
+          }
         }
+        .font(.bowFootnote)
       }
       .listRowBackground(Bow.card)
 
@@ -269,6 +272,7 @@ struct EnvelopeDetailScreen: View {
       } else if feed.items.isEmpty {
         Section("Transactions") {
           Text("Nothing spent from \(envelope.name) this month.")
+            .font(.bowBody)
             .foregroundStyle(Bow.inkSoft)
         }
         .listRowBackground(Bow.card)

@@ -114,9 +114,12 @@ struct ScheduleEditorScreen: View {
           }
           BowNotesRow(notes: $notes)
         } footer: {
-          if needsEnvelope && kind == .expense && envelopeID == nil {
-            Text("Choose an envelope for this scheduled expense.")
+          Group {
+            if needsEnvelope && kind == .expense && envelopeID == nil {
+              Text("Choose an envelope for this scheduled expense.")
+            }
           }
+          .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
         Section {

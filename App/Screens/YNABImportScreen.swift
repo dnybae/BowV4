@@ -32,6 +32,7 @@ struct YNABImportScreen: View {
           Text("File")
         } footer: {
           Text("Bow imports your YNAB category groups and categories as groups and envelopes. Transactions, past assignments, balances, and targets are left behind.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
 

@@ -86,12 +86,14 @@ struct SimpleFINScreen: View {
             }
           } footer: {
             Text("Bow checks while you use the app and requests background refresh when iOS allows it. Bank data may update about once a day.")
+              .font(.bowFootnote)
           }
           .listRowBackground(Bow.card)
         } else {
           Section {
           } footer: {
             Text("Sample bank data never contacts a real bank. Try its transaction examples in Spending.")
+              .font(.bowFootnote)
           }
         }
 
@@ -105,6 +107,7 @@ struct SimpleFINScreen: View {
         Section {
           if linkedAccounts.isEmpty {
             Text("No bank accounts have been added to Bow yet.")
+              .font(.bowBody)
               .foregroundStyle(Bow.inkSoft)
           }
           ForEach(linkedAccounts) { link in
@@ -141,6 +144,7 @@ struct SimpleFINScreen: View {
           Text("Syncing with Bow")
         } footer: {
           Text("To stop syncing an account, open it from Accounts.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
 
@@ -151,6 +155,7 @@ struct SimpleFINScreen: View {
             }
           } footer: {
             Text("This stops sync for every linked account. Accounts and transactions already in Bow remain.")
+              .font(.bowFootnote)
           }
           .listRowBackground(Bow.card)
         }

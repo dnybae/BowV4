@@ -61,6 +61,7 @@ struct PayeeMergeSheet: View {
             }
           } footer: {
             Text("Choose a payee that’s really \(target.name). Its transactions and schedules move here, and its name is saved as a bank name so future imports land here too.")
+              .font(.bowFootnote)
           }
           .listRowBackground(Bow.card)
         }

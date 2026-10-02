@@ -115,6 +115,7 @@ struct PayeeEditorScreen: View {
           Text("Icon")
         } footer: {
           Text("\(logoSource.title). Every payee starts with a native icon. You can use your own image or choose a Logo.dev logo instead.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
         Section {
@@ -124,6 +125,7 @@ struct PayeeEditorScreen: View {
           )
         } footer: {
           Text("Bow suggests this envelope when you enter this payee on an expense. You can always choose a different one.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
         Section {
@@ -153,12 +155,14 @@ struct PayeeEditorScreen: View {
           Text("Bank names")
         } footer: {
           Text("Imported transactions with one of these descriptions are filed under this payee and use its default envelope.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
         Section {
           BowNotesRow(notes: $notes)
         } footer: {
           Text("Keep details like a loyalty number or renewal month.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
         if let entry, entry.transactionCount == 0 && entry.scheduleCount == 0,

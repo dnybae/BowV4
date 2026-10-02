@@ -113,6 +113,7 @@ struct MoneyMoveScreen: View {
           Text("After moving")
         } footer: {
           Text("Recorded in \(month.formatted(.dateTime.month(.wide).year())). Remaining balances carry into later months.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
       }

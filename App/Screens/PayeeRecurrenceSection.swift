@@ -20,6 +20,7 @@ struct PayeeRecurrenceSection: View {
         Section {
           Label {
             Text("Your schedule expects \(money(existingSchedule.amountMinor)), but recent charges are \(money(recurrence.amountMinor)).")
+              .font(.bowBody)
           } icon: {
             Image(systemName: "exclamationmark.triangle.fill")
               .foregroundStyle(Bow.needs)
@@ -31,6 +32,7 @@ struct PayeeRecurrenceSection: View {
           Text("Price change")
         } footer: {
           Text("Updating the amount keeps the envelope’s monthly target accurate.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
       }
@@ -56,6 +58,7 @@ struct PayeeRecurrenceSection: View {
         Text("Looks recurring")
       } footer: {
         Text("A schedule shows this bill on your calendar and adds it to its envelope’s monthly target.")
+          .font(.bowFootnote)
       }
       .listRowBackground(Bow.card)
     }

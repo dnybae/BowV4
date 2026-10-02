@@ -96,6 +96,7 @@ struct PayeeDetailScreen: View {
         if !notes.isEmpty {
           Label {
             Text(notes)
+              .font(.bowBody)
               .foregroundStyle(Bow.ink)
               .textSelection(.enabled)
           } icon: {
@@ -116,9 +117,12 @@ struct PayeeDetailScreen: View {
       } header: {
         Text("About")
       } footer: {
-        if !bankNames.isEmpty {
-          Text("Imported transactions with these descriptions are filed under \(entry.name).")
+        Group {
+          if !bankNames.isEmpty {
+            Text("Imported transactions with these descriptions are filed under \(entry.name).")
+          }
         }
+        .font(.bowFootnote)
       }
       .listRowBackground(Bow.card)
     }
@@ -187,6 +191,7 @@ struct PayeeDetailScreen: View {
             }
           } footer: {
             Text("Combine payees that are really the same place, like “Target” and “Target.com”.")
+              .font(.bowFootnote)
           }
           .listRowBackground(Bow.card)
         }
@@ -333,6 +338,7 @@ private struct PayeeBankNamesScreen: View {
         }
       } footer: {
         Text("Imported transactions with these descriptions are filed under \(payeeName).")
+          .font(.bowFootnote)
       }
       .listRowBackground(Bow.card)
     }

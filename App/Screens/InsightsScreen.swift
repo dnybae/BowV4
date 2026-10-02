@@ -343,7 +343,7 @@ struct InsightsScreen: View {
               } label: {
                 HStack {
                   Text(group.name)
-                    .font(.bowBody)
+                    .font(.bowHeadline)
                     .foregroundStyle(Bow.ink)
                   Spacer()
                   MoneyText(minor: group.totalMinor, currencyCode: currencyCode)

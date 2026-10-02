@@ -71,6 +71,7 @@ struct PayeeLogoFinderSheet: View {
           .padding(.vertical, 4)
         } footer: {
           Text("A logo is used only after you choose Use Logo. If this isn't the right company, enter its website domain.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
 
@@ -86,6 +87,7 @@ struct PayeeLogoFinderSheet: View {
           }
         } footer: {
           Text("Optional. A website domain gives a more precise result than the payee name.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
       }

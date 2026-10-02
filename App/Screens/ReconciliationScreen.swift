@@ -123,6 +123,7 @@ struct ReconciliationScreen: View {
           }
         } footer: {
           Text("\(isBalanced ? heroTitle + ". " : "")\(heroMessage)")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
 
@@ -162,7 +163,7 @@ struct ReconciliationScreen: View {
                     .accessibilityHidden(true)
                   VStack(alignment: .leading, spacing: 2) {
                     Text(payeeNames[entry.id].flatMap { $0.isEmpty ? nil : $0 } ?? "Transfer")
-                      .font(.bowBody)
+                      .font(.bowHeadline)
                       .foregroundStyle(Bow.ink)
                     Text(entry.date.formatted(.dateTime.month(.abbreviated).day()))
                       .font(.bowFootnote)
@@ -194,6 +195,7 @@ struct ReconciliationScreen: View {
           Text("Transactions")
         } footer: {
           Text("Select the transactions that cleared by your statement date. Reconciliation does not add or remove money.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
       }

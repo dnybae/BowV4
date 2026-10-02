@@ -123,11 +123,14 @@ struct EnvelopeEditorScreen: View {
       } header: {
         Text("Target")
       } footer: {
-        if let envelope, envelope.scheduledTargetMinor > 0 {
-          Text("A target is a plan. It shows what to assign each month but does not move money by itself. Scheduled transactions add \(BudgetMoney.formatted(envelope.scheduledTargetMinor, currencyCode: currencyCode)) this month on top of it.")
-        } else {
-          Text("A target is a plan. It shows what to assign each month but does not move money by itself.")
+        Group {
+          if let envelope, envelope.scheduledTargetMinor > 0 {
+            Text("A target is a plan. It shows what to assign each month but does not move money by itself. Scheduled transactions add \(BudgetMoney.formatted(envelope.scheduledTargetMinor, currencyCode: currencyCode)) this month on top of it.")
+          } else {
+            Text("A target is a plan. It shows what to assign each month but does not move money by itself.")
+          }
         }
+        .font(.bowFootnote)
       }
       .listRowBackground(Bow.card)
     }
@@ -213,6 +216,7 @@ struct EnvelopeEditorScreen: View {
         Text("This month")
       } footer: {
         Text("A target is a plan. It shows what to assign each month but doesn’t move money by itself.")
+          .font(.bowFootnote)
       }
     }
   }

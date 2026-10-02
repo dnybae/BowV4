@@ -108,6 +108,7 @@ struct TransactionFilterScreen: View {
           Text("Amount")
         } footer: {
           Text("Leave at zero for no limit. Outflows are compared by their size, so “at least 50” finds −50 and up.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
 

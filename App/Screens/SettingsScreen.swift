@@ -193,6 +193,7 @@ struct SettingsScreen: View {
           }
         } footer: {
           Text("Sample data stays separate from your budget.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
       }

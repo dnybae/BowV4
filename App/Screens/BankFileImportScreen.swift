@@ -82,6 +82,7 @@ struct BankFileImportScreen: View {
           Text("File")
         } footer: {
           Text("Choose a CSV, OFX, QFX, or QIF export from your bank.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
 
@@ -91,6 +92,7 @@ struct BankFileImportScreen: View {
           Text("Account")
         } footer: {
           Text("Choose the Bow account represented by this bank file.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
 
@@ -147,6 +149,7 @@ struct BankFileImportScreen: View {
             Text("Preview")
           } footer: {
             Text("Clear matches and transactions that already have an envelope are completed automatically. Anything uncertain waits in Spending for you to review. Historical imports preserve today’s cash balance.")
+              .font(.bowFootnote)
           }
           .listRowBackground(Bow.card)
 

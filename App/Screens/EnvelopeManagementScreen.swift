@@ -138,7 +138,7 @@ struct EnvelopeManagementScreen: View {
       HStack {
         VStack(alignment: .leading, spacing: 2) {
           Text(envelope.name)
-            .font(.bowBody)
+            .font(.bowHeadline)
             .foregroundStyle(Bow.ink)
           Text(envelope.totalMonthlyTargetMinor.map {
             "Target \(BudgetMoney.formatted($0, currencyCode: currencyCode)) monthly"

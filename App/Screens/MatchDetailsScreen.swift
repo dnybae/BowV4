@@ -30,6 +30,7 @@ struct MatchDetailsScreen: View {
         Text("From your bank")
       } footer: {
         Text("Transactions you enter are matched automatically with bank transactions of the same amount, if they're within 10 days of each other. \(unmatchFootnote)")
+          .font(.bowFootnote)
       }
       .listRowBackground(Bow.card)
     }

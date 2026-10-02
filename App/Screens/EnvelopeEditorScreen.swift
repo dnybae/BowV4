@@ -24,6 +24,8 @@ struct EnvelopeEditorScreen: View {
   @State private var targetDate = Date()
   @State private var errorMessage: String?
   @State private var initialFields: EnvelopeEditorFields?
+  @FocusState private var nameIsFocused: Bool
+  @State private var didRequestNameFocus = false
 
   private var targetMinor: Int64? { targetAmountMinor > 0 ? targetAmountMinor : nil }
   private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
@@ -87,11 +89,26 @@ struct EnvelopeEditorScreen: View {
     }
   }
 
-  /// Name-first: icon and name, the group, then the target.
+  /// Name first, followed by the group and target.
   private var envelopeForm: some View {
     Form {
       Section {
-        BowNameHeader("Envelope name", name: $name, systemImage: tileSymbol)
+        TextField("Envelope name", text: $name)
+          .font(.bowTitle)
+          .foregroundStyle(Bow.ink)
+          .multilineTextAlignment(.center)
+          .submitLabel(.done)
+          .accessibilityLabel("Envelope name")
+          .focused($nameIsFocused)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, Bow.Space.s2)
+          .task {
+            guard envelope == nil, !didRequestNameFocus else { return }
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            didRequestNameFocus = true
+            nameIsFocused = true
+          }
       }
       .listRowBackground(Color.clear)
       .listRowInsets(EdgeInsets())

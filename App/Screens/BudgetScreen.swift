@@ -128,12 +128,21 @@ struct BudgetScreen: View {
   }
 
   var body: some View {
-    List {
-      listContent
+    // A ScrollView, not a List: List resizes rows on its own timing, which fought the card
+    // stacks' collapse animation.
+    ScrollView {
+      VStack(alignment: .leading, spacing: Bow.Space.s6) {
+        screenContent
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, Bow.Space.s5)
+      .padding(.top, Bow.Space.s3)
+      .padding(.bottom, Bow.Space.s8)
     }
+    .font(.bowHeadline)
     .offset(x: swipeOffset)
     .scrollsToTopOnReselect(of: .budget)
-    .bowListBackground {
+    .background {
       Bow.mist.overlay(alignment: .top) {
         ZStack {
           SkyBackground(mood: skyMood)
@@ -142,6 +151,7 @@ struct BudgetScreen: View {
         }
         .bowAnimation(value: skyMood)
       }
+      .ignoresSafeArea()
     }
     .bowSoftScrollEdge()
     .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))
@@ -250,7 +260,7 @@ struct BudgetScreen: View {
   }
 
   @ViewBuilder
-  private var listContent: some View {
+  private var screenContent: some View {
     BudgetOverviewSection(
       summary: summary,
       notices: notices,
@@ -260,24 +270,24 @@ struct BudgetScreen: View {
     )
 
     if !hasBudgetEnvelopes && !isPastMonth {
-      Section {
-        ContentUnavailableView {
-          Label("Give your money somewhere to go", systemImage: "square.grid.2x2")
-        } description: {
-          Text("Create envelopes for bills, groceries and goals, or bring them over from YNAB.")
-        } actions: {
-          if orderedGroups.isEmpty {
-            Button("Add Group", systemImage: "folder.badge.plus", action: onAddGroup)
-              .bowPrimaryButton(size: .regular)
-          } else {
-            Button("Add Envelope", systemImage: "plus", action: onAddEnvelope)
-              .bowPrimaryButton(size: .regular)
-          }
-          Button("Import from YNAB", action: onImportYNAB)
-            .bowSecondaryButton(size: .regular)
+      ContentUnavailableView {
+        Label("Give your money somewhere to go", systemImage: "square.grid.2x2")
+      } description: {
+        Text("Create envelopes for bills, groceries and goals, or bring them over from YNAB.")
+      } actions: {
+        if orderedGroups.isEmpty {
+          Button("Add Group", systemImage: "folder.badge.plus", action: onAddGroup)
+            .bowPrimaryButton(size: .regular)
+        } else {
+          Button("Add Envelope", systemImage: "plus", action: onAddEnvelope)
+            .bowPrimaryButton(size: .regular)
         }
+        Button("Import from YNAB", action: onImportYNAB)
+          .bowSecondaryButton(size: .regular)
       }
-      .listRowBackground(Bow.card)
+      .frame(maxWidth: .infinity)
+      .padding(.vertical, Bow.Space.s4)
+      .bowCard()
     }
 
     let scheduled = scheduledTargets
@@ -285,7 +295,14 @@ struct BudgetScreen: View {
       let matching = visibleEnvelopes(in: group)
       if !matching.isEmpty {
         let key = group.id.uuidString
-        Section {
+        VStack(alignment: .leading, spacing: Bow.Space.s2) {
+          BowGroupHeader(
+            name: group.name, count: matching.count,
+            isCollapsed: collapseState.isCollapsed(key),
+            onToggle: { toggleGroup(key) }
+          )
+          .padding(.leading, Bow.Space.s1)
+
           BowCardStack(
             items: matching,
             isCollapsed: collapseState.isCollapsed(key),
@@ -305,20 +322,20 @@ struct BudgetScreen: View {
               )
             }
           }
-          .budgetCardStackRow()
-        } header: {
-          BowGroupHeader(
-            name: group.name, count: matching.count,
-            isCollapsed: collapseState.isCollapsed(key),
-            onToggle: { toggleGroup(key) }
-          )
         }
       }
     }
 
     if !creditCards.isEmpty {
       let key = BudgetGroupCollapseState.creditCardsKey
-      Section {
+      VStack(alignment: .leading, spacing: Bow.Space.s2) {
+        BowGroupHeader(
+          name: "Credit card payments", count: creditCards.count,
+          isCollapsed: collapseState.isCollapsed(key),
+          onToggle: { toggleGroup(key) }
+        )
+        .padding(.leading, Bow.Space.s1)
+
         BowCardStack(
           items: creditCards,
           isCollapsed: collapseState.isCollapsed(key),
@@ -329,25 +346,20 @@ struct BudgetScreen: View {
             CardPaymentRow(card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode)
           }
         }
-        .budgetCardStackRow()
-      } header: {
-        BowGroupHeader(
-          name: "Credit card payments", count: creditCards.count,
-          isCollapsed: collapseState.isCollapsed(key),
-          onToggle: { toggleGroup(key) }
-        )
       }
       .id(key)
     }
 
     if !isPastMonth && hasBudgetEnvelopes {
-      Section {
-        Button("Add Envelope", systemImage: "plus", action: onAddEnvelope)
-          .disabled(orderedGroups.isEmpty)
-        Button("Add Group", systemImage: "folder.badge.plus", action: onAddGroup)
-        Button("Import YNAB Categories", systemImage: "square.and.arrow.down", action: onImportYNAB)
+      VStack(spacing: 0) {
+        actionRow("Add Envelope", systemImage: "plus", isDisabled: orderedGroups.isEmpty, action: onAddEnvelope)
+        Divider().padding(.leading, Bow.Space.s4)
+        actionRow("Add Group", systemImage: "folder.badge.plus", action: onAddGroup)
+        Divider().padding(.leading, Bow.Space.s4)
+        actionRow("Import YNAB Categories", systemImage: "square.and.arrow.down", action: onImportYNAB)
       }
-      .listRowBackground(Bow.card)
+      .clipShape(RoundedRectangle(cornerRadius: Bow.Radius.lg, style: .continuous))
+      .bowCard()
     }
   }
 
@@ -363,9 +375,8 @@ struct BudgetScreen: View {
     path.append(route)
   }
 
-  /// One envelope or card payment card, opening its route. Cards use buttons, not
-  /// NavigationLinks: several links in one List row make the List treat the whole row as one
-  /// link, so taps open the wrong (or several) envelopes.
+  /// One envelope or card payment card, opening its route. A button rather than a
+  /// NavigationLink, so `open` can ignore a finger lifted at the end of a month swipe.
   private func budgetCard<Row: View>(_ route: BudgetRoute, @ViewBuilder row: () -> Row) -> some View {
     let content = row()
     return Button { open(route) } label: {
@@ -373,6 +384,28 @@ struct BudgetScreen: View {
     }
     .buttonStyle(.bowPress)
     .matchedTransitionSource(id: route, in: zoomNamespace)
+  }
+
+  /// A tinted row in the card of actions at the bottom of the screen, like a List button row.
+  private func actionRow(
+    _ title: String, systemImage: String, isDisabled: Bool = false, action: @escaping () -> Void
+  ) -> some View {
+    Button(action: action) {
+      Label {
+        Text(title)
+      } icon: {
+        // A fixed column, so every title starts at the same edge.
+        Image(systemName: systemImage).frame(width: 28)
+      }
+      .font(.bowHeadline)
+      .foregroundStyle(.tint)
+      .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+      .padding(.horizontal, Bow.Space.s4)
+      .contentShape(.rect)
+    }
+    .buttonStyle(.bowRowPress)
+    .disabled(isDisabled)
+    .opacity(isDisabled ? 0.4 : 1)
   }
 
   private func toggleGroup(_ key: String) {
@@ -415,24 +448,6 @@ private struct ReadyToAssignState: Equatable {
   var minor: Int64
 }
 
-private extension View {
-  /// A row at the top of the Budget screen: edge to edge, no background or separators.
-  func budgetOverviewRow() -> some View {
-    self
-      .listRowBackground(Color.clear)
-      .listRowSeparator(.hidden)
-      .listRowInsets(EdgeInsets(top: Bow.Space.s1, leading: 0, bottom: Bow.Space.s1, trailing: 0))
-  }
-
-  /// A group's card stack fills its List row edge to edge, with no row background or separators.
-  func budgetCardStackRow() -> some View {
-    self
-      .listRowBackground(Color.clear)
-      .listRowSeparator(.hidden)
-      .listRowInsets(EdgeInsets(top: Bow.Space.s1, leading: 0, bottom: Bow.Space.s1, trailing: 0))
-  }
-}
-
 enum BudgetRoute: Hashable {
   case envelope(UUID)
   case cardPayment(UUID)
@@ -454,7 +469,7 @@ private struct BudgetOverviewSection: View {
   }
 
   var body: some View {
-    Section {
+    VStack(spacing: Bow.Space.s2) {
       // Most urgent first, above the totals: Ready to Assign is the screen's focal point.
       ForEach(notices) { notice in
         Group {
@@ -469,13 +484,11 @@ private struct BudgetOverviewSection: View {
             banner(notice)
           }
         }
-        .budgetOverviewRow()
         .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
       }
 
       if isFullyAssigned {
         BudgetAllAssignedBanner()
-          .budgetOverviewRow()
           .transition(.opacity)
       }
 
@@ -489,7 +502,6 @@ private struct BudgetOverviewSection: View {
         }
       }
       .frame(maxWidth: .infinity)
-      .budgetOverviewRow()
 
       if summary.assignedInFutureMinor != 0 {
         HStack(spacing: Bow.Space.s1) {
@@ -500,8 +512,7 @@ private struct BudgetOverviewSection: View {
         .foregroundStyle(Bow.inkSoft)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
+        .padding(.vertical, Bow.Space.s2)
       }
     }
     .bowAnimation(value: notices.map(\.kind))

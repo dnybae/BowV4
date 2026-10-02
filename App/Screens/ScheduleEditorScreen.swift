@@ -67,13 +67,13 @@ struct ScheduleEditorScreen: View {
       Form {
         Section {
           VStack(spacing: Bow.Space.s4) {
+            CurrencyAmountField("Amount", minor: $amountMinor, currencyCode: currencyCode, style: .editorHero)
             Picker("Type", selection: $kind) {
               ForEach(BudgetTransactionKind.allCases) { option in
                 Text(option.title).tag(option)
               }
             }
             .pickerStyle(.segmented)
-            CurrencyAmountField("Amount", minor: $amountMinor, currencyCode: currencyCode, style: .editorHero)
           }
           .padding(.bottom, Bow.Space.s2)
           .listRowBackground(Color.clear)

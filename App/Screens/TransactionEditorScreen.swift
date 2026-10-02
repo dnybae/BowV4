@@ -237,6 +237,10 @@ struct TransactionEditorScreen: View {
         }
         Section {
           VStack(spacing: Bow.Space.s4) {
+            CurrencyAmountField("Amount", minor: $amountMinor, currencyCode: currencyCode, style: .editorHero,
+                                focusOnAppear: transaction == nil && reviewRecord == nil && scheduledDraft == nil)
+              // A match uses the posted bank amount.
+              .disabled(isMatching)
             // The bank sets an imported transaction's direction; the schedule sets a bill's.
             if !isReviewing && !isRecordingBill {
               Picker("Type", selection: $kind) {
@@ -246,10 +250,6 @@ struct TransactionEditorScreen: View {
               }
               .pickerStyle(.segmented)
             }
-            CurrencyAmountField("Amount", minor: $amountMinor, currencyCode: currencyCode, style: .editorHero,
-                                focusOnAppear: transaction == nil && reviewRecord == nil && scheduledDraft == nil)
-              // A match uses the posted bank amount.
-              .disabled(isMatching)
           }
           .padding(.bottom, Bow.Space.s2)
           .listRowBackground(Color.clear)

@@ -102,7 +102,7 @@ struct SettingsScreen: View {
           }
           .pickerStyle(.menu)
           Toggle(isOn: $showsMerchantLogos) {
-            Label("Merchant logos", systemImage: "storefront")
+            Label("Merchant logos", systemImage: "storefront").labelStyle(.bowTile)
           }
         } header: {
           Text("Preferences")
@@ -116,7 +116,7 @@ struct SettingsScreen: View {
           LabeledContent {
             Text(isDemoMode ? "Temporary demo" : "On this iPhone")
           } label: {
-            Label("Storage", systemImage: "internaldrive")
+            Label("Storage", systemImage: "internaldrive").labelStyle(.bowTile)
           }
           NavigationLink {
             LegalDocumentScreen(document: .privacy)
@@ -149,7 +149,9 @@ struct SettingsScreen: View {
         .listRowBackground(Bow.card)
 
         Section {
-          Toggle("Demo mode", systemImage: "play.rectangle", isOn: $isDemoMode)
+          Toggle(isOn: $isDemoMode) {
+            Label("Demo mode", systemImage: "play.rectangle").labelStyle(.bowTile)
+          }
           if isDemoMode {
             Picker(selection: $demoScenarioRaw) {
               ForEach(DemoScenario.allCases) { scenario in

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BudgetScreen: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.bowToasts) private var toasts
   var currencyCode: String
   var groups: [BudgetGroup]
   var envelopes: [BudgetEnvelope]
@@ -14,6 +15,7 @@ struct BudgetScreen: View {
   @Binding var path: [BudgetRoute]
   var returnToPresentRequest: Int = 0
   var onAddGroup: () -> Void
+  var onAddAccount: () -> Void
   var onAddEnvelope: () -> Void
   var onEditEnvelope: (UUID) -> Void
   var onEditEnvelopeTarget: (UUID) -> Void
@@ -56,17 +58,29 @@ struct BudgetScreen: View {
     OverspendingSummary(snapshot: snapshot, envelopes: envelopes, groups: groups)
   }
 
-  private var assignableEnvelope: BudgetEnvelope? {
-    envelopes.first { !$0.isHidden && $0.paymentAccountID == nil }
+  /// Visible envelopes in the order the Budget screen shows them.
+  private var budgetOrderedEnvelopes: [BudgetEnvelope] {
+    orderedGroups.flatMap { visibleEnvelopes(in: $0) }
   }
 
-  /// Where money comes from to cover a deficit: the first funded envelope, else a card payment.
+  /// Where Assign sends money first: the first envelope still short of this month's target,
+  /// else the first envelope on screen.
+  private var assignableEnvelope: BudgetEnvelope? {
+    let scheduled = scheduledTargets
+    let ordered = budgetOrderedEnvelopes
+    return ordered.first { envelope in
+      guard let target = monthlyTarget(for: envelope, scheduled: scheduled) else { return false }
+      return snapshot.assigned[envelope.id, default: 0] < target
+    } ?? ordered.first
+  }
+
+  /// Where money comes from to cover a deficit: the first funded envelope on screen, else a card payment.
   private var deficitSource: BudgetBucket? {
-    if let funded = envelopes.first(where: { snapshot.available(for: $0.id) > 0 }) {
+    if let funded = budgetOrderedEnvelopes.first(where: { snapshot.available(for: $0.id) > 0 }) {
       return .envelope(funded.id)
     }
-    return accounts.first {
-      $0.kind == .credit && snapshot.paymentAvailable[$0.id, default: 0] > 0
+    return creditCards.first {
+      snapshot.paymentAvailable[$0.id, default: 0] > 0
     }.map { .cardPayment($0.id) }
   }
 
@@ -83,13 +97,8 @@ struct BudgetScreen: View {
   private var canAdvance: Bool {
     // The policy needs the selected month's assignments; wait until they've loaded.
     isShowingSelectedMonth && BudgetMonthAccessPolicy().canAdvance(
-      from: selectedMonth, today: Date(), assignedMinor: summary.assignedThisMonthMinor
-    )
-  }
-
-  private var lastAccessibleMonth: Date {
-    BudgetMonthAccessPolicy().lastAccessibleMonth(
-      today: Date(), funding: allocations.map(\.monthFundingItem)
+      from: selectedMonth, today: Date(), assignedMinor: summary.assignedThisMonthMinor,
+      readyToAssignMinor: snapshot.readyToAssignMinor
     )
   }
 
@@ -105,12 +114,22 @@ struct BudgetScreen: View {
   }
 
   private func monthlyTarget(for envelope: BudgetEnvelope, scheduled: [UUID: Int64]) -> Int64? {
-    let total = (envelope.targetMinor ?? 0) + scheduled[envelope.id, default: 0]
-    return total > 0 ? total : nil
+    EnvelopeTargetPlanner().monthlyMinor(
+      for: envelope, scheduledMinor: scheduled[envelope.id, default: 0], snapshot: snapshot
+    )
   }
 
   private var skyMood: SkyMood {
     snapshot.readyToAssignMinor < 0 ? .coral : .dawn
+  }
+
+  private var hasOpenAccount: Bool {
+    accounts.contains { $0.closedAt == nil }
+  }
+
+  /// The setup steps stay until there's an account, an envelope and money assigned.
+  private var showsSetup: Bool {
+    !isPastMonth && (!hasOpenAccount || !hasBudgetEnvelopes || allocations.isEmpty)
   }
 
   private var hasBudgetEnvelopes: Bool {
@@ -124,7 +143,7 @@ struct BudgetScreen: View {
   }
 
   private var creditCards: [BudgetAccount] {
-    accounts.filter { $0.kind == .credit }.sorted { $0.name < $1.name }
+    accounts.filter { $0.kind == .credit && $0.closedAt == nil }.sorted { $0.name < $1.name }
   }
 
   var body: some View {
@@ -171,8 +190,7 @@ struct BudgetScreen: View {
           .labelStyle(.iconOnly)
         Button { changeMonth(1) } label: { BowToolbarLabel("Next Month", systemImage: "chevron.right") }
           .labelStyle(.iconOnly)
-          .disabled(!canAdvance)
-          .accessibilityHint(canAdvance ? "" : "Assign money in this month to plan the next month")
+          .accessibilityHint(canAdvance ? "" : "Assign money or add income in this month to plan the next one")
       }
       .bowHighVisibilityPriority()
     }
@@ -209,10 +227,6 @@ struct BudgetScreen: View {
       monthDirection = current < selectedMonth ? .leading : .trailing
       withAnimation(Bow.motion(reduceMotion: reduceMotion)) { selectedMonth = current }
     }
-    .onChange(of: lastAccessibleMonth) { _, _ in
-      enforceMonthAccess()
-    }
-    .onAppear { enforceMonthAccess() }
   }
 
   /// Success when Ready to Assign reaches zero within the month on screen.
@@ -269,25 +283,19 @@ struct BudgetScreen: View {
       onSelectNotice: handle
     )
 
-    if !hasBudgetEnvelopes && !isPastMonth {
-      ContentUnavailableView {
-        Label("Give your money somewhere to go", systemImage: "square.grid.2x2")
-      } description: {
-        Text("Create envelopes for bills, groceries and goals, or bring them over from YNAB.")
-      } actions: {
-        if orderedGroups.isEmpty {
-          Button("Add Group", systemImage: "folder.badge.plus", action: onAddGroup)
-            .bowPrimaryButton(size: .regular)
-        } else {
-          Button("Add Envelope", systemImage: "plus", action: onAddEnvelope)
-            .bowPrimaryButton(size: .regular)
+    if showsSetup {
+      BudgetSetupCard(
+        hasAccount: hasOpenAccount,
+        hasEnvelopes: hasBudgetEnvelopes,
+        hasAssigned: !allocations.isEmpty,
+        onAddAccount: onAddAccount,
+        onAddEnvelopes: orderedGroups.isEmpty ? onAddGroup : onAddEnvelope,
+        onImportYNAB: onImportYNAB,
+        onAssign: {
+          if let envelope = assignableEnvelope { onMoveMoney(.readyToAssign, .envelope(envelope.id)) }
         }
-        Button("Import from YNAB", action: onImportYNAB)
-          .bowSecondaryButton(size: .regular)
-      }
-      .frame(maxWidth: .infinity)
-      .padding(.vertical, Bow.Space.s4)
-      .bowCard()
+      )
+      .transition(.opacity)
     }
 
     let scheduled = scheduledTargets
@@ -428,17 +436,20 @@ struct BudgetScreen: View {
   }
 
   private func changeMonth(_ amount: Int) {
-    if amount > 0 && !canAdvance { return }
+    if amount > 0 && !canAdvance {
+      // Say why rather than ignoring the tap.
+      if isShowingSelectedMonth {
+        let next = Calendar.current.date(byAdding: .month, value: 1, to: displayedMonth) ?? displayedMonth
+        toasts?.show(BowToast(
+          message: "Assign money in \(displayedMonth.formatted(.dateTime.month(.wide))) to start planning \(next.formatted(.dateTime.month(.wide)))",
+          systemImage: "calendar.badge.clock", feedback: .quiet
+        ))
+      }
+      return
+    }
     guard let next = Calendar.current.date(byAdding: .month, value: amount, to: selectedMonth) else { return }
     monthDirection = amount > 0 ? .trailing : .leading
     withAnimation(Bow.motion(reduceMotion: reduceMotion)) { selectedMonth = next }
-  }
-
-  private func enforceMonthAccess() {
-    let viewed = Calendar.current.dateInterval(of: .month, for: selectedMonth)?.start ?? selectedMonth
-    guard viewed > lastAccessibleMonth else { return }
-    monthDirection = .leading
-    withAnimation(Bow.motion(reduceMotion: reduceMotion)) { selectedMonth = lastAccessibleMonth }
   }
 }
 

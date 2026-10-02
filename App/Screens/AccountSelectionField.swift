@@ -38,7 +38,8 @@ struct AccountSelectionField: View {
       AccountSelectionSheet(
         title: title,
         selectedID: selection,
-        allowedIDs: Set(accounts.map(\.id)),
+        // Closed accounts aren't offered, but one that's already chosen stays visible.
+        allowedIDs: Set(accounts.filter { $0.closedAt == nil || $0.id == selection }.map(\.id)),
         excludingID: excludingID,
         noneTitle: noneTitle
       ) { id in

@@ -3,12 +3,14 @@ import SwiftData
 
 struct TransactionsScreen: View {
   @Environment(\.modelContext) private var modelContext
+  @Environment(\.bowToasts) private var toasts
   @Query
   private var simpleFINRecords: [SimpleFINImportRecord]
   @Query(filter: #Predicate<BudgetTransaction> { $0.needsApproval })
   private var approvals: [BudgetTransaction]
   @Query(filter: #Predicate<BudgetTransaction> {
     $0.kindRaw == "expense" && $0.envelopeID == nil
+      && $0.sourceRaw != "balanceAdjustment" && !$0.isBeforeStart
   })
   private var legacyUncategorized: [BudgetTransaction]
   @Query private var bankConnections: [SimpleFINConnection]
@@ -32,6 +34,7 @@ struct TransactionsScreen: View {
   @State private var scheduledRecords: [BudgetTransaction] = []
   @State private var refreshVersion = 0
   @State private var hasLoaded = false
+  @State private var swipeError: String?
 
   private var reviewTransactions: [BudgetTransaction] {
     let approvalIDs = Set(approvals.map(\.id))
@@ -98,6 +101,8 @@ struct TransactionsScreen: View {
                 item: item, onSelect: onSelect, onRecord: onRecord,
                 onReviewBankRecord: onReviewBankRecord, onEnterPending: onEnterPending
               )
+              .swipeActions(edge: .trailing, allowsFullSwipe: false) { trailingSwipe(for: item) }
+              .swipeActions(edge: .leading) { leadingSwipe(for: item) }
             }
           }
         }
@@ -135,6 +140,8 @@ struct TransactionsScreen: View {
     .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
       refreshVersion += 1
     }
+    .refreshable { await refreshFromBank() }
+    .bowErrorAlert("Spending", message: $swipeError)
     .navigationTitle("Spending")
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
@@ -190,6 +197,91 @@ extension TransactionsScreen {
             .bowSecondaryButton(size: .regular)
         }
       }
+    }
+  }
+}
+
+// MARK: - Swipe actions and refresh
+
+extension TransactionsScreen {
+  /// Delete a transaction, skip a bill's date, or ignore a bank item, straight from its row.
+  @ViewBuilder
+  fileprivate func trailingSwipe(for item: SpendingTimelineItem) -> some View {
+    switch item.source {
+    case .transaction(let id):
+      Button("Delete", systemImage: "trash", role: .destructive) { deleteTransaction(id) }
+    case .scheduled(let occurrence, let schedule):
+      Button("Skip", systemImage: "forward.end") { skip(occurrence, of: schedule) }
+        .tint(Bow.needs)
+    case .bankReview(let record, _):
+      Button("Ignore", systemImage: "eye.slash", role: .destructive) { ignore(record) }
+    case .pending:
+      EmptyView()
+    }
+  }
+
+  /// Marks a transaction cleared or uncleared, as the bank would.
+  @ViewBuilder
+  fileprivate func leadingSwipe(for item: SpendingTimelineItem) -> some View {
+    if case .transaction(let id) = item.source,
+       let transaction = try? BudgetTransactionLookup.byID(id, in: modelContext),
+       transaction.reconciledAt == nil, !transaction.isBalanceAdjustment {
+      Button(transaction.isCleared ? "Uncleared" : "Cleared",
+             systemImage: transaction.isCleared ? "circle" : "checkmark.circle") {
+        transaction.isCleared.toggle()
+        try? modelContext.save()
+      }
+      .tint(Bow.funded)
+    }
+  }
+
+  private func deleteTransaction(_ id: UUID) {
+    do {
+      guard let transaction = try BudgetTransactionLookup.byID(id, in: modelContext) else { return }
+      let title = transaction.payee.isEmpty ? "Transaction" : transaction.payee
+      let undo = try UndoableChanges.delete(transaction, in: modelContext)
+      toasts?.show(.deleted("Deleted · \(title)", undo: undo))
+    } catch {
+      swipeError = error.localizedDescription
+    }
+  }
+
+  private func skip(_ occurrence: BudgetScheduleOccurrence, of schedule: BudgetSchedule) {
+    do {
+      try BudgetCommands.skipScheduledDate(scheduleID: schedule.id, on: occurrence.scheduledFor, in: modelContext)
+      try modelContext.save()
+      toasts?.show(.deleted("Skipped · \(schedule.payee.isEmpty ? "Scheduled bill" : schedule.payee)"))
+    } catch {
+      swipeError = error.localizedDescription
+    }
+  }
+
+  private func ignore(_ record: SimpleFINImportRecord) {
+    do {
+      try SimpleFINSyncCoordinator.shared.resolve(record, as: .ignore, in: modelContext)
+      toasts?.show(.deleted("Ignored · \(record.payee.isEmpty ? "Bank transaction" : record.payee)"))
+    } catch {
+      swipeError = error.localizedDescription
+    }
+  }
+
+  /// Pull to refresh asks the bank for anything new, when a bank is connected.
+  fileprivate func refreshFromBank() async {
+    guard !isDemoMode, !bankConnections.isEmpty else {
+      refreshVersion += 1
+      return
+    }
+    do {
+      let summary = try await SimpleFINSyncCoordinator.shared.sync(in: modelContext, manual: true)
+      let arrived = summary.imported + summary.needsReview
+      toasts?.show(BowToast(
+        message: arrived == 0 ? "You’re up to date"
+          : arrived == 1 ? "1 new transaction from your bank" : "\(arrived) new transactions from your bank",
+        systemImage: "building.columns.fill", feedback: .quiet
+      ))
+    } catch {
+      toasts?.show(BowToast(message: error.localizedDescription,
+                            systemImage: "exclamationmark.circle.fill", feedback: .quiet))
     }
   }
 }

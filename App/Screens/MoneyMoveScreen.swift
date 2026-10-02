@@ -32,7 +32,7 @@ struct MoneyMoveScreen: View {
   }
 
   private var cardAccounts: [BudgetAccount] {
-    currentAccounts.filter { $0.kind == .credit }.sorted { $0.name < $1.name }
+    currentAccounts.filter { $0.kind == .credit && $0.closedAt == nil }.sorted { $0.name < $1.name }
   }
 
   private var sourceAvailable: Int64 { balance(of: source) }
@@ -237,11 +237,13 @@ struct MoneyMoveScreen: View {
       await repository.invalidate()
       let current = try await repository.snapshot(month: month)
       snapshot = current
-      try BudgetCommands.moveMoney(
+      let allocation = try BudgetCommands.moveMoney(
         amountMinor: minor, from: source, to: target,
         date: allocationDate, snapshot: current, in: modelContext
       )
-      toasts?.show(.moved("Moved \(BudgetMoney.formatted(minor, currencyCode: currencyCode)) to \(bucketName(target))"))
+      var toast = BowToast.moved("Moved \(BudgetMoney.formatted(minor, currencyCode: currencyCode)) to \(bucketName(target))")
+      toast.undo = UndoableChanges.undoMove(allocation, in: modelContext)
+      toasts?.show(toast)
       dismiss()
     } catch {
       errorMessage = error.localizedDescription

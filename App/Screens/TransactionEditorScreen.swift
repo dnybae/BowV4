@@ -83,7 +83,7 @@ struct TransactionEditorScreen: View {
     case .existing(let existing):
       transaction = existing
       purpose = TransactionSheetPurpose(existingNeedsReview: existing.needsApproval
-        || (existing.kind == .expense && existing.envelopeID == nil))
+        || existing.needsEnvelope)
     case .bankItem(let record):
       reviewRecord = record
       purpose = .approve
@@ -113,9 +113,10 @@ struct TransactionEditorScreen: View {
     let bankKind: BudgetTransactionKind? = bank.map { $0.amountMinor < 0 ? .expense : .inflow }
     _kind = State(initialValue: transaction?.kind ?? scheduledDraft?.kind
       ?? (scheduledTransfer != nil ? .transfer : nil) ?? bankKind ?? .expense)
-    let fallbackAccountID: UUID? = accounts.first(where: { $0.kind == .cash })?.id
-      ?? accounts.first(where: { $0.kind == .credit })?.id
-      ?? accounts.first?.id
+    let openAccounts = accounts.filter { $0.closedAt == nil }
+    let fallbackAccountID: UUID? = openAccounts.first(where: { $0.kind == .cash })?.id
+      ?? openAccounts.first(where: { $0.kind == .credit })?.id
+      ?? openAccounts.first?.id
     let defaultAccountID: UUID? = transaction?.accountID ?? scheduledDraft?.accountID
       ?? scheduledTransfer?.accountID ?? bank?.localAccountID
       ?? preferredAccountID ?? fallbackAccountID
@@ -871,29 +872,31 @@ struct TransactionEditorScreen: View {
     }
   }
 
-  /// Approve: match the bank item to what you entered, or add it to the budget.
+  /// Approve: match the bank item to what you entered, or add it to the budget. Everything the
+  /// sheet changes is saved together, so a failure leaves the bank item exactly as it was.
   private func approve() {
     guard let account = selectedAccount else {
       errorMessage = "Choose an account."
       return
     }
     let coordinator = SimpleFINSyncCoordinator.shared
+    let message: String
     do {
       if let matchedID, let candidate = matchedCandidate, let bankRecord {
         try coordinator.resolve(
           bankRecord, as: .link(matchedID), envelopeID: envelopeID,
           scheduleID: relatedOccurrence?.scheduleID, scheduledFor: relatedOccurrence?.scheduledFor,
-          in: modelContext
+          in: modelContext, saving: false
         )
         if fields != matchFields {
           try BudgetCommands.updateTransaction(
             candidate, kind: candidate.kind, account: account,
             destination: accounts.first { $0.id == candidate.transferAccountID },
             envelopeID: chosenEnvelopeID, amountMinor: abs(candidate.amountMinor), date: date,
-            payee: payee, merchantDomain: merchantDomain, notes: notes, in: modelContext
+            payee: payee, merchantDomain: merchantDomain, notes: notes, in: modelContext, saving: false
           )
         }
-        toasts?.show(.saved("Matched and approved"))
+        message = "Matched and approved"
       } else if let reviewRecord {
         if relatedSchedule?.kind == .transfer, let relatedOccurrence {
           // Records the scheduled transfer and matches this bank leg to it, in one step.
@@ -903,46 +906,55 @@ struct TransactionEditorScreen: View {
             envelopeID: chosenEnvelopeID, amountMinor: amountMinor, date: date,
             payee: payee, notes: notes,
             scheduleID: relatedOccurrence.scheduleID, scheduledFor: relatedOccurrence.scheduledFor,
-            in: modelContext
+            in: modelContext, saving: false
           )
           try coordinator.resolve(
             reviewRecord, as: .link(recorded.id),
             scheduleID: relatedOccurrence.scheduleID, scheduledFor: relatedOccurrence.scheduledFor,
-            in: modelContext
+            in: modelContext, saving: false
           )
         } else {
           try coordinator.resolve(
             reviewRecord, as: .importNew, envelopeID: envelopeID,
             scheduleID: relatedOccurrence?.scheduleID, scheduledFor: relatedOccurrence?.scheduledFor,
-            in: modelContext
+            in: modelContext, saving: false
           )
           try applyEdits(madeTo: reviewRecord, account: account)
         }
-        toasts?.show(.saved("Approved · \(savedSummary)"))
+        message = "Approved · \(savedSummary)"
       } else {
         save()
         return
       }
-      dismiss()
+      try modelContext.save()
     } catch {
+      modelContext.rollback()
       errorMessage = error.localizedDescription
+      return
     }
+    toasts?.show(.saved(message))
+    dismiss()
   }
 
-  /// Enter Now: puts a pending bank item in the budget before it posts.
+  /// Enter Now: puts a pending bank item in the budget before it posts, edits included, in one save.
   private func enterPending() {
     guard let pendingRecord, let account = selectedAccount else { return }
     do {
-      try SimpleFINSyncCoordinator.shared.enterPending(pendingRecord, envelopeID: envelopeID, in: modelContext)
+      try SimpleFINSyncCoordinator.shared.enterPending(
+        pendingRecord, envelopeID: envelopeID, in: modelContext, saving: false
+      )
       try applyEdits(madeTo: pendingRecord, account: account)
-      toasts?.show(.saved("Entered · \(savedSummary)"))
-      dismiss()
+      try modelContext.save()
     } catch {
+      modelContext.rollback()
       errorMessage = error.localizedDescription
+      return
     }
+    toasts?.show(.saved("Entered · \(savedSummary)"))
+    dismiss()
   }
 
-  /// Once a bank item is in the budget, applies anything changed in the sheet.
+  /// Once a bank item is in the budget, applies anything changed in the sheet. Doesn't save.
   private func applyEdits(madeTo record: SimpleFINImportRecord, account: BudgetAccount) throws {
     let edited = payee != record.payee || !notes.isEmpty || merchantDomain != nil
       || amountMinor != abs(record.amountMinor)
@@ -953,7 +965,7 @@ struct TransactionEditorScreen: View {
     try BudgetCommands.updateTransaction(
       added, kind: kind, account: account, destination: nil, envelopeID: envelopeID,
       amountMinor: amountMinor, date: date, payee: payee, merchantDomain: merchantDomain,
-      notes: notes, in: modelContext
+      notes: notes, in: modelContext, saving: false
     )
   }
 
@@ -970,7 +982,7 @@ struct TransactionEditorScreen: View {
         // Deleting a bill's transaction marks its date skipped.
         try BudgetCommands.deleteTransaction(transaction, in: modelContext)
       }
-      toasts?.show(.saved("Skipped · \(payee.isEmpty ? "Scheduled bill" : payee)"))
+      toasts?.show(.deleted("Skipped · \(payee.isEmpty ? "Scheduled bill" : payee)"))
       dismiss()
     } catch {
       errorMessage = error.localizedDescription
@@ -981,6 +993,7 @@ struct TransactionEditorScreen: View {
     guard let bankRecord else { return }
     do {
       try SimpleFINSyncCoordinator.shared.resolve(bankRecord, as: .ignore, in: modelContext)
+      toasts?.show(.deleted("Ignored · \(payee.isEmpty ? "Bank transaction" : payee)"))
       dismiss()
     } catch {
       errorMessage = error.localizedDescription
@@ -990,7 +1003,8 @@ struct TransactionEditorScreen: View {
   private func delete() {
     guard let transaction else { return }
     do {
-      try BudgetCommands.deleteTransaction(transaction, in: modelContext)
+      let undo = try UndoableChanges.delete(transaction, in: modelContext)
+      toasts?.show(.deleted("Deleted · \(savedSummary)", undo: undo))
       dismiss()
     } catch {
       errorMessage = error.localizedDescription

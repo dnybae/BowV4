@@ -36,7 +36,7 @@ struct SimpleFINAccountSetupScreen: View {
   private var canAdd: Bool {
     !selectedLinks.isEmpty && selectedLinks.allSatisfy { link in
       let balance = balanceDrafts[link.remoteKey, default: 0]
-      let type = accountTypes[link.remoteKey] ?? .other
+      let type = accountTypes[link.remoteKey] ?? .checking
       return link.currencyCode == currencyCode
         && !link.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         && (type.kind != .liability || balance <= 0)
@@ -232,15 +232,13 @@ struct SimpleFINAccountSetupScreen: View {
             .font(.bowFootnote).foregroundStyle(Bow.inkSoft)
         } else if selectedKeys.contains(key) {
           Picker("Account type", selection: Binding(
-            get: { accountTypes[key] ?? .other },
+            get: { accountTypes[key] ?? .checking },
             set: { accountTypes[key] = $0 }
           )) {
-            ForEach(BudgetAccountType.allCases) { type in
-              Text(type.title).tag(type)
-            }
+            AccountTypeMenu()
           }
           .pickerStyle(.menu)
-          Text((accountTypes[key] ?? .other).explanation)
+          Text((accountTypes[key] ?? .checking).explanation)
             .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
           LabeledContent("Starting balance") {
             CurrencyAmountField("Starting balance", minor: Binding(
@@ -249,7 +247,7 @@ struct SimpleFINAccountSetupScreen: View {
             ), currencyCode: currencyCode, allowsNegative: true)
             .labelsHidden()
           }
-          if (accountTypes[key] ?? .other).kind == .liability,
+          if (accountTypes[key] ?? .checking).kind == .liability,
              balanceDrafts[key, default: 0] > 0 {
             Text("Enter money owed as a negative balance.")
               .font(.bowFootnote).foregroundStyle(Bow.inkSoft)
@@ -280,10 +278,11 @@ struct SimpleFINAccountSetupScreen: View {
     let startDate = importHistory ? Calendar.current.startOfDay(for: historyStart) : Date()
     var accountsAdded = false
     var createdCount = 0
+    var created: [(BudgetAccount, Int64)] = []
     do {
       let selectedDrafts = try selectedLinks.map { link -> (SimpleFINAccountLink, Int64, BudgetAccountType) in
         let balance = balanceDrafts[link.remoteKey, default: 0]
-        let type = accountTypes[link.remoteKey] ?? .other
+        let type = accountTypes[link.remoteKey] ?? .checking
         guard type.kind != .liability || balance <= 0 else {
           throw BudgetCommandError.liabilityRequiresNegativeBalance
         }
@@ -295,6 +294,7 @@ struct SimpleFINAccountSetupScreen: View {
           openingBalanceMinor: balance, type: type, in: modelContext
         )
         createdCount += 1
+        created.append((account, balance))
         link.applyInstitution(to: account)
         link.localAccountID = account.id
         link.importStartDate = startDate
@@ -304,6 +304,14 @@ struct SimpleFINAccountSetupScreen: View {
       accountsAdded = true
       if !isDemoMode {
         _ = try await SimpleFINSyncCoordinator.shared.sync(in: modelContext, manual: true)
+        // The bank's balance already includes what posted today, and today's items now count
+        // in the ledger, so the starting balance is set to keep each account at the bank's figure.
+        for (account, balance) in created {
+          try BudgetCommands.moveStartingBalanceDate(
+            of: account, to: account.openedAt, keepingBalance: balance, in: modelContext
+          )
+        }
+        try modelContext.save()
         SimpleFINBackgroundRefresh.schedule(in: modelContext)
       }
       if let onDone { onDone() } else { dismiss() }
@@ -338,7 +346,7 @@ struct SimpleFINAccountTypeSuggester {
       return .investment
     }
     if value.contains("savings") { return .savings }
-    if value.contains("checking") { return .checking }
-    return .other
+    // Most accounts a bank sync finds are everyday deposit accounts.
+    return .checking
   }
 }

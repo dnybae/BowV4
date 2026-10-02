@@ -5,20 +5,38 @@ import SwiftUI
 struct BowNameHeader<Tile: View>: View {
   var placeholder: String
   @Binding var name: String
+  /// Lets an editor put the cursor in the name, e.g. when creating something new.
+  var isFocused: FocusState<Bool>.Binding?
   @ViewBuilder var tile: () -> Tile
+
+  init(placeholder: String, name: Binding<String>, isFocused: FocusState<Bool>.Binding? = nil,
+       @ViewBuilder tile: @escaping () -> Tile) {
+    self.placeholder = placeholder
+    _name = name
+    self.isFocused = isFocused
+    self.tile = tile
+  }
 
   var body: some View {
     VStack(spacing: Bow.Space.s3) {
       tile()
-      TextField(placeholder, text: $name)
-        .font(.bowTitle)
-        .foregroundStyle(Bow.ink)
-        .multilineTextAlignment(.center)
-        .submitLabel(.done)
-        .accessibilityLabel("Name")
+      if let isFocused {
+        field.focused(isFocused)
+      } else {
+        field
+      }
     }
     .frame(maxWidth: .infinity)
     .padding(.vertical, Bow.Space.s2)
+  }
+
+  private var field: some View {
+    TextField(placeholder, text: $name)
+      .font(.bowTitle)
+      .foregroundStyle(Bow.ink)
+      .multilineTextAlignment(.center)
+      .submitLabel(.done)
+      .accessibilityLabel("Name")
   }
 }
 

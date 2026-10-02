@@ -125,7 +125,7 @@ struct SimpleFINScreen: View {
               }
             } icon: {
               AccountLogoView(appearance: account?.logoAppearance ?? link.logoAppearance,
-                              systemImage: account?.kind.systemImage ?? "building.columns", size: 28)
+                              systemImage: account?.accountType.systemImage ?? "building.columns", size: 28)
             }
             .labelStyle(.bowTile)
             .padding(.vertical, Bow.Space.s1)

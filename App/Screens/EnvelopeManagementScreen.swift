@@ -123,9 +123,9 @@ struct EnvelopeManagementScreen: View {
       case .editGroup(let group):
         GroupEditorScreen(nextOrder: groups.count, group: group)
       case .newEnvelope:
-        EnvelopeEditorScreen(groups: orderedGroups, nextOrder: envelopes.count)
+        EnvelopeEditorScreen(groups: orderedGroups)
       case .editEnvelope(let envelope):
-        EnvelopeEditorScreen(groups: orderedGroups, nextOrder: envelopes.count, envelope: envelope)
+        EnvelopeEditorScreen(groups: orderedGroups, envelope: envelope)
       }
     }
     .bowErrorAlert("Envelope", message: $message)
@@ -140,9 +140,7 @@ struct EnvelopeManagementScreen: View {
           Text(envelope.name)
             .font(.bowHeadline)
             .foregroundStyle(Bow.ink)
-          Text(envelope.totalMonthlyTargetMinor.map {
-            "Target \(BudgetMoney.formatted($0, currencyCode: currencyCode)) monthly"
-          } ?? "No target")
+          Text(targetSummary(envelope))
             .font(.bowFootnote)
             .foregroundStyle(Bow.inkSoft)
         }
@@ -159,6 +157,15 @@ struct EnvelopeManagementScreen: View {
       .contentShape(.rect)
     }
     .accessibilityHint("Edit envelope")
+  }
+
+  private func targetSummary(_ envelope: BudgetEnvelope) -> String {
+    if let goal = envelope.targetMinor, goal > 0, let date = envelope.targetDate {
+      return "Goal \(BudgetMoney.formatted(goal, currencyCode: currencyCode)) by \(date.formatted(.dateTime.month(.abbreviated).year()))"
+    }
+    return envelope.totalMonthlyTargetMinor.map {
+      "Target \(BudgetMoney.formatted($0, currencyCode: currencyCode)) monthly"
+    } ?? "No target"
   }
 
   private func setHidden(_ envelope: BudgetEnvelope, _ hidden: Bool) {

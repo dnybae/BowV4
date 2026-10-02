@@ -84,6 +84,9 @@ private struct BudgetHomeView: View {
   @State private var loadedAccountReport: AccountBalanceReport?
   @State private var ledgerError: String?
   @State private var ledgerRefreshGeneration = 0
+  @State private var pendingLedgerRefresh: Task<Void, Never>?
+  /// Rebuilt when payees change, not on every redraw of the home screen.
+  @State private var logoDirectory = PayeeLogoDirectory()
   @State private var selectedMonth = Date()
   @State private var selectedCalendarDate = Date()
   @State private var selectedTab: HomeTab = .budget
@@ -92,6 +95,8 @@ private struct BudgetHomeView: View {
   @State private var budgetReturnToPresentRequest = 0
   @State private var calendarReturnToTodayRequest = 0
   @State private var activeSheet: BowSheet?
+  /// Presented as soon as the current sheet finishes closing.
+  @State private var queuedSheet: BowSheet?
   @State private var tabReselect = TabReselectCenter()
   @State private var showingSettings = false
   @State private var showingInsights = false
@@ -126,7 +131,7 @@ private struct BudgetHomeView: View {
           get: { selectedTab },
           set: { tab in
             if tab == .addTransaction {
-              activeSheet = .newTransaction
+              startNewTransaction()
             } else if tab == selectedTab {
               reselect(tab)
             } else {
@@ -153,6 +158,7 @@ private struct BudgetHomeView: View {
                 path: $budgetPath,
                 returnToPresentRequest: budgetReturnToPresentRequest,
                 onAddGroup: { activeSheet = .newGroup },
+                onAddAccount: { activeSheet = .newAccount },
                 onAddEnvelope: { activeSheet = .newEnvelope },
                 onEditEnvelope: { activeSheet = .editEnvelope($0) },
                 onEditEnvelopeTarget: { activeSheet = .editEnvelopeTarget($0) },
@@ -185,7 +191,7 @@ private struct BudgetHomeView: View {
             }
             .background {
               AddTabInterceptor(tabTitle: Self.addTransactionTabTitle) {
-                activeSheet = .newTransaction
+                startNewTransaction()
               }
             }
           }
@@ -201,7 +207,7 @@ private struct BudgetHomeView: View {
                 onRecord: { activeSheet = .recordScheduled($0) },
                 onReviewBankRecord: { activeSheet = .bankItem($0, $1) },
                 onEnterPending: { activeSheet = .pendingItem($0) },
-                onAddTransaction: { activeSheet = .newTransaction },
+                onAddTransaction: { startNewTransaction() },
                 onConnectBank: { activeSheet = .bankSync }
               )
               .toolbar {
@@ -244,7 +250,8 @@ private struct BudgetHomeView: View {
                 onAddAccount: { activeSheet = .newAccount },
                 onViewInsights: { showingInsights = true },
                 onSelectTransaction: selectTransaction,
-                onAddTransaction: { activeSheet = .newTransactionInAccount($0) }
+                onAddTransaction: { activeSheet = .newTransactionInAccount($0) },
+                onAccountRemoved: { accountsPath.removeAll() }
                 )
               } else {
                 if let ledgerError {
@@ -281,7 +288,7 @@ private struct BudgetHomeView: View {
               HStack {
                 Spacer()
                 Button("Add Transaction", systemImage: "plus") {
-                  activeSheet = .newTransaction
+                  startNewTransaction()
                 }
                 .labelStyle(.iconOnly)
                 .font(.title3.weight(.semibold))
@@ -299,7 +306,7 @@ private struct BudgetHomeView: View {
         .sheet(isPresented: $showingSettings) {
           SettingsScreen()
         }
-        .sheet(item: $activeSheet) { sheet in
+        .sheet(item: $activeSheet, onDismiss: presentQueuedSheet) { sheet in
           switch sheet {
           case .newTransaction:
             transactionSheet(.new())
@@ -317,7 +324,17 @@ private struct BudgetHomeView: View {
             .bowToastHost()
           case .transaction(let id):
             if let transaction = transaction(for: id) {
-              transactionSheet(.existing(transaction))
+              if transaction.isBalanceAdjustment {
+                BalanceAdjustmentSheet(
+                  transaction: transaction,
+                  accountName: accounts.first { $0.id == transaction.accountID }?.name ?? "This account",
+                  currencyCode: currencyCode
+                )
+              } else {
+                transactionSheet(.existing(transaction))
+              }
+            } else {
+              MissingItemSheet(title: "Transaction")
             }
           case .bankItem(let record, let occurrence):
             // Already imported: approve the transaction it became. Otherwise approve the bank item.
@@ -331,26 +348,32 @@ private struct BudgetHomeView: View {
           case .recordScheduled(let draft):
             transactionSheet(.scheduled(draft))
           case .editSchedule(let id):
-            ScheduleEditorScreen(
-              schedule: schedules.first { $0.id == id },
-              accounts: accounts, envelopes: envelopes, currencyCode: currencyCode
-            )
+            if let schedule = schedules.first(where: { $0.id == id }) {
+              ScheduleEditorScreen(
+                schedule: schedule,
+                accounts: accounts, envelopes: envelopes, currencyCode: currencyCode
+              )
+            } else {
+              MissingItemSheet(title: "Schedule")
+            }
           case .newAccount:
             AddAccountFlowScreen(currencyCode: currencyCode, isDemoMode: isDemoMode)
+          case .newAccountForTransaction:
+            AddAccountFlowScreen(currencyCode: currencyCode, isDemoMode: isDemoMode) { account in
+              queuedSheet = .newTransactionInAccount(account.id)
+            }
           case .newGroup:
             GroupEditorScreen(nextOrder: groups.count)
           case .newEnvelope:
-            EnvelopeEditorScreen(groups: groups.filter { !$0.isSystem }, nextOrder: envelopes.count)
+            EnvelopeEditorScreen(groups: groups.filter { !$0.isSystem })
           case .editEnvelope(let id):
             EnvelopeEditorScreen(
               groups: groups.filter { !$0.isSystem },
-              nextOrder: envelopes.count,
               envelope: envelopes.first { $0.id == id }
             )
           case .editEnvelopeTarget(let id):
             EnvelopeEditorScreen(
               groups: groups.filter { !$0.isSystem },
-              nextOrder: envelopes.count,
               envelope: envelopes.first { $0.id == id },
               layout: .target
             )
@@ -372,7 +395,10 @@ private struct BudgetHomeView: View {
     .bowAnimation(value: profiles.isEmpty)
     .environment(\.budgetSnapshotRepository, snapshotRepository)
     .environment(tabReselect)
-    .environment(\.payeeLogoDirectory, PayeeLogoDirectory(payees: payees))
+    .environment(\.payeeLogoDirectory, logoDirectory)
+    .onChange(of: payees.map(\.logoSignature), initial: true) { _, _ in
+      logoDirectory = PayeeLogoDirectory(payees: payees)
+    }
     .task(id: profiles.first?.id) {
       do {
         try BundledPayeeInstaller.installIfNeeded(in: modelContext.container)
@@ -382,7 +408,12 @@ private struct BudgetHomeView: View {
     }
     .task {
       try? BudgetCommands.ensureCardPaymentEnvelopes(in: modelContext)
-      try? BankMemoNotesCleanup().runOnce(in: modelContext)
+      do {
+        try BowDataUpgrade().run(in: modelContext)
+      } catch {
+        modelContext.rollback()
+        ledgerError = "Bow couldn’t update your budget’s saved data. \(error.localizedDescription)"
+      }
       try? ScheduleReviewPlanner().refresh(in: modelContext)
       try? ScheduleTargetSynchronizer().refresh(in: modelContext)
       if !isDemoMode { await refreshSimpleFINIfConnected() }
@@ -391,7 +422,13 @@ private struct BudgetHomeView: View {
       await refreshLedger()
     }
     .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-      Task { await refreshLedger(invalidate: true) }
+      // A sync or an auto-entered bill saves several times in a row; recalculate once after them.
+      pendingLedgerRefresh?.cancel()
+      pendingLedgerRefresh = Task {
+        try? await Task.sleep(for: .milliseconds(120))
+        guard !Task.isCancelled else { return }
+        await refreshLedger(invalidate: true)
+      }
     }
     .onChange(of: scenePhase) { _, phase in
       if phase == .active { try? ScheduleTargetSynchronizer().refresh(in: modelContext) }
@@ -415,6 +452,8 @@ private struct BudgetHomeView: View {
         calendarReturnToTodayRequest += 1
       }
       lastKnownCurrentMonth = Date()
+      // A new month changes which months are "future", so cached months are recalculated.
+      Task { await refreshLedger(invalidate: true) }
     }
   }
 
@@ -452,6 +491,17 @@ private struct BudgetHomeView: View {
       message: arrived == 1 ? "1 new transaction from your bank" : "\(arrived) new transactions from your bank",
       systemImage: "building.columns.fill", feedback: .quiet
     ))
+  }
+
+  /// A transaction needs an account, so with none open, + starts by adding one.
+  private func startNewTransaction() {
+    activeSheet = accounts.contains { $0.closedAt == nil } ? .newTransaction : .newAccountForTransaction
+  }
+
+  private func presentQueuedSheet() {
+    guard let next = queuedSheet else { return }
+    queuedSheet = nil
+    activeSheet = next
   }
 
   private func selectTransaction(_ id: UUID) {
@@ -538,6 +588,8 @@ private enum BowSheet: Identifiable {
   case recordScheduled(ScheduledTransactionDraft)
   case editSchedule(UUID)
   case newAccount
+  /// + with no accounts yet: add one, then go straight on to the transaction.
+  case newAccountForTransaction
   case newGroup
   case newEnvelope
   case editEnvelope(UUID)
@@ -557,6 +609,7 @@ private enum BowSheet: Identifiable {
     case .recordScheduled(let draft): "recordScheduled-\(draft.scheduleID)-\(draft.scheduledFor)"
     case .editSchedule(let id): "editSchedule-\(id)"
     case .newAccount: "newAccount"
+    case .newAccountForTransaction: "newAccountForTransaction"
     case .newGroup: "newGroup"
     case .newEnvelope: "newEnvelope"
     case .editEnvelope(let id): "editEnvelope-\(id)"

@@ -30,7 +30,7 @@ struct PayeeLogoFinderSheet: View {
     guard validDomain else { return nil }
     return LogoDev.logoURL(
       domain: trimmedDomain.isEmpty ? nil : trimmedDomain,
-      merchantName: payeeName
+      merchantName: payeeName, userRequested: true
     )
   }
 

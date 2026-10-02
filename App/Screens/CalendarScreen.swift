@@ -8,7 +8,8 @@ struct CalendarScreen: View {
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Query private var bankRecords: [SimpleFINImportRecord]
   @Query(filter: #Predicate<BudgetTransaction> {
-    $0.needsApproval || ($0.kindRaw == "expense" && $0.envelopeID == nil)
+    $0.needsApproval || ($0.kindRaw == "expense" && $0.envelopeID == nil
+      && $0.sourceRaw != "balanceAdjustment" && !$0.isBeforeStart)
   }) private var reviewTransactions: [BudgetTransaction]
   var schedules: [BudgetSchedule]
   var occurrences: [BudgetScheduleOccurrence]

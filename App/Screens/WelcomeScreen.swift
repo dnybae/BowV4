@@ -4,8 +4,9 @@ import SwiftData
 struct WelcomeScreen: View {
   @Environment(\.modelContext) private var modelContext
   @AppStorage("bow.demoMode") private var isDemoMode = false
-  @State private var currencyCode = "USD"
-  @State private var withDefaults = false
+  /// Canadian dollars in Canada; US dollars everywhere else Bow supports today.
+  @State private var currencyCode = Locale.current.currency?.identifier == "CAD" ? "CAD" : "USD"
+  @State private var withDefaults = true
   @State private var errorMessage: String?
 
   var body: some View {

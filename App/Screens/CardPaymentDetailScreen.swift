@@ -3,6 +3,7 @@ import SwiftData
 
 struct CardPaymentDetailScreen: View {
   @Environment(\.modelContext) private var modelContext
+  @Environment(\.dismiss) private var dismiss
   var card: BudgetAccount
   var currencyCode: String
   var snapshot: BudgetSnapshot
@@ -297,7 +298,7 @@ struct CardPaymentDetailScreen: View {
     }
     .sheet(isPresented: $showingAccountEditor) {
       NavigationStack {
-        AccountEditorScreen(currencyCode: currencyCode, account: card)
+        AccountEditorScreen(currencyCode: currencyCode, account: card, onDeleted: { dismiss() })
       }
     }
   }

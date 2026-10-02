@@ -2,15 +2,11 @@ import SwiftUI
 import SwiftData
 
 struct EnvelopeDirectoryScreen: View {
-  @Environment(\.dismiss) private var dismiss
-  @Environment(\.modelContext) private var modelContext
   @Query private var groups: [BudgetGroup]
   @Query private var envelopes: [BudgetEnvelope]
-  @State private var selected: EnvelopeSuggestion?
-  @State private var groupID: UUID?
-  @State private var message: String?
+  @State private var selected: EnvelopeIdea?
 
-  private let suggestions: [EnvelopeSuggestion] = [
+  private let suggestions: [EnvelopeIdea] = [
     .init(name: "Groceries", groupName: "Food & Home"),
     .init(name: "Housing", groupName: "Food & Home"),
     .init(name: "Rent", groupName: "Food & Home"),
@@ -67,21 +63,39 @@ struct EnvelopeDirectoryScreen: View {
     .init(name: "Buffer / “Things I Forgot to Budget For”", groupName: "Future")
   ]
 
+  private func isAdded(_ idea: EnvelopeIdea) -> Bool {
+    envelopes.contains {
+      $0.name.localizedCaseInsensitiveCompare(idea.name) == .orderedSame && !$0.isHidden
+    }
+  }
+
   var body: some View {
     List {
+      Section {
+        Text("Tap an idea to add it. Ideas you already have are checked.")
+          .font(.bowSubhead)
+          .foregroundStyle(Bow.inkSoft)
+          .listRowBackground(Color.clear)
+      }
       ForEach(["Food & Home", "Getting Around", "Lifestyle", "Future"], id: \.self) { groupName in
         Section(groupName) {
-          ForEach(suggestions.filter { $0.groupName == groupName }) { suggestion in
-            Button(suggestion.name) {
-              selected = suggestion
-              groupID = groups.first {
-                $0.name.localizedCaseInsensitiveCompare(groupName) == .orderedSame
-              }?.id
+          ForEach(suggestions.filter { $0.groupName == groupName }) { idea in
+            let added = isAdded(idea)
+            Button {
+              selected = idea
+            } label: {
+              HStack {
+                Text(idea.name)
+                  .foregroundStyle(added ? Bow.inkSoft : Bow.ink)
+                Spacer(minLength: Bow.Space.s2)
+                Image(systemName: added ? "checkmark.circle.fill" : "plus.circle")
+                  .foregroundStyle(added ? AnyShapeStyle(Bow.funded) : AnyShapeStyle(.tint))
+                  .accessibilityHidden(true)
+              }
+              .contentShape(Rectangle())
             }
-            .disabled(envelopes.contains {
-              $0.name.localizedCaseInsensitiveCompare(suggestion.name) == .orderedSame
-                && !$0.isHidden
-            })
+            .disabled(added)
+            .accessibilityValue(added ? "Added" : "")
           }
         }
         .listRowBackground(Bow.card)
@@ -90,80 +104,9 @@ struct EnvelopeDirectoryScreen: View {
     .bowListBackground()
     .navigationTitle("Envelope ideas")
     .navigationBarTitleDisplayMode(.inline)
-    .sheet(item: $selected) { suggestion in
-      NavigationStack {
-        Form {
-          Section("Envelope") {
-            LabeledContent("Name", value: suggestion.name)
-            Picker("Group", selection: $groupID) {
-              Text("New: \(suggestion.groupName)").tag(Optional<UUID>.none)
-              ForEach(groups.filter { !$0.isSystem }.sorted { $0.sortOrder < $1.sortOrder }) { group in
-                Text(group.name).tag(Optional(group.id))
-              }
-            }
-          }
-          .listRowBackground(Bow.card)
-          Section {
-            Text("A directory envelope starts with no money assigned. You can edit its target later.")
-              .font(.bowBody)
-              .foregroundStyle(Bow.inkSoft)
-          }
-          .listRowBackground(Bow.card)
-        }
-        .bowListBackground()
-        .navigationTitle("Add envelope")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-          ToolbarItem(placement: .cancellationAction) {
-            Button { selected = nil } label: { BowToolbarLabel("Cancel") }
-          }
-          ToolbarItem(placement: .confirmationAction) {
-            Button { add(suggestion) } label: { BowToolbarLabel("Add") }
-          }
-        }
-      }
-    }
-    .bowErrorAlert("Couldn’t add envelope", message: $message)
-  }
-
-  private func add(_ suggestion: EnvelopeSuggestion) {
-    do {
-      let destinationID: UUID
-      if let groupID {
-        destinationID = groupID
-      } else if let existing = groups.first(where: {
-        $0.name.localizedCaseInsensitiveCompare(suggestion.groupName) == .orderedSame
-      }) {
-        destinationID = existing.id
-      } else {
-        let group = BudgetGroup(name: suggestion.groupName, sortOrder: groups.count)
-        modelContext.insert(group)
-        destinationID = group.id
-      }
-      if let hidden = envelopes.first(where: {
-        $0.groupID == destinationID
-          && $0.name.localizedCaseInsensitiveCompare(suggestion.name) == .orderedSame
-          && $0.isHidden
-      }) {
-        hidden.isHidden = false
-        try modelContext.save()
-      } else {
-        try BudgetCommands.addEnvelope(
-          name: suggestion.name, symbol: "", groupID: destinationID,
-          order: envelopes.filter { $0.groupID == destinationID }.count,
-          in: modelContext
-        )
-      }
-      selected = nil
-      dismiss()
-    } catch {
-      message = error.localizedDescription
+    .sheet(item: $selected) { idea in
+      // The same editor as New Envelope, filled in from the idea; this list stays open after.
+      EnvelopeEditorScreen(groups: groups, idea: idea)
     }
   }
-}
-
-private struct EnvelopeSuggestion: Identifiable {
-  var name: String
-  var groupName: String
-  var id: String { groupName + "/" + name }
 }

@@ -54,8 +54,7 @@ struct EnvelopeDetailScreen: View {
   }
 
   private var totalTarget: Int64? {
-    let total = (envelope.targetMinor ?? 0) + scheduledTotal
-    return total > 0 ? total : nil
+    EnvelopeTargetPlanner().monthlyMinor(for: envelope, scheduledMinor: scheduledTotal, snapshot: snapshot)
   }
 
   /// Spending the scheduled bills don't already cover, so accepting it doesn't double count them.
@@ -186,7 +185,7 @@ struct EnvelopeDetailScreen: View {
             MoneyText(minor: totalTarget, currencyCode: currencyCode)
           }
             .fontWeight(.semibold)
-          if !scheduledContributions.isEmpty {
+          if !scheduledContributions.isEmpty && envelope.targetDate == nil {
             LabeledContent("Your target") {
               MoneyText(minor: envelope.targetMinor ?? 0, currencyCode: currencyCode)
             }
@@ -194,8 +193,14 @@ struct EnvelopeDetailScreen: View {
               ScheduledTargetRow(contribution: contribution, currencyCode: currencyCode)
             }
           }
-          if let date = envelope.targetDate {
-            LabeledContent("Target date", value: date.formatted(date: .abbreviated, time: .omitted))
+          if let date = envelope.targetDate, let goal = envelope.targetMinor {
+            LabeledContent("Goal") {
+              Text("\(BudgetMoney.formatted(goal, currencyCode: currencyCode)) by \(date.formatted(.dateTime.month(.wide).year()))")
+            }
+            let months = EnvelopeTargetPlanner().monthsLeft(from: snapshot.month, through: date)
+            Text("Spread over \(months) \(months == 1 ? "month" : "months"), including this one. The amount adjusts as you save.")
+              .font(.bowFootnote)
+              .foregroundStyle(Bow.inkSoft)
           }
           let remaining = max(0, totalTarget - max(0, snapshot.assigned[envelope.id, default: 0]))
           Text(remaining == 0
@@ -413,9 +418,9 @@ struct EnvelopeDetailScreen: View {
     let target = BudgetBucket.envelope(envelope.id)
     if snapshot.readyToAssignMinor > 0 {
       onMoveMoney(.readyToAssign, target)
-    } else if let funded = envelopes.first(where: {
-      $0.id != envelope.id && snapshot.available(for: $0.id) > 0
-    }) {
+    } else if let funded = envelopes.filter({
+      $0.id != envelope.id && !$0.isHidden && $0.paymentAccountID == nil && snapshot.available(for: $0.id) > 0
+    }).max(by: { snapshot.available(for: $0.id) < snapshot.available(for: $1.id) }) {
       onMoveMoney(.envelope(funded.id), target)
     } else if let card = accounts.first(where: {
       $0.kind == .credit && snapshot.paymentAvailable[$0.id, default: 0] > 0

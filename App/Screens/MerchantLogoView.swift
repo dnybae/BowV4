@@ -13,6 +13,8 @@ struct MerchantLogoView: View {
   var style: Style = .plain
   @ScaledMetric private var scale: CGFloat = 1
   @State private var remoteLogo: BrandLogo?
+  /// Watched so turning Merchant logos off or on updates every logo at once.
+  @AppStorage(MerchantLogoSettings.key) private var showsMerchantLogos = true
 
   enum Style {
     /// A grey well, for list rows.
@@ -44,7 +46,7 @@ struct MerchantLogoView: View {
   }
 
   private var logoURL: URL? {
-    guard kind != .transfer, appearance?.source == .logoDev else { return nil }
+    guard showsMerchantLogos, kind != .transfer, appearance?.source == .logoDev else { return nil }
     return LogoDev.logoURL(
       domain: appearance?.domain ?? domain,
       merchantName: appearance?.name ?? merchantName

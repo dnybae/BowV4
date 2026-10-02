@@ -34,18 +34,31 @@ struct BowToast: Identifiable, Equatable {
   var message: String
   var systemImage: String
   var feedback: Feedback = .success
+  /// Puts back what the toast confirms. Shown as an Undo button; the toast stays up longer.
+  var undo: (@MainActor () -> Void)? = nil
+
+  static func == (lhs: BowToast, rhs: BowToast) -> Bool { lhs.id == rhs.id }
+
+  /// Long enough to reach Undo, short enough not to linger.
+  var duration: Duration { undo == nil ? .seconds(2.4) : .seconds(5) }
 
   enum Feedback: Equatable {
     /// A save or a goal reached.
     case success
     /// Money moved between envelopes.
     case moved
+    /// Something removed: deleted, ignored or skipped.
+    case removed
     /// Information only.
     case quiet
   }
 
   static func saved(_ message: String) -> BowToast {
     BowToast(message: message, systemImage: "checkmark.circle.fill")
+  }
+
+  static func deleted(_ message: String, undo: (@MainActor () -> Void)? = nil) -> BowToast {
+    BowToast(message: message, systemImage: "trash.circle.fill", feedback: .removed, undo: undo)
   }
 
   static func moved(_ message: String) -> BowToast {
@@ -85,7 +98,7 @@ private struct BowToastHost: ViewModifier {
             .padding(.top, Self.navigationBarClearance)
             .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
             .task(id: toast.id) {
-              try? await Task.sleep(for: .seconds(2.4))
+              try? await Task.sleep(for: toast.duration)
               if !Task.isCancelled { center?.dismiss(toast) }
             }
         }
@@ -97,6 +110,7 @@ private struct BowToastHost: ViewModifier {
         switch center?.current?.feedback {
         case .success: return .success
         case .moved: return .impact(weight: .light)
+        case .removed: return .warning
         case .quiet, nil: return nil
         }
       }
@@ -111,26 +125,39 @@ private struct BowToastView: View {
   var onDismiss: () -> Void
 
   var body: some View {
-    Button(action: onDismiss) {
-      Label {
-        Text(toast.message)
-          .font(.bowSubhead.weight(.semibold))
-          .foregroundStyle(Bow.ink)
-          .monospacedDigit()
-          .fixedSize(horizontal: false, vertical: true)
-      } icon: {
-        Image(systemName: toast.systemImage)
-          .foregroundStyle(Bow.fundedInk)
+    HStack(spacing: Bow.Space.s2) {
+      Button(action: onDismiss) {
+        Label {
+          Text(toast.message)
+            .font(.bowSubhead.weight(.semibold))
+            .foregroundStyle(Bow.ink)
+            .monospacedDigit()
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+          Image(systemName: toast.systemImage)
+            .foregroundStyle(toast.feedback == .removed ? Bow.inkSoft : Bow.fundedInk)
+        }
+        .contentShape(.capsule)
       }
-      .padding(.horizontal, Bow.Space.s4)
-      .padding(.vertical, Bow.Space.s3)
-      .contentShape(.capsule)
+      .buttonStyle(.plain)
+      .accessibilityHint("Dismisses the message")
+      if let undo = toast.undo {
+        Button("Undo") {
+          undo()
+          onDismiss()
+        }
+        .font(.bowSubhead.weight(.semibold))
+        .foregroundStyle(Bow.bowInk)
+        .frame(minHeight: 44)
+        .contentShape(.rect)
+      }
     }
-    .buttonStyle(.plain)
+    .padding(.horizontal, Bow.Space.s4)
+    .padding(.vertical, toast.undo == nil ? Bow.Space.s3 : Bow.Space.s1)
     .background {
       if reduceTransparency { Capsule().fill(Bow.card) }
     }
     .glassEffect(reduceTransparency ? .identity : .regular.interactive(), in: .capsule)
-    .accessibilityHint("Dismisses the message")
   }
 }

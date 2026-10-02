@@ -195,7 +195,9 @@ struct CoverEnvelopeScreen: View {
     guard case .envelope(let id) = bucket, let donor = envelopes.first(where: { $0.id == id }) else {
       return leftover > 0 ? .funded : .empty
     }
-    let target = (donor.targetMinor ?? 0) + scheduledTargets[id, default: 0]
+    let target = EnvelopeTargetPlanner().monthlyMinor(
+      for: donor, scheduledMinor: scheduledTargets[id, default: 0], snapshot: snapshot
+    ) ?? 0
     let assignedAfter = snapshot.assigned[id, default: 0] - draft.amountMinor(for: bucket)
     if target > 0 && assignedAfter < target { return .needs }
     return leftover > 0 ? .funded : .empty

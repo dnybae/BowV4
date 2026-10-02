@@ -12,20 +12,29 @@ struct AccountsScreen: View {
   var onSelectTransaction: (UUID) -> Void
   /// Opens a new transaction already set to this account.
   var onAddTransaction: (UUID) -> Void
+  /// An account was deleted from its editor; close its detail screen.
+  var onAccountRemoved: () -> Void = {}
   @Query private var simpleFINLinks: [SimpleFINAccountLink]
   /// Held in @State, not @AppStorage, so collapsing animates; saved to UserDefaults on change.
   @State private var collapsedKinds = Self.savedCollapsedKinds
   @State private var editingAccount: BudgetAccount?
+  @State private var showsClosedAccounts = false
   @Namespace private var zoomNamespace
 
   private var balances: [UUID: Int64] { balanceReport.balances }
 
+  private var openAccounts: [BudgetAccount] { accounts.filter { $0.closedAt == nil } }
+
+  private var closedAccounts: [BudgetAccount] {
+    accounts.filter { $0.closedAt != nil }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+  }
+
   private var hasOnBudgetAccounts: Bool {
-    accounts.contains { $0.kind == .cash || $0.kind == .credit }
+    openAccounts.contains { $0.kind == .cash || $0.kind == .credit }
   }
 
   private var hasOffBudgetAccounts: Bool {
-    accounts.contains { $0.kind == .asset || $0.kind == .liability }
+    openAccounts.contains { $0.kind == .asset || $0.kind == .liability }
   }
 
   private static let collapsedGroupsKey = "bow.collapsedAccountGroups"
@@ -64,6 +73,10 @@ struct AccountsScreen: View {
               accountGroup(.liability, title: "Loans")
             }
           }
+
+          if !closedAccounts.isEmpty {
+            closedGroup
+          }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Bow.Space.s5)
@@ -100,7 +113,7 @@ struct AccountsScreen: View {
     }
     .sheet(item: $editingAccount) { account in
       NavigationStack {
-        AccountEditorScreen(currencyCode: currencyCode, account: account)
+        AccountEditorScreen(currencyCode: currencyCode, account: account, onDeleted: onAccountRemoved)
       }
     }
   }
@@ -123,7 +136,7 @@ struct AccountsScreen: View {
   /// One kind of account, as separate cards like Budget's envelopes, under the same header.
   @ViewBuilder
   private func accountGroup(_ kind: BudgetAccountKind, title: String) -> some View {
-    let matching = accounts.filter { $0.kind == kind }.sorted { $0.name < $1.name }
+    let matching = openAccounts.filter { $0.kind == kind }.sorted { $0.name < $1.name }
     if !matching.isEmpty {
       let total = matching.reduce(0) { $0 + balances[$1.id, default: 0] }
       let isCollapsed = collapsedKinds.contains(kind)
@@ -144,6 +157,26 @@ struct AccountsScreen: View {
           card: accountCard
         )
       }
+    }
+  }
+
+  /// Closed accounts, folded away under one header until asked for.
+  private var closedGroup: some View {
+    VStack(alignment: .leading, spacing: Bow.Space.s2) {
+      BowGroupHeader(name: "Closed", isCollapsed: !showsClosedAccounts, onToggle: {
+        withAnimation(Bow.stackMotion(reduceMotion: reduceMotion)) { showsClosedAccounts.toggle() }
+      }) {
+        Text("\(closedAccounts.count)")
+          .foregroundStyle(Bow.inkSoft)
+      }
+      .padding(.leading, Bow.Space.s1)
+      BowCardStack(
+        items: closedAccounts,
+        isCollapsed: !showsClosedAccounts,
+        collapsedLabel: Text("Closed, ^[\(closedAccounts.count) account](inflect: true), collapsed"),
+        onExpand: { withAnimation(Bow.stackMotion(reduceMotion: reduceMotion)) { showsClosedAccounts = true } },
+        card: accountCard
+      )
     }
   }
 
@@ -212,7 +245,7 @@ struct AccountsScreen: View {
       BowItemCard {
         layout {
           if !dynamicTypeSize.isAccessibilitySize {
-            AccountLogoView(appearance: account.logoAppearance, systemImage: account.kind.systemImage, size: 36)
+            AccountLogoView(appearance: account.logoAppearance, systemImage: account.accountType.systemImage, size: 36)
           }
           VStack(alignment: .leading, spacing: 2) {
             Text(account.name)
@@ -258,6 +291,8 @@ private struct AccountDetailScreen: View {
   @State private var showingReconciliation = false
   @State private var feed = TransactionFeedModel()
   @State private var hasLoadedFeed = false
+  /// Bumped by every save, so the ledger shows edits made from any sheet.
+  @State private var refreshVersion = 0
 
   private var link: SimpleFINAccountLink? {
     simpleFINLinks.first { $0.localAccountID == account.id }
@@ -299,7 +334,7 @@ private struct AccountDetailScreen: View {
             amountMinor: balanceMinor,
             currencyCode: currencyCode
           ) {
-            AccountLogoView(appearance: account.logoAppearance, systemImage: account.kind.systemImage, size: 64, style: .glossy)
+            AccountLogoView(appearance: account.logoAppearance, systemImage: account.accountType.systemImage, size: 64, style: .glossy)
           }
           if !reconcileStats.isEmpty {
             BowStatStrip(stats: reconcileStats, currencyCode: currencyCode)
@@ -328,13 +363,11 @@ private struct AccountDetailScreen: View {
         .listRowBackground(Bow.card)
       } else if feed.items.isEmpty {
         Section("Ledger") {
+          // The Add tile above is the action, so the empty state only explains.
           ContentUnavailableView {
             Label("No transactions in \(account.name) yet", systemImage: "list.bullet.rectangle")
           } description: {
-            Text("Add one by hand, or link this account to your bank to bring them in automatically.")
-          } actions: {
-            Button("Add Transaction", systemImage: "plus", action: onAddTransaction)
-              .bowPrimaryButton(size: .regular)
+            Text("Tap Add above to enter one by hand, or link this account to your bank to bring them in automatically.")
           }
         }
         .listRowBackground(Bow.card)
@@ -347,14 +380,10 @@ private struct AccountDetailScreen: View {
                 amountMinor: transaction.transferAccountID == account.id
                   ? -transaction.amountMinor : transaction.amountMinor
               )
-              if transaction.isBalanceAdjustment {
+              Button {
+                onSelectTransaction(transaction.id)
+              } label: {
                 TransactionRowView(model: model, currencyCode: currencyCode, options: .hidesAccount)
-              } else {
-                Button {
-                  onSelectTransaction(transaction.id)
-                } label: {
-                  TransactionRowView(model: model, currencyCode: currencyCode, options: .hidesAccount)
-                }
               }
             }
           }
@@ -374,7 +403,13 @@ private struct AccountDetailScreen: View {
     .bowAnimation(value: isFirstLoad)
     .navigationTitle(account.name)
     .navigationBarTitleDisplayMode(.inline)
-    .task(id: account.id) {
+    .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+      refreshVersion += 1
+    }
+    .task(id: AccountLedgerKey(accountID: account.id, refreshVersion: refreshVersion)) {
+      // Several saves in a row (a sync, an edit with an adjustment) reload once.
+      if hasLoadedFeed { try? await Task.sleep(for: .milliseconds(150)) }
+      guard !Task.isCancelled else { return }
       await feed.reload(container: modelContext.container, searchText: "", filter: TransactionFilter(),
                         scopedAccountID: account.id, includeUncategorizedCount: false,
                         includesBalanceAdjustments: true)
@@ -384,4 +419,9 @@ private struct AccountDetailScreen: View {
       ReconciliationScreen(account: account, currencyCode: currencyCode)
     }
   }
+}
+
+private struct AccountLedgerKey: Hashable {
+  var accountID: UUID
+  var refreshVersion: Int
 }

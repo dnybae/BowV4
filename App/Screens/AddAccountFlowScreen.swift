@@ -6,6 +6,8 @@ struct AddAccountFlowScreen: View {
   @Query private var connections: [SimpleFINConnection]
   var currencyCode: String
   var isDemoMode: Bool
+  /// A hand-tracked account was created; the bank route reports nothing because it imports.
+  var onCreated: ((BudgetAccount) -> Void)? = nil
   @State private var path: [AccountSetupRoute] = []
 
   var body: some View {
@@ -40,7 +42,7 @@ struct AddAccountFlowScreen: View {
           NavigationLink(value: AccountSetupRoute.manual) {
             optionRow(
               title: "Track it yourself",
-              detail: "Enter a balance and add transactions by hand, or import a bank file.",
+              detail: "Enter a balance and add transactions by hand. You can also import bank files from Settings.",
               note: "Works with any bank. Stays on this iPhone.",
               symbol: "pencil"
             )
@@ -63,7 +65,10 @@ struct AddAccountFlowScreen: View {
         case .bank:
           SimpleFINAccountSetupScreen(isDemoMode: isDemoMode, onDone: { dismiss() })
         case .manual:
-          AccountEditorScreen(currencyCode: currencyCode) { _ in dismiss() }
+          AccountEditorScreen(currencyCode: currencyCode, isInFlow: true, onSaved: { account in
+            onCreated?(account)
+            dismiss()
+          })
         }
       }
     }

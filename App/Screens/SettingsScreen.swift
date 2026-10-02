@@ -9,6 +9,7 @@ struct SettingsScreen: View {
   @AppStorage("bow.demoMode") private var isDemoMode = false
   @AppStorage("bow.demoResetVersion") private var demoResetVersion = 0
   @AppStorage("bow.demoScenario") private var demoScenarioRaw = DemoScenario.showcase.rawValue
+  @AppStorage(MerchantLogoSettings.key) private var showsMerchantLogos = true
   @Query private var profiles: [BudgetProfile]
   @Query private var groups: [BudgetGroup]
   @Query private var envelopes: [BudgetEnvelope]
@@ -74,20 +75,21 @@ struct SettingsScreen: View {
         }
         .listRowBackground(Bow.card)
 
-        Section("More") {
+        Section {
           NavigationLink {
-            SettingsPlaceholderScreen(
-              title: "Home inventory",
-              description: "A place to track personal items and home supplies is coming soon.",
-              systemImage: "shippingbox"
-            )
+            DataManagementScreen(appVersion: version)
           } label: {
-            Label("Home inventory", systemImage: "shippingbox")
+            Label("Export or restore", systemImage: "externaldrive")
           }
+        } header: {
+          Text("Your data")
+        } footer: {
+          Text("Bow keeps your budget on this iPhone. Export a backup to keep a copy somewhere safe.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
 
-        Section("Preferences") {
+        Section {
           Picker(selection: $appearanceRaw) {
             ForEach(AppAppearance.allCases) { appearance in
               Text(appearance.title).tag(appearance.rawValue)
@@ -99,25 +101,14 @@ struct SettingsScreen: View {
             }
           }
           .pickerStyle(.menu)
-          NavigationLink {
-            SettingsPlaceholderScreen(
-              title: "App icon",
-              description: "Choose from alternate Bow app icons.",
-              systemImage: "app.badge",
-              isComingSoon: true
-            )
-          } label: {
-            ComingSoonRowLabel(title: "App icon", systemImage: "app.badge")
+          Toggle(isOn: $showsMerchantLogos) {
+            Label("Merchant logos", systemImage: "storefront")
           }
-          NavigationLink {
-            SettingsPlaceholderScreen(
-              title: "Notifications",
-              description: "Notification controls will appear here when reminders are available.",
-              systemImage: "bell"
-            )
-          } label: {
-            Label("Notifications", systemImage: "bell")
-          }
+        } header: {
+          Text("Preferences")
+        } footer: {
+          Text("Merchant logos are fetched from logo.dev using a store’s website. No amounts or account details are sent.")
+            .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
 
@@ -128,20 +119,12 @@ struct SettingsScreen: View {
             Label("Storage", systemImage: "internaldrive")
           }
           NavigationLink {
-            SettingsPlaceholderScreen(
-              title: "Privacy policy",
-              description: "The privacy policy has not been published in the app yet.",
-              systemImage: "hand.raised"
-            )
+            LegalDocumentScreen(document: .privacy)
           } label: {
             Label("Privacy policy", systemImage: "hand.raised")
           }
           NavigationLink {
-            SettingsPlaceholderScreen(
-              title: "Terms of use",
-              description: "The terms of use have not been published in the app yet.",
-              systemImage: "doc.text"
-            )
+            LegalDocumentScreen(document: .terms)
           } label: {
             Label("Terms of use", systemImage: "doc.text")
           }
@@ -149,18 +132,13 @@ struct SettingsScreen: View {
         .listRowBackground(Bow.card)
 
         Section("Support") {
-          Button("Leave a review", systemImage: "star.bubble") {
-            openURL(AppStoreLink.writeReview)
+          Link(destination: SupportLink.email(subject: "Bow \(version) feedback")) {
+            Label("Send feedback", systemImage: "bubble.left.and.text.bubble.right")
           }
-          NavigationLink {
-            SettingsPlaceholderScreen(
-              title: "Feedback",
-              description: "Send ideas and report problems directly from Bow.",
-              systemImage: "bubble.left.and.text.bubble.right",
-              isComingSoon: true
-            )
-          } label: {
-            ComingSoonRowLabel(title: "Feedback", systemImage: "bubble.left.and.text.bubble.right")
+          if let reviewURL = AppStoreLink.writeReview {
+            Button("Leave a review", systemImage: "star.bubble") {
+              openURL(reviewURL)
+            }
           }
         }
         .listRowBackground(Bow.card)

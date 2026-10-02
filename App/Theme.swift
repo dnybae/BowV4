@@ -230,6 +230,7 @@ struct StatusPill: View {
             Text(text)
                 .monospacedDigit()
                 .contentTransition(.numericText())
+                .fadingTail(fadeWidth: 16)
         }
         .font(.bowAmountSm)
         .foregroundStyle(inkColor ?? state.ink)

@@ -1,9 +1,8 @@
 import SwiftUI
 
 /// A Budget screen row: status ring, name and a color-coded status pill. Nothing else.
-/// Used for envelopes and card payments. When the name and pill don't fit on one line
-/// (a narrow phone, a long name, larger text) the pill moves under the name instead of
-/// breaking the name mid-word.
+/// Used for envelopes and card payments. Always one line: a name too long for the row fades
+/// out at its end. At accessibility text sizes the pill moves under the name.
 struct BudgetStatusRow: View {
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   var name: String
@@ -24,21 +23,13 @@ struct BudgetStatusRow: View {
           pill
         }
       } else {
-        ViewThatFits(in: .horizontal) {
-          HStack(spacing: Bow.Space.s3) {
-            ring
-            nameText.lineLimit(1)
-            Spacer(minLength: Bow.Space.s2)
-            pill
-          }
-          HStack(spacing: Bow.Space.s3) {
-            ring
-            VStack(alignment: .leading, spacing: Bow.Space.s1) {
-              nameText.lineLimit(2)
-              pill
-            }
-            Spacer(minLength: 0)
-          }
+        // One line: the pill keeps its full amount and a long name fades out before it.
+        HStack(spacing: Bow.Space.s3) {
+          ring
+          nameText
+            .fadingTail()
+            .frame(maxWidth: .infinity, alignment: .leading)
+          pill.layoutPriority(1)
         }
       }
     }

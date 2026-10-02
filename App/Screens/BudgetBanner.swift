@@ -58,15 +58,19 @@ struct BudgetBanner: View {
         }
       }
       VStack(alignment: .leading, spacing: Bow.Space.s1) {
-        // Amount and title share a line when they fit; on narrow phones the title wraps below.
-        ViewThatFits(in: .horizontal) {
-          HStack(alignment: .firstTextBaseline, spacing: 5) {
-            amount
-            title.lineLimit(1)
-          }
+        // One line: the amount keeps its full width first and the title fades out if it's cut.
+        // At accessibility sizes they stack and wrap instead.
+        if dynamicTypeSize.isAccessibilitySize {
           VStack(alignment: .leading, spacing: 0) {
             amount
+              .lineLimit(1)
+              .minimumScaleFactor(0.7)
             title
+          }
+        } else {
+          HStack(alignment: .firstTextBaseline, spacing: 5) {
+            amount.fadingTail().layoutPriority(1)
+            title.fadingTail()
           }
         }
         if !isHero {
@@ -100,8 +104,6 @@ struct BudgetBanner: View {
     MoneyText(minor: notice.amountMinor, currencyCode: currencyCode)
       .font(isHero ? .bowTitle : .bowAmount)
       .foregroundStyle(ink)
-      .lineLimit(1)
-      .minimumScaleFactor(0.7)
   }
 
   private var title: some View {

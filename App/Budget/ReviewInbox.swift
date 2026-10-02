@@ -41,14 +41,14 @@ struct ReviewInbox {
         $0.status == .review
           || ($0.status == .imported && $0.transactionID.flatMap { id in
             transactionByID[id].map {
-              $0.needsApproval || ($0.kind == .expense && $0.envelopeID == nil)
+              $0.needsApproval || $0.needsEnvelope
             }
           } == true)
       )
     }
     let bankTransactionIDs = Set(unresolved.compactMap(\.transactionID))
     var bank = transactions.filter {
-      ($0.needsApproval || ($0.kind == .expense && $0.envelopeID == nil))
+      ($0.needsApproval || $0.needsEnvelope)
         && !bankTransactionIDs.contains($0.id)
     }
       .map(ReviewEntry.transaction)

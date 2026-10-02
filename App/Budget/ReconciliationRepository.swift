@@ -17,7 +17,8 @@ actor ReconciliationRepository {
       try Task.checkCancellation()
       var request = FetchDescriptor<BudgetTransaction>(
         predicate: #Predicate {
-          $0.date < end && ($0.accountID == accountID || $0.transferAccountID == accountID)
+          $0.date < end && !$0.isBeforeStart
+            && ($0.accountID == accountID || $0.transferAccountID == accountID)
         }, sortBy: [SortDescriptor(\.date, order: .reverse),
                    SortDescriptor(\.id, order: .reverse)]
       )
@@ -55,7 +56,8 @@ actor ReconciliationRepository {
       let context = ModelContext(modelContainer)
       var request = FetchDescriptor<BudgetTransaction>(
         predicate: #Predicate {
-          $0.date < end && ($0.accountID == accountID || $0.transferAccountID == accountID)
+          $0.date < end && !$0.isBeforeStart
+            && ($0.accountID == accountID || $0.transferAccountID == accountID)
         }, sortBy: [SortDescriptor(\.id)]
       )
       request.fetchLimit = 512

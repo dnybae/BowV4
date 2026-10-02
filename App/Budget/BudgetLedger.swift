@@ -82,7 +82,8 @@ struct BudgetLedger {
         accountID: $0.accountID,
         transferAccountID: $0.transferAccountID,
         envelopeID: $0.envelopeID,
-        kind: $0.kind
+        kind: $0.kind,
+        isBeforeStart: $0.isBeforeStart
       )
     }
   }

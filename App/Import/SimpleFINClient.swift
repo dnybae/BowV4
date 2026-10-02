@@ -109,8 +109,9 @@ struct SimpleFINRemoteTransaction: Decodable, Sendable {
     return try? encoder.encode(extra)
   }
 
+  /// The calendar day the bank reports, stored like every other transaction day.
   var date: Date {
-    Date(timeIntervalSince1970: posted > 0 ? posted : (transactedAt ?? posted))
+    BowDay.fromBankTimestamp(posted > 0 ? posted : (transactedAt ?? posted))
   }
 
   var amountMinor: Int64? {

@@ -50,7 +50,7 @@ struct BudgetCalculator {
 
     let events: [LedgerEvent] =
       allocations.filter { $0.date < nextMonth }.map { .allocation($0) }
-      + transactions.filter { $0.date < nextMonth }.map { .transaction($0) }
+      + transactions.filter { $0.date < nextMonth && !$0.isBeforeStart }.map { .transaction($0) }
     let orderedEvents = events.sorted {
       if $0.date != $1.date { return $0.date < $1.date }
       if $0.createdAt != $1.createdAt { return $0.createdAt < $1.createdAt }
@@ -223,12 +223,12 @@ struct BudgetCalculator {
       .reduce(Int64(0)) { $0 + accountBalances[$1.id, default: 0] }
     let envelopeFunds = cashAvailable.values.reduce(Int64(0), +)
     let cardPaymentFunds = paymentAvailable.values.reduce(Int64(0), +)
-    let todayMonth = calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
-    let assignedInFuture = assignedInFutureOverride ?? allocations.filter { monthStart >= todayMonth && $0.date >= nextMonth }.reduce(Int64(0)) { total, allocation in
-      let fromReady = allocation.source == .readyToAssign
-      let toReady = allocation.target == .readyToAssign
-      return total + (fromReady ? allocation.amountMinor : 0) - (toReady ? allocation.amountMinor : 0)
-    }
+    // Cash overspending shows on its envelope this month and comes out of Ready to Assign when
+    // the month ends, as in YNAB. Until then Ready to Assign still holds that money, so covering
+    // the envelope from Ready to Assign lowers it, and covering from another envelope doesn't.
+    let uncoveredCashOverspending = cashShortfall.values.reduce(Int64(0), +)
+    let assignedInFuture = assignedInFutureOverride
+      ?? futureReservation(after: monthStart, today: Date(), allocations: allocations)
     let creditShortfallByEnvelope = Dictionary(
       creditShortfall.map { ($0.key.envelopeID, $0.value) },
       uniquingKeysWith: +
@@ -243,7 +243,8 @@ struct BudgetCalculator {
       paymentAvailable: paymentAvailable,
       assigned: assigned,
       activity: activity,
-      readyToAssignMinor: cashTotal - envelopeFunds - cardPaymentFunds - assignedInFuture,
+      readyToAssignMinor: cashTotal - envelopeFunds - cardPaymentFunds - assignedInFuture
+        + uncoveredCashOverspending,
       assignedInFutureMinor: assignedInFuture,
       cashTotalMinor: cashTotal,
       netWorthMinor: balanceReport.netWorthMinor
@@ -257,6 +258,32 @@ struct BudgetCalculator {
         categoryCardReserve: categoryCardReserve
       )
     )
+  }
+
+  /// Money later months take from Ready to Assign that this month must keep aside.
+  ///
+  /// Each later month's net draw is added up in order, and the largest running total is
+  /// what has to be reserved now. Money a later month gives back can only cover a draw in that
+  /// month or after it, and never frees money today: until that month, the money is still in its
+  /// envelope. Past months reserve nothing; their budgets are closed.
+  func futureReservation(after month: Date, today: Date, allocations: [AllocationLedgerItem]) -> Int64 {
+    let monthStart = calendar.dateInterval(of: .month, for: month)?.start ?? month
+    let todayMonth = calendar.dateInterval(of: .month, for: today)?.start ?? today
+    guard monthStart >= todayMonth,
+          let nextMonth = calendar.date(byAdding: .month, value: 1, to: monthStart) else { return 0 }
+    var netByMonth: [Date: Int64] = [:]
+    for allocation in allocations where allocation.date >= nextMonth {
+      let key = calendar.dateInterval(of: .month, for: allocation.date)?.start ?? allocation.date
+      if allocation.source == .readyToAssign { netByMonth[key, default: 0] += allocation.amountMinor }
+      if allocation.target == .readyToAssign { netByMonth[key, default: 0] -= allocation.amountMinor }
+    }
+    var running: Int64 = 0
+    var reserved: Int64 = 0
+    for key in netByMonth.keys.sorted() {
+      running += netByMonth[key, default: 0]
+      reserved = max(reserved, running)
+    }
+    return reserved
   }
 
   struct Result {
@@ -355,6 +382,8 @@ struct TransactionLedgerItem {
   var transferAccountID: UUID?
   var envelopeID: UUID?
   var kind: BudgetTransactionKind
+  /// Already part of an account's starting balance; skipped by every calculation.
+  var isBeforeStart: Bool = false
 }
 
 struct BudgetSnapshot: Sendable {

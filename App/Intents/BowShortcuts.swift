@@ -7,38 +7,34 @@ struct LogBowTransactionIntent: AppIntent {
 
   @Parameter(title: "Amount") var amount: Double
   @Parameter(title: "Payee") var payee: String
-  @Parameter(title: "Account") var account: String
-  @Parameter(title: "Envelope") var envelope: String?
+  @Parameter(title: "Account") var account: BowAccountEntity
+  @Parameter(title: "Envelope") var envelope: BowEnvelopeEntity
 
-  @MainActor
+  static var parameterSummary: some ParameterSummary {
+    Summary("Log \(\.$amount) at \(\.$payee) from \(\.$envelope) using \(\.$account)")
+  }
+
   func perform() async throws -> some IntentResult & ProvidesDialog {
     guard amount > 0, amount.isFinite, amount < Double(Int64.max) / 100 else {
       throw BowShortcutError.invalidAmount
     }
-    let container = try BowModelStore.makeContainer()
-    let context = container.mainContext
-    let accounts = try context.fetch(FetchDescriptor<BudgetAccount>())
-    let matchingAccounts = accounts.filter { $0.name.localizedCaseInsensitiveCompare(account) == .orderedSame }
-    guard matchingAccounts.count == 1, let source = matchingAccounts.first,
-          source.kind == .cash || source.kind == .credit else {
-      throw BowShortcutError.accountNotFound
-    }
-    let envelopes = try context.fetch(FetchDescriptor<BudgetEnvelope>())
-    let matchingEnvelopes = envelope.map { requested in
-      envelopes.filter { $0.paymentAccountID == nil &&
-        $0.name.localizedCaseInsensitiveCompare(requested) == .orderedSame }
-    } ?? []
-    if envelope != nil && matchingEnvelopes.count != 1 { throw BowShortcutError.envelopeNotFound }
-    let selected = matchingEnvelopes.first
     let minor = Int64((amount * 100).rounded())
-    do {
-      try BudgetCommands.addTransaction(
-        kind: .expense, account: source, destination: nil, envelopeID: selected?.id,
-        amountMinor: minor, date: Date(), payee: payee, notes: "Added with Siri",
-        in: context
-      )
-    } catch { throw BowShortcutError.couldNotRecord }
-    return .result(dialog: "Recorded \(BudgetMoney.formatted(minor, currencyCode: source.currencyCode)) at \(payee) in Bow.")
+    let accountID = account.id, envelopeID = envelope.id, payee = payee
+    let currencyCode = try await MainActor.run {
+      let context = try BowModelStore.shared().mainContext
+      guard let source = try context.fetch(FetchDescriptor<BudgetAccount>()).first(where: { $0.id == accountID }),
+            source.closedAt == nil else { throw BowShortcutError.accountNotFound }
+      do {
+        try BudgetCommands.addTransaction(
+          kind: .expense, account: source, destination: nil, envelopeID: envelopeID,
+          amountMinor: minor, date: Date(), payee: payee, notes: "", in: context
+        )
+      } catch {
+        throw BowShortcutError.couldNotRecord(error.localizedDescription)
+      }
+      return source.currencyCode
+    }
+    return .result(dialog: "Recorded \(BudgetMoney.formatted(minor, currencyCode: currencyCode)) at \(payee) in Bow.")
   }
 }
 
@@ -46,20 +42,25 @@ struct CheckBowEnvelopeIntent: AppIntent {
   static var title: LocalizedStringResource = "Check Envelope Balance"
   static var description = IntentDescription("Ask how much is available in a Bow envelope.")
 
-  @Parameter(title: "Envelope") var envelope: String
+  @Parameter(title: "Envelope") var envelope: BowEnvelopeEntity
 
-  @MainActor
+  static var parameterSummary: some ParameterSummary {
+    Summary("Check \(\.$envelope)")
+  }
+
   func perform() async throws -> some IntentResult & ProvidesDialog {
-    let container = try BowModelStore.makeContainer()
-    let context = container.mainContext
-    let envelopes = try context.fetch(FetchDescriptor<BudgetEnvelope>())
-    let matches = envelopes.filter { $0.name.localizedCaseInsensitiveCompare(envelope) == .orderedSame }
-    guard matches.count == 1, let selected = matches.first else { throw BowShortcutError.envelopeNotFound }
+    let envelopeID = envelope.id
+    let container = try await MainActor.run { try BowModelStore.shared() }
     let snapshot = try await BudgetSnapshotRepository(modelContainer: container).snapshot(month: Date())
-    let amount = selected.paymentAccountID.map { snapshot.paymentAvailable[$0, default: 0] }
-      ?? snapshot.available(for: selected.id)
-    let currency = try context.fetch(FetchDescriptor<BudgetProfile>()).first?.currencyCode ?? "USD"
-    return .result(dialog: "\(selected.name) has \(BudgetMoney.formatted(amount, currencyCode: currency)) available.")
+    let (name, currency) = try await MainActor.run {
+      let context = container.mainContext
+      guard let selected = try context.fetch(FetchDescriptor<BudgetEnvelope>()).first(where: { $0.id == envelopeID })
+      else { throw BowShortcutError.envelopeNotFound }
+      let currency = try context.fetch(FetchDescriptor<BudgetProfile>()).first?.currencyCode ?? "USD"
+      return (selected.name, currency)
+    }
+    let amount = snapshot.available(for: envelopeID)
+    return .result(dialog: "\(name) has \(BudgetMoney.formatted(amount, currencyCode: currency)) available.")
   }
 }
 
@@ -80,18 +81,86 @@ struct BowAppShortcuts: AppShortcutsProvider {
   }
 }
 
+// MARK: - Entities
+
+/// An open cash or credit card account, as Siri and Shortcuts offer it.
+struct BowAccountEntity: AppEntity {
+  static var typeDisplayRepresentation: TypeDisplayRepresentation = "Account"
+  static var defaultQuery = BowAccountQuery()
+  var id: UUID
+  var name: String
+
+  var displayRepresentation: DisplayRepresentation { DisplayRepresentation(title: "\(name)") }
+}
+
+struct BowAccountQuery: EntityStringQuery {
+  func entities(for identifiers: [UUID]) async throws -> [BowAccountEntity] {
+    try await all().filter { identifiers.contains($0.id) }
+  }
+
+  func entities(matching string: String) async throws -> [BowAccountEntity] {
+    try await all().filter { $0.name.localizedCaseInsensitiveContains(string) }
+  }
+
+  func suggestedEntities() async throws -> [BowAccountEntity] {
+    try await all()
+  }
+
+  private func all() async throws -> [BowAccountEntity] {
+    try await MainActor.run {
+      try BowModelStore.shared().mainContext.fetch(FetchDescriptor<BudgetAccount>())
+        .filter { ($0.kind == .cash || $0.kind == .credit) && $0.closedAt == nil }
+        .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        .map { BowAccountEntity(id: $0.id, name: $0.name) }
+    }
+  }
+}
+
+/// A spending envelope (not a card payment), as Siri and Shortcuts offer it.
+struct BowEnvelopeEntity: AppEntity {
+  static var typeDisplayRepresentation: TypeDisplayRepresentation = "Envelope"
+  static var defaultQuery = BowEnvelopeQuery()
+  var id: UUID
+  var name: String
+
+  var displayRepresentation: DisplayRepresentation { DisplayRepresentation(title: "\(name)") }
+}
+
+struct BowEnvelopeQuery: EntityStringQuery {
+  func entities(for identifiers: [UUID]) async throws -> [BowEnvelopeEntity] {
+    try await all().filter { identifiers.contains($0.id) }
+  }
+
+  func entities(matching string: String) async throws -> [BowEnvelopeEntity] {
+    try await all().filter { $0.name.localizedCaseInsensitiveContains(string) }
+  }
+
+  func suggestedEntities() async throws -> [BowEnvelopeEntity] {
+    try await all()
+  }
+
+  private func all() async throws -> [BowEnvelopeEntity] {
+    try await MainActor.run {
+      try BowModelStore.shared().mainContext.fetch(FetchDescriptor<BudgetEnvelope>())
+        .filter { $0.paymentAccountID == nil && !$0.isHidden }
+        .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        .map { BowEnvelopeEntity(id: $0.id, name: $0.name) }
+    }
+  }
+}
+
 private enum BowShortcutError: Error, CustomLocalizedStringResourceConvertible {
   case invalidAmount
   case accountNotFound
   case envelopeNotFound
-  case couldNotRecord
+  case couldNotRecord(String)
 
   var localizedStringResource: LocalizedStringResource {
     switch self {
     case .invalidAmount: "Enter an amount greater than zero."
-    case .accountNotFound: "Choose one existing cash or credit card account by name."
-    case .envelopeNotFound: "Choose one existing envelope by name."
-    case .couldNotRecord: "Bow couldn't record this transaction. Check the account and try again."
+    case .accountNotFound: "That account isn’t in Bow anymore. Choose another one."
+    case .envelopeNotFound: "That envelope isn’t in Bow anymore. Choose another one."
+    case .couldNotRecord(let reason): "Bow couldn’t record this transaction. \(reason)"
     }
   }
 }

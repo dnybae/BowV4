@@ -10,7 +10,10 @@ final class BudgetAccount {
   var currencyCode: String = "USD"
   var openingBalanceMinor: Int64 = 0
   var note: String = ""
+  /// The start of the day the starting balance is as of. Earlier transactions are history.
   var openedAt: Date = Date()
+  /// Set when the account is closed: it keeps its history but leaves pickers and totals.
+  var closedAt: Date? = nil
   var lastReconciledAt: Date? = nil
   var lastReconciledBalanceMinor: Int64? = nil
   var debtGoalStartMinor: Int64? = nil

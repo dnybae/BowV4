@@ -10,6 +10,8 @@ struct AccountBalanceCalculator {
   ) -> AccountBalanceReport {
     let included = accounts.filter { inclusive ? $0.openedAt <= cutoff : $0.openedAt < cutoff }
     let byID = Dictionary(uniqueKeysWithValues: included.map { ($0.id, $0) })
+    /// Accounts that exist but start after the cutoff: their transactions simply don't count yet.
+    let knownIDs = Set(accounts.map(\.id))
     var balances = Dictionary(uniqueKeysWithValues: included.map { ($0.id, $0.openingBalanceMinor) })
     var issues: [AccountBalanceIssue] = []
 
@@ -28,8 +30,9 @@ struct AccountBalanceCalculator {
       return $0.id.uuidString < $1.id.uuidString
     }
     for transaction in ordered where inclusive ? transaction.date <= cutoff : transaction.date < cutoff {
+      guard !transaction.isBeforeStart else { continue }
       guard let source = byID[transaction.accountID] else {
-        issues.append(.missingAccount(transaction.id))
+        if !knownIDs.contains(transaction.accountID) { issues.append(.missingAccount(transaction.id)) }
         continue
       }
       let (sourceBalance, sourceOverflow) = balances[source.id, default: 0]
@@ -41,7 +44,9 @@ struct AccountBalanceCalculator {
       if transaction.kind == .transfer {
         guard let destinationID = transaction.transferAccountID,
               let destination = byID[destinationID] else {
-          issues.append(.missingAccount(transaction.id))
+          if !(transaction.transferAccountID.map(knownIDs.contains) ?? false) {
+            issues.append(.missingAccount(transaction.id))
+          }
           balances[source.id] = sourceBalance
           continue
         }

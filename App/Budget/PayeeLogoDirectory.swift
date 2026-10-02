@@ -28,3 +28,11 @@ struct PayeeLogoDirectory {
 extension EnvironmentValues {
   @Entry var payeeLogoDirectory = PayeeLogoDirectory()
 }
+
+extension BudgetPayee {
+  /// Everything the logo directory reads, so it's rebuilt only when one of these changes.
+  var logoSignature: String {
+    ([id.uuidString, name, logoSourceRaw, merchantDomain ?? "", String(customLogoData?.count ?? 0)]
+      + bankNames).joined(separator: "|")
+  }
+}

@@ -60,7 +60,7 @@ struct SpendingTimeline {
         accountID: record.localAccountID, transferAccountID: linked?.transferAccountID,
         envelopeID: linked?.envelopeID, date: record.date,
         amountMinor: record.amountMinor,
-        isUncategorizedExpense: record.amountMinor < 0 && linked?.envelopeID == nil,
+        isUncategorizedExpense: record.amountMinor < 0 && (linked?.needsEnvelope ?? true),
         needsAttention: true,
         searchableText: [record.payee, record.memo, account?.name ?? "", envelope?.name ?? ""]
       ) else { continue }
@@ -86,9 +86,9 @@ struct SpendingTimeline {
     for transaction in transactions where !reviewedTransactionIDs.contains(transaction.id) {
       let pendingRecord = pendingByTransactionID[transaction.id]
       let needsReview = transaction.needsApproval
-        || (transaction.kind == .expense && transaction.envelopeID == nil)
+        || transaction.needsEnvelope
       let status: SpendingTimelineStatus?
-      if transaction.kind == .expense && transaction.envelopeID == nil {
+      if transaction.needsEnvelope {
         status = .chooseEnvelope
       } else if needsReview {
         status = .transactionReview
@@ -128,7 +128,7 @@ struct SpendingTimeline {
         transferAccountID: transaction.transferAccountID,
         envelopeID: transaction.envelopeID,
         date: transaction.date, amountMinor: transaction.amountMinor,
-        isUncategorizedExpense: transaction.kind == .expense && transaction.envelopeID == nil,
+        isUncategorizedExpense: transaction.needsEnvelope,
         needsAttention: true,
         isMatched: transaction.sourceRaw == "manualLinked",
         searchableText: [transaction.payee, transaction.notes,
@@ -141,7 +141,7 @@ struct SpendingTimeline {
         accountName: account?.name ?? "Account", envelopeName: envelope?.name,
         amountMinor: transaction.amountMinor, currencyCode: currencyCode,
         merchantDomain: transaction.merchantDomain, kind: transaction.kind,
-        status: transaction.kind == .expense && transaction.envelopeID == nil
+        status: transaction.needsEnvelope
           ? .chooseEnvelope : .transactionReview,
         isMatched: transaction.sourceRaw == "manualLinked",
         source: .transaction(transaction.id)

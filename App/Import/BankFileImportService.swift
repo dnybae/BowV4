@@ -86,6 +86,9 @@ struct BankFileImportService {
       } ?? false
       let scheduleNeedsReview = scheduledExpense.count > 1 || scheduleAlreadyRecorded
       let selectedEnvelopeID = matchedSchedule?.envelopeID ?? envelopeID
+      // Rows from before the account's starting balance come in as history: the starting
+      // balance already includes them, so they need no envelope and change no balance.
+      let beforeStart = BowDay.normalized(row.date) < BowDay.start(of: account.openedAt)
       switch proposal.decision {
       case .alreadyImported:
         summary.skipped += 1
@@ -112,7 +115,7 @@ struct BankFileImportService {
           account.lastReconciledBalanceMinor = nil
         }
       case .createNew where !scheduledTransfer && !scheduleNeedsReview
-        && (row.amountMinor >= 0 || selectedEnvelopeID != nil):
+        && (row.amountMinor >= 0 || selectedEnvelopeID != nil || beforeStart):
         let transaction = BudgetTransaction(
           accountID: account.id, envelopeID: selectedEnvelopeID, date: row.date,
           amountMinor: row.amountMinor, payee: row.payee, notes: "",
@@ -125,11 +128,7 @@ struct BankFileImportService {
           transaction.scheduleID = matchedSchedule.id
           transaction.scheduledFor = row.date
         }
-        if row.date < account.openedAt {
-          let (adjusted, overflow) = account.openingBalanceMinor.subtractingReportingOverflow(row.amountMinor)
-          guard !overflow else { throw BankFileImportError.balanceOverflow }
-          account.openingBalanceMinor = adjusted
-        }
+        transaction.isBeforeStart = beforeStart
         context.insert(transaction)
         let record = record(for: proposal, account: account, in: context)
         record.transactionID = transaction.id
@@ -144,7 +143,7 @@ struct BankFileImportService {
         summary.needsReview += 1
       }
       if let reconciled = account.lastReconciledAt, row.date <= reconciled,
-         case .createNew = proposal.decision, selectedEnvelopeID != nil || row.amountMinor >= 0 {
+         case .createNew = proposal.decision, selectedEnvelopeID != nil || row.amountMinor >= 0 || beforeStart {
         account.lastReconciledAt = nil
         account.lastReconciledBalanceMinor = nil
       }

@@ -3,7 +3,12 @@ import Foundation
 import SwiftData
 
 enum SimpleFINBackgroundRefresh {
-  static var identifier = "app.bitrig.new.b6ec559c-1e09-43ff-a70f-25c814186523.simplefin-refresh"
+  /// Matches BGTaskSchedulerPermittedIdentifiers, which is built from the bundle identifier too.
+  static let identifier = (Bundle.main.bundleIdentifier ?? "app.bow") + ".simplefin-refresh"
+
+  static func cancel() {
+    BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: identifier)
+  }
 
   @MainActor
   static func schedule(in context: ModelContext) {

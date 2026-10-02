@@ -108,53 +108,18 @@ actor BudgetSnapshotRepository {
       try Task.checkCancellation()
       let next = nextMonth(month)
       let previousMonth = Calendar.current.date(byAdding: .month, value: -1, to: month)
-      let newlyIncludedAccount = month > (firstMonth ?? month) && accounts.contains {
-        $0.openedAt >= month && $0.openedAt < next
-      }
-      let calculation: MonthCalculation
-      if newlyIncludedAccount {
-        // Transactions imported before an account's opening date become part of
-        // its ledger once the account appears. Rebuild only this boundary month.
-        calculation = try replayThrough(month)
-      } else {
-        calculation = try calculateMonth(
-          month, using: accounts,
-          previous: previousMonth.flatMap { checkpoints[$0] },
-          previousReport: previousMonth.flatMap { balanceReports[$0] }
-        )
-      }
+      // History from before an account's starting balance is flagged and skipped, so a month
+      // where an account appears needs no special replay.
+      let calculation = try calculateMonth(
+        month, using: accounts,
+        previous: previousMonth.flatMap { checkpoints[$0] },
+        previousReport: previousMonth.flatMap { balanceReports[$0] }
+      )
       snapshots[month] = calculation.result.snapshot
       checkpoints[month] = calculation.result.checkpoint
       balanceReports[month] = calculation.report
       month = next
     }
-  }
-
-  private func replayThrough(_ target: Date) throws -> MonthCalculation {
-    let targetNext = nextMonth(target)
-    let start = firstMonth ?? target
-    let includedAccounts = accounts.filter { $0.openedAt < targetNext }.map { account -> AccountLedgerItem in
-      var item = account
-      item.openedAt = min(item.openedAt, start)
-      return item
-    }
-    var month = start
-    var previous: BudgetCalculator.Checkpoint?
-    var previousReport: AccountBalanceReport?
-    var latest: MonthCalculation?
-    while month <= target {
-      try Task.checkCancellation()
-      let calculated = try calculateMonth(
-        month, using: includedAccounts,
-        previous: previous, previousReport: previousReport
-      )
-      previous = calculated.result.checkpoint
-      previousReport = calculated.report
-      latest = calculated
-      month = nextMonth(month)
-    }
-    guard let latest else { throw BudgetReadError.missingSnapshot }
-    return latest
   }
 
   private func calculateMonth(
@@ -176,13 +141,9 @@ actor BudgetSnapshotRepository {
       transactions: monthTransactions, previous: previousReport,
       currencyCode: nil
     )
-    let todayMonth = monthStart(Date())
-    let futureAssigned = month >= todayMonth ? allocations
-      .filter { $0.date >= next }
-      .reduce(Int64(0)) { total, allocation in
-        total + (allocation.source == .readyToAssign ? allocation.amountMinor : 0)
-          - (allocation.target == .readyToAssign ? allocation.amountMinor : 0)
-      } : 0
+    let futureAssigned = BudgetCalculator().futureReservation(
+      after: month, today: Date(), allocations: allocations
+    )
     let result = BudgetCalculator().calculateWithCheckpoint(
       month: month, accounts: includedAccounts, envelopes: envelopes,
       allocations: monthAllocations, transactions: monthTransactions,
@@ -245,7 +206,7 @@ actor BudgetSnapshotRepository {
           id: $0.id, date: $0.date, createdAt: $0.createdAt,
           amountMinor: $0.amountMinor, accountID: $0.accountID,
           transferAccountID: $0.transferAccountID, envelopeID: $0.envelopeID,
-          kind: $0.kind
+          kind: $0.kind, isBeforeStart: $0.isBeforeStart
         )
       })
       offset += batch.count

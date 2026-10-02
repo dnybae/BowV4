@@ -1,7 +1,6 @@
 import Foundation
 import Observation
 import SwiftData
-import BackgroundTasks
 
 @MainActor @Observable
 final class SimpleFINSyncCoordinator {
@@ -102,7 +101,7 @@ final class SimpleFINSyncCoordinator {
 
   func disconnect(in context: ModelContext) throws {
     try SimpleFINCredentialStore().delete()
-    BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: SimpleFINBackgroundRefresh.identifier)
+    SimpleFINBackgroundRefresh.cancel()
     for link in try context.fetch(FetchDescriptor<SimpleFINAccountLink>()) {
       context.delete(link)
     }
@@ -118,7 +117,8 @@ final class SimpleFINSyncCoordinator {
     envelopeID: UUID? = nil,
     scheduleID: UUID? = nil,
     scheduledFor: Date? = nil,
-    in context: ModelContext
+    in context: ModelContext,
+    saving: Bool = true
   ) throws {
     guard record.bankState == .posted else { return }
     let existingImported = try record.transactionID.flatMap {
@@ -126,7 +126,7 @@ final class SimpleFINSyncCoordinator {
     }
     guard record.status == .review
       || (record.status == .imported && existingImported.map {
-        $0.needsApproval || ($0.kind == .expense && $0.envelopeID == nil)
+        $0.needsApproval || $0.needsEnvelope
       } == true) else { return }
     if let scheduleID, let scheduledFor {
       let linkedSchedule = try context.fetch(FetchDescriptor<BudgetSchedule>()).first { $0.id == scheduleID }
@@ -167,7 +167,9 @@ final class SimpleFINSyncCoordinator {
         .first(where: { $0.id == record.localAccountID }) else {
         throw SimpleFINError.invalidResponse
       }
-      guard record.amountMinor >= 0 || envelopeID != nil || existingImported?.envelopeID != nil else {
+      let beforeStart = record.date < BowDay.start(of: account.openedAt)
+      guard record.amountMinor >= 0 || envelopeID != nil || existingImported?.envelopeID != nil
+        || beforeStart else {
         throw BudgetCommandError.expenseNeedsEnvelope
       }
       let transaction: BudgetTransaction
@@ -181,7 +183,7 @@ final class SimpleFINSyncCoordinator {
           envelopeID: envelopeID, origin: record.origin
         )
         transaction.externalKey = record.remoteKey
-        try Self.adjustOpeningBalance(for: transaction, account: account)
+        Self.prepareImported(transaction, account: account)
         context.insert(transaction)
       }
       if transaction.envelopeID == nil { transaction.envelopeID = envelopeID }
@@ -241,11 +243,11 @@ final class SimpleFINSyncCoordinator {
         account.lastReconciledBalanceMinor = nil
       }
     }
-    try context.save()
+    if saving { try context.save() }
   }
 
   func enterPending(
-    _ record: SimpleFINImportRecord, envelopeID: UUID?, in context: ModelContext
+    _ record: SimpleFINImportRecord, envelopeID: UUID?, in context: ModelContext, saving: Bool = true
   ) throws {
     if record.amountMinor < 0 && envelopeID == nil {
       throw BudgetCommandError.expenseNeedsEnvelope
@@ -260,7 +262,7 @@ final class SimpleFINSyncCoordinator {
     )
     context.insert(transaction)
     record.transactionID = transaction.id
-    try context.save()
+    if saving { try context.save() }
   }
 
   func unmatch(_ record: SimpleFINImportRecord, in context: ModelContext) throws {
@@ -528,12 +530,17 @@ final class SimpleFINSyncCoordinator {
         let incoming = BankTransactionCandidate(
           externalKey: key, accountID: localID, amountMinor: amount,
           postedAt: item.date,
-          transactedAt: item.transactedAt.flatMap { $0 > 0 ? Date(timeIntervalSince1970: $0) : nil },
+          transactedAt: item.transactedAt.flatMap { $0 > 0 ? BowDay.fromBankTimestamp($0) : nil },
           description: payee
         )
         let decision = matcher.decide(for: incoming, among: candidates)
+        // Transactions another bank item already became or matched can't also be this one, so a
+        // second purchase at the same store isn't held for review as a possible duplicate.
+        let usedIDs = Set(records.lazy.filter {
+          $0.id != record.id && $0.status != .ignored && $0.localAccountID == localID
+        }.compactMap(\.transactionID))
         let otherPossible = (transactions + addedThisPass).contains {
-          Self.isPossibleMatch($0, for: record)
+          !usedIDs.contains($0.id) && Self.isPossibleMatch($0, for: record)
             && ($0.kind == .transfer || $0.sourceRaw != "manual")
         }
         let otherStagedPossible = records.contains { existing in
@@ -551,7 +558,7 @@ final class SimpleFINSyncCoordinator {
           return (schedule.accountID == localID && amount == -schedule.amountMinor)
             || (schedule.transferAccountID == localID && amount == schedule.amountMinor)
         }
-        let transactionDate = item.transactedAt.flatMap { $0 > 0 ? Date(timeIntervalSince1970: $0) : nil }
+        let transactionDate = item.transactedAt.flatMap { $0 > 0 ? BowDay.fromBankTimestamp($0) : nil }
           ?? item.date
         let scheduledExpenses = schedules.filter { schedule in
           schedule.isActive && schedule.kind == .expense
@@ -571,6 +578,9 @@ final class SimpleFINSyncCoordinator {
         let scheduledExpense = scheduledExpenses.count == 1 ? scheduledExpenses.first : nil
         let scheduledExpenseAmbiguous = scheduledExpenses.count > 1
         let ruleEnvelopeID = categoryMatcher.envelopeID(for: payee, rules: rules)
+        // Bank items from before the account's starting balance come in as history: the starting
+        // balance already includes them, so they need no envelope and never wait for review.
+        let beforeStart = item.date < BowDay.start(of: account.openedAt)
         let envelopeID = scheduledExpense?.envelopeID ?? ruleEnvelopeID
         switch decision {
         case .linkManual(let id) where !otherPossible && !otherStagedPossible
@@ -607,7 +617,9 @@ final class SimpleFINSyncCoordinator {
         case .createNew where !otherPossible && !otherStagedPossible
           && !scheduledTransferPossible && !scheduledExpenseAmbiguous
           && record.transactionID == nil
-          && (amount >= 0 || envelopeID != nil):
+          && (amount >= 0 || envelopeID != nil),
+          .createNew where beforeStart && record.transactionID == nil,
+          .review(_) where beforeStart && record.transactionID == nil:
           let transaction = Self.makeTransaction(
             account: account, date: item.date, amount: amount, payee: payee,
             envelopeID: envelopeID, origin: .simplefin
@@ -617,7 +629,7 @@ final class SimpleFINSyncCoordinator {
             transaction.scheduleID = scheduledExpense.id
             transaction.scheduledFor = transactionDate
           }
-          try Self.adjustOpeningBalance(for: transaction, account: account)
+          Self.prepareImported(transaction, account: account)
           context.insert(transaction)
           addedThisPass.append(transaction)
           candidates.append(LocalTransactionCandidate(
@@ -657,13 +669,10 @@ final class SimpleFINSyncCoordinator {
     return transaction
   }
 
-  nonisolated private static func adjustOpeningBalance(for transaction: BudgetTransaction, account: BudgetAccount) throws {
-    if transaction.date < account.openedAt {
-      let (adjusted, overflow) = account.openingBalanceMinor.subtractingReportingOverflow(transaction.amountMinor)
-      guard !overflow else { throw SimpleFINError.balanceOverflow }
-      account.openingBalanceMinor = adjusted
-    }
-    if let reconciled = account.lastReconciledAt, transaction.date <= reconciled {
+  /// Marks history from before the starting balance, and reopens reconciliation it reaches back into.
+  nonisolated private static func prepareImported(_ transaction: BudgetTransaction, account: BudgetAccount) {
+    transaction.isBeforeStart = transaction.date < BowDay.start(of: account.openedAt)
+    if let reconciled = account.lastReconciledAt, transaction.date <= reconciled, !transaction.isBeforeStart {
       account.lastReconciledAt = nil
       account.lastReconciledBalanceMinor = nil
     }

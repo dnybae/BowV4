@@ -20,7 +20,7 @@
         "path" : "App\/Info.plist",
         "properties" : {
           "BGTaskSchedulerPermittedIdentifiers" : [
-            "app.bitrig.new.b6ec559c-1e09-43ff-a70f-25c814186523.simplefin-refresh"
+            "$(PRODUCT_BUNDLE_IDENTIFIER).simplefin-refresh"
           ],
           "CFBundleDisplayName" : "Bow",
           "CFBundleShortVersionString" : "1.0",

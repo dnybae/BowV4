@@ -17,6 +17,7 @@ struct TransactionListItem: Identifiable, Sendable, Equatable {
   var envelopeName: String?
   var scheduleID: UUID? = nil
   var isCleared = false
+  var isBeforeStart = false
 
   var kind: BudgetTransactionKind {
     BudgetTransactionKind(rawValue: kindRaw) ?? .expense
@@ -24,5 +25,10 @@ struct TransactionListItem: Identifiable, Sendable, Equatable {
 
   var isBalanceAdjustment: Bool {
     sourceRaw == BudgetTransaction.balanceAdjustmentSource
+  }
+
+  /// Same rule as `BudgetTransaction.needsEnvelope`.
+  var needsEnvelope: Bool {
+    kind == .expense && envelopeID == nil && !isBalanceAdjustment && !isBeforeStart
   }
 }

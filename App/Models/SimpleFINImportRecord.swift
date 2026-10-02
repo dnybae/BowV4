@@ -25,7 +25,7 @@ final class SimpleFINImportRecord {
   init(remoteKey: String, localAccountID: UUID, date: Date, amountMinor: Int64, payee: String) {
     self.remoteKey = remoteKey
     self.localAccountID = localAccountID
-    self.date = date
+    self.date = BowDay.normalized(date)
     self.amountMinor = amountMinor
     self.payee = payee
   }

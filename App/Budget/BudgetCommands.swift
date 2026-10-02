@@ -51,6 +51,7 @@ struct BudgetCommands {
     type: BudgetAccountType? = nil,
     note: String = "",
     logoSettings: AccountLogoSettings = AccountLogoSettings(),
+    startDate: Date = Date(),
     in context: ModelContext
   ) throws -> BudgetAccount {
     guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -69,6 +70,7 @@ struct BudgetCommands {
       note: note.trimmingCharacters(in: .whitespacesAndNewlines)
     )
     account.logoSettings = logoSettings
+    account.openedAt = BowDay.start(of: startDate)
     context.insert(account)
     if kind == .credit {
       try ensureCardPaymentEnvelope(for: account, in: context)
@@ -85,6 +87,7 @@ struct BudgetCommands {
     currentBalanceMinor: Int64,
     existingBalanceMinor: Int64,
     logoSettings: AccountLogoSettings? = nil,
+    startDate: Date? = nil,
     in context: ModelContext
   ) throws {
     let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -93,6 +96,10 @@ struct BudgetCommands {
       throw BudgetCommandError.liabilityRequiresNegativeBalance
     }
     let now = Date()
+    if let startDate, BowDay.start(of: startDate) != account.openedAt {
+      try moveStartingBalanceDate(of: account, to: startDate,
+                                  keepingBalance: existingBalanceMinor, in: context)
+    }
     let (delta, overflow) = currentBalanceMinor.subtractingReportingOverflow(existingBalanceMinor)
     guard !overflow else { throw BudgetCommandError.balanceOverflow }
     if delta != 0 {
@@ -114,6 +121,29 @@ struct BudgetCommands {
       try ensureCardPaymentEnvelope(for: account, in: context)
     }
     try context.save()
+  }
+
+  /// Moves the day an account's starting balance is as of, keeping today's balance unchanged:
+  /// the starting balance absorbs whatever moves into or out of history.
+  static func moveStartingBalanceDate(
+    of account: BudgetAccount, to startDate: Date, keepingBalance balanceMinor: Int64,
+    in context: ModelContext
+  ) throws {
+    account.openedAt = BowDay.start(of: startDate)
+    try refreshStartFlags(forAccountIDs: [account.id], in: context)
+    let id = account.id
+    let counted = try context.fetch(FetchDescriptor<BudgetTransaction>(predicate: #Predicate {
+      !$0.isBeforeStart && ($0.accountID == id || $0.transferAccountID == id)
+    })).reduce(Int64(0)) { total, transaction in
+      let leg = transaction.accountID == id ? transaction.amountMinor
+        : (transaction.kind == .transfer ? -transaction.amountMinor : 0)
+      return total + leg
+    }
+    let (opening, overflow) = balanceMinor.subtractingReportingOverflow(counted)
+    guard !overflow else { throw BudgetCommandError.balanceOverflow }
+    account.openingBalanceMinor = opening
+    account.lastReconciledAt = nil
+    account.lastReconciledBalanceMinor = nil
   }
 
   static func ensureCardPaymentEnvelopes(in context: ModelContext) throws {
@@ -155,30 +185,49 @@ struct BudgetCommands {
     try context.save()
   }
 
+  /// Adds an envelope at the end of its group. An envelope of the same name that was hidden in
+  /// that group comes back instead, with its history, rather than being duplicated.
   static func addEnvelope(
     name: String,
     symbol: String,
     groupID: UUID,
-    order: Int,
     targetMinor: Int64? = nil,
     targetDate: Date? = nil,
     in context: ModelContext
   ) throws {
-    guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    else { throw BudgetCommandError.missingName }
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { throw BudgetCommandError.missingName }
     guard try context.fetch(FetchDescriptor<BudgetGroup>()).contains(where: {
       $0.id == groupID && !$0.isSystem
     }) else { throw BudgetCommandError.invalidEnvelope }
+    let envelopes = try context.fetch(FetchDescriptor<BudgetEnvelope>())
+    if let hidden = envelopes.first(where: {
+      $0.isHidden && $0.groupID == groupID && $0.paymentAccountID == nil
+        && $0.name.localizedCaseInsensitiveCompare(trimmed) == .orderedSame
+    }) {
+      hidden.isHidden = false
+      if let targetMinor { hidden.targetMinor = targetMinor }
+      if let targetDate { hidden.targetDate = targetDate }
+      try context.save()
+      return
+    }
     let envelope = BudgetEnvelope(
       groupID: groupID,
-      name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+      name: trimmed,
       symbol: symbol,
-      sortOrder: order
+      sortOrder: try nextEnvelopeOrder(in: groupID, context: context)
     )
     envelope.targetMinor = targetMinor
     envelope.targetDate = targetDate
     context.insert(envelope)
     try context.save()
+  }
+
+  /// The sort order that puts an envelope last in its group.
+  static func nextEnvelopeOrder(in groupID: UUID, context: ModelContext) throws -> Int {
+    let orders = try context.fetch(FetchDescriptor<BudgetEnvelope>())
+      .filter { $0.groupID == groupID }.map(\.sortOrder)
+    return (orders.max() ?? -1) + 1
   }
 
   @discardableResult
@@ -194,7 +243,8 @@ struct BudgetCommands {
     notes: String,
     scheduleID: UUID? = nil,
     scheduledFor: Date? = nil,
-    in context: ModelContext
+    in context: ModelContext,
+    saving: Bool = true
   ) throws -> BudgetTransaction {
     try validateEnvelopeID(envelopeID, in: context)
     guard Calendar.current.startOfDay(for: date) <= Calendar.current.startOfDay(for: Date()) else {
@@ -206,12 +256,14 @@ struct BudgetCommands {
       ) != nil
       guard !alreadyRecorded else { throw BudgetCommandError.duplicateScheduledOccurrence }
     }
+    let beforeStart = isBeforeStart(date: date, account: account, destination: kind == .transfer ? destination : nil)
     try validateTransaction(
       kind: kind,
       account: account,
       destination: destination,
       envelopeID: envelopeID,
-      amountMinor: amountMinor
+      amountMinor: amountMinor,
+      isBeforeStart: beforeStart
     )
     let signedAmount = kind == .inflow ? amountMinor : -amountMinor
     let transaction = BudgetTransaction(
@@ -227,9 +279,10 @@ struct BudgetCommands {
     )
     transaction.scheduleID = scheduleID
     transaction.scheduledFor = scheduledFor
+    transaction.isBeforeStart = beforeStart
     context.insert(transaction)
     try invalidateReconciliation(accountIDs: [account.id, destination?.id].compactMap { $0 }, from: date, in: context)
-    try context.save()
+    if saving { try context.save() }
     return transaction
   }
 
@@ -247,7 +300,7 @@ struct BudgetCommands {
   ) throws {
     try validateEnvelopeID(envelopeID, in: context)
     try validateTransaction(kind: kind, account: account, destination: destination,
-                            envelopeID: envelopeID, amountMinor: amountMinor)
+                            envelopeID: envelopeID, amountMinor: amountMinor, isBeforeStart: false)
     let schedule = BudgetSchedule(
       payee: kind == .transfer && payee.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         ? "Transfer to \(destination?.name ?? "Account")"
@@ -275,7 +328,8 @@ struct BudgetCommands {
     notes: String,
     scheduleID: UUID? = nil,
     scheduledFor: Date? = nil,
-    in context: ModelContext
+    in context: ModelContext,
+    saving: Bool = true
   ) throws {
     try validateEnvelopeID(envelopeID, in: context)
     guard Calendar.current.startOfDay(for: date) <= Calendar.current.startOfDay(for: Date()) else {
@@ -288,12 +342,14 @@ struct BudgetCommands {
       ) != nil
       guard !alreadyRecorded else { throw BudgetCommandError.duplicateScheduledOccurrence }
     }
+    let beforeStart = isBeforeStart(date: date, account: account, destination: kind == .transfer ? destination : nil)
     try validateTransaction(
       kind: kind,
       account: account,
       destination: destination,
       envelopeID: envelopeID,
-      amountMinor: amountMinor
+      amountMinor: amountMinor,
+      isBeforeStart: beforeStart || transaction.isBalanceAdjustment
     )
     let previousAccountIDs = [transaction.accountID, transaction.transferAccountID].compactMap { $0 }
     let earliestDate = min(transaction.date, date)
@@ -302,7 +358,7 @@ struct BudgetCommands {
     transaction.transferAccountID = kind == .transfer ? destination?.id : nil
     transaction.envelopeID = envelopeID
     transaction.amountMinor = kind == .inflow ? amountMinor : -amountMinor
-    transaction.date = date
+    transaction.date = BowDay.normalized(date)
     let updatedPayee = payee.trimmingCharacters(in: .whitespacesAndNewlines)
     transaction.merchantDomain = kind == .transfer ? nil : merchantDomain
     transaction.payee = updatedPayee
@@ -311,11 +367,12 @@ struct BudgetCommands {
       transaction.scheduleID = scheduleID
       transaction.scheduledFor = scheduledFor
     }
+    transaction.isBeforeStart = beforeStart
     transaction.needsApproval = false
     transaction.reconciledAt = nil
     transaction.destinationReconciledAt = nil
     try invalidateReconciliation(accountIDs: previousAccountIDs + [account.id, destination?.id].compactMap { $0 }, from: earliestDate, in: context)
-    try context.save()
+    if saving { try context.save() }
   }
 
   static func deleteTransaction(_ transaction: BudgetTransaction, in context: ModelContext) throws {
@@ -370,10 +427,12 @@ struct BudgetCommands {
     account: BudgetAccount,
     destination: BudgetAccount?,
     envelopeID: UUID?,
-    amountMinor: Int64
+    amountMinor: Int64,
+    isBeforeStart: Bool
   ) throws {
     guard amountMinor > 0 else { throw BudgetCommandError.invalidAmount }
-    if kind == .expense && envelopeID == nil {
+    // History from before the starting balance is already counted, so it needs no envelope.
+    if kind == .expense && envelopeID == nil && !isBeforeStart {
       throw BudgetCommandError.expenseNeedsEnvelope
     }
     if kind == .transfer {
@@ -395,12 +454,35 @@ struct BudgetCommands {
     }
   }
 
+  /// Whether a transaction on `date` falls before its account's starting balance (or, for a
+  /// transfer, either account's). Such a transaction is history: the balance already includes it.
+  static func isBeforeStart(date: Date, account: BudgetAccount, destination: BudgetAccount?) -> Bool {
+    [account, destination].compactMap { $0 }.contains { date < BowDay.start(of: $0.openedAt) }
+  }
+
+  /// Re-marks every transaction in `accountIDs` after a starting balance date changes.
+  static func refreshStartFlags(forAccountIDs accountIDs: Set<UUID>, in context: ModelContext) throws {
+    let accounts = Dictionary(
+      try context.fetch(FetchDescriptor<BudgetAccount>()).map { ($0.id, $0) },
+      uniquingKeysWith: { first, _ in first }
+    )
+    for transaction in try context.fetch(FetchDescriptor<BudgetTransaction>()) {
+      guard accountIDs.contains(transaction.accountID)
+        || transaction.transferAccountID.map(accountIDs.contains) == true,
+        let account = accounts[transaction.accountID] else { continue }
+      let destination = transaction.kind == .transfer ? transaction.transferAccountID.flatMap { accounts[$0] } : nil
+      let flag = isBeforeStart(date: transaction.date, account: account, destination: destination)
+      if transaction.isBeforeStart != flag { transaction.isBeforeStart = flag }
+    }
+  }
+
   private static func validateEnvelopeID(_ id: UUID?, in context: ModelContext) throws {
     guard let id else { return }
     guard let envelope = try context.fetch(FetchDescriptor<BudgetEnvelope>()).first(where: { $0.id == id }),
           envelope.paymentAccountID == nil else { throw BudgetCommandError.invalidEnvelope }
   }
 
+  @discardableResult
   static func moveMoney(
     amountMinor: Int64,
     from source: BudgetBucket,
@@ -408,7 +490,7 @@ struct BudgetCommands {
     date: Date,
     snapshot: BudgetSnapshot,
     in context: ModelContext
-  ) throws {
+  ) throws -> BudgetAllocation {
     guard amountMinor > 0 else { throw BudgetCommandError.invalidAmount }
     let calendar = Calendar.current
     let targetMonth = calendar.dateInterval(of: .month, for: date)?.start ?? date
@@ -461,6 +543,7 @@ struct BudgetCommands {
     }
     context.insert(allocation)
     try context.save()
+    return allocation
   }
 
   /// When a money move for `month` is recorded: now for the current month, otherwise the month's
@@ -589,6 +672,10 @@ enum BudgetCommandError: LocalizedError {
   case balanceOverflow
   case nothingToCover
   case coverExceedsOverspending
+  case accountKindLocked
+  case accountHasActivity
+  case closeNeedsZeroBalance
+  case closeNeedsEmptyCardPayment
 
   var errorDescription: String? {
     switch self {
@@ -614,6 +701,14 @@ enum BudgetCommandError: LocalizedError {
     case .balanceOverflow: "That balance change is too large to save safely."
     case .nothingToCover: "This envelope isn’t overspent anymore."
     case .coverExceedsOverspending: "That’s more than this envelope is overspent. Lower an amount."
+    case .accountKindLocked:
+      "This account already has transactions, so it can only change to a type of the same kind."
+    case .accountHasActivity:
+      "This account has transactions or schedules, so it can’t be deleted. Close it instead."
+    case .closeNeedsZeroBalance:
+      "Bring the balance to zero first, with a transfer or by updating the balance."
+    case .closeNeedsEmptyCardPayment:
+      "Move the money set aside for this card’s payment back to Ready to Assign first."
     }
   }
 }

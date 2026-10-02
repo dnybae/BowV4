@@ -3,10 +3,18 @@ import Foundation
 struct BudgetMonthAccessPolicy {
   var calendar: Calendar = .current
 
-  func canAdvance(from viewedMonth: Date, today: Date, assignedMinor: Int64) -> Bool {
+  /// How far ahead the Budget screen goes: a year of planning.
+  static let maximumMonthsAhead = 12
+
+  /// The next month opens when there's something to plan with: money assigned in this month,
+  /// or money still waiting in Ready to Assign.
+  func canAdvance(from viewedMonth: Date, today: Date, assignedMinor: Int64, readyToAssignMinor: Int64 = 0) -> Bool {
     let viewed = calendar.dateInterval(of: .month, for: viewedMonth)?.start ?? viewedMonth
     let current = calendar.dateInterval(of: .month, for: today)?.start ?? today
-    return viewed < current || assignedMinor > 0
+    if viewed < current { return true }
+    let limit = calendar.date(byAdding: .month, value: Self.maximumMonthsAhead, to: current) ?? current
+    guard viewed < limit else { return false }
+    return assignedMinor > 0 || readyToAssignMinor > 0
   }
 
   func assignedMinor(in month: Date, funding: [BudgetMonthFundingItem]) -> Int64 {

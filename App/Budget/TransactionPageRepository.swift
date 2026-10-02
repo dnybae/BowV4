@@ -110,11 +110,9 @@ actor TransactionPageRepository {
           let normalized = PayeeDirectory.key(item.payee)
           if (aliases[normalized] ?? normalized) != payeeKey { continue }
         }
-        if request.needsAttentionOnly
-          && !item.needsApproval
-          && !(item.kind == .expense && item.envelopeID == nil) { continue }
+        if request.needsAttentionOnly && !item.needsApproval && !item.needsEnvelope { continue }
         if request.matchedOnly && item.sourceRaw != "manualLinked" { continue }
-        if request.uncategorizedOnly && !(item.kind == .expense && item.envelopeID == nil) { continue }
+        if request.uncategorizedOnly && !item.needsEnvelope { continue }
         if let minimum = request.minimumAmountMinor,
            item.amountMinor.magnitude < UInt64(max(0, minimum)) { continue }
         if let maximum = request.maximumAmountMinor,
@@ -137,7 +135,8 @@ actor TransactionPageRepository {
         accountName: accountNames[item.accountID] ?? "Account",
         envelopeName: item.envelopeID.flatMap { envelopeNames[$0] },
         scheduleID: item.scheduleID,
-        isCleared: item.isCleared
+        isCleared: item.isCleared,
+        isBeforeStart: item.isBeforeStart
         ))
         if items.count == Self.pageSize { break }
       }
@@ -150,7 +149,7 @@ actor TransactionPageRepository {
     let adjustment = BudgetTransaction.balanceAdjustmentSource
     let predicate = #Predicate<BudgetTransaction> {
       $0.kindRaw == "expense" && $0.envelopeID == nil
-        && $0.sourceRaw != adjustment
+        && $0.sourceRaw != adjustment && !$0.isBeforeStart
     }
     return try modelContext.fetchCount(FetchDescriptor(predicate: predicate))
   }

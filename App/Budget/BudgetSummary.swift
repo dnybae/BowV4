@@ -7,7 +7,7 @@ struct BudgetSummary {
   var overspentMinor: Int64
   /// Net spending out of budget envelopes this month; refunds reduce it.
   var spentThisMonthMinor: Int64
-  /// Money still sitting in budget envelopes. Shortfalls are counted in `overspentMinor` instead.
+  /// Money still sitting in visible budget envelopes. Shortfalls are counted in `overspentMinor` instead.
   var availableMinor: Int64
   var creditOwedMinor: Int64
   var creditReservedMinor: Int64
@@ -29,7 +29,8 @@ struct BudgetSummary {
     spentThisMonthMinor = max(0, budgetEnvelopes.reduce(0) { total, envelope in
       total - snapshot.activity[envelope.id, default: 0]
     })
-    availableMinor = budgetEnvelopes.reduce(0) { total, envelope in
+    // Only the envelopes on screen, so the total matches the cards below it.
+    availableMinor = budgetEnvelopes.filter { !$0.isHidden }.reduce(0) { total, envelope in
       total + max(0, snapshot.available(for: envelope.id))
     }
     let interval = calendar.dateInterval(of: .month, for: snapshot.month)

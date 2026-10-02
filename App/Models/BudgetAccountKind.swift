@@ -27,7 +27,7 @@ enum BudgetAccountKind: String, CaseIterable, Identifiable {
       }
     case .credit: "creditcard.fill"
     case .asset: "chart.bar.fill"
-    case .liability: "arrow.down.left"
+    case .liability: "percent"
     }
   }
 

@@ -53,9 +53,9 @@ struct TransactionRowModel: Identifiable, Equatable {
   }
 
   /// Needs approval wins over a missing envelope; both need the user.
-  static func state(needsApproval: Bool, kind: BudgetTransactionKind, envelopeID: UUID?) -> State {
+  static func state(needsApproval: Bool, needsEnvelope: Bool) -> State {
     if needsApproval { return .attention("Needs review", symbol: "exclamationmark.circle.fill") }
-    if kind == .expense && envelopeID == nil {
+    if needsEnvelope {
       return .attention("Choose an envelope", symbol: "tray.and.arrow.down.fill")
     }
     return .normal
@@ -83,7 +83,7 @@ extension TransactionRowModel {
       accountName: item.accountName,
       envelopeName: item.envelopeName,
       amountMinor: amountMinor ?? item.amountMinor,
-      state: Self.state(needsApproval: item.needsApproval, kind: item.kind, envelopeID: item.envelopeID)
+      state: Self.state(needsApproval: item.needsApproval, needsEnvelope: item.needsEnvelope)
     )
     isMatched = item.sourceRaw == "manualLinked"
     isScheduledEntry = item.scheduleID != nil && !item.isCleared
@@ -99,9 +99,7 @@ extension TransactionRowModel {
       accountName: accountName,
       envelopeName: envelopeName,
       amountMinor: transaction.amountMinor,
-      state: Self.state(
-        needsApproval: transaction.needsApproval, kind: transaction.kind, envelopeID: transaction.envelopeID
-      )
+      state: Self.state(needsApproval: transaction.needsApproval, needsEnvelope: transaction.needsEnvelope)
     )
     isMatched = transaction.sourceRaw == "manualLinked"
     isScheduledEntry = transaction.scheduleID != nil && !transaction.isCleared

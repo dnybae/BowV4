@@ -50,8 +50,8 @@ struct MerchantLogoView: View {
                 let image = CustomLogoCache.image(for: data) {
         Image(uiImage: image)
           .resizable()
-          .scaledToFit()
-          .frame(width: side - 10, height: side - 10)
+          .scaledToFill()
+          .frame(width: side, height: side)
       } else if appearance?.source == .logoDev {
         // The logo fades in over the fallback symbol instead of popping in.
         AsyncImage(
@@ -63,8 +63,8 @@ struct MerchantLogoView: View {
         ) { phase in
           if let image = phase.image {
             image.resizable()
-              .scaledToFit()
-              .frame(width: side - 10, height: side - 10)
+              .scaledToFill()
+              .frame(width: side, height: side)
               .transition(.opacity)
           } else {
             systemIcon

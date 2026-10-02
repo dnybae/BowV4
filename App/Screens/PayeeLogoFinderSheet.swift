@@ -41,8 +41,8 @@ struct PayeeLogoFinderSheet: View {
               if let previewImage {
                 Image(uiImage: previewImage)
                   .resizable()
-                  .scaledToFit()
-                  .frame(width: 54, height: 54)
+                  .scaledToFill()
+                  .frame(width: 64, height: 64)
               } else if isLoading {
                 RoundedRectangle(cornerRadius: Bow.Radius.sm)
                   .fill(Bow.well)

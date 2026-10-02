@@ -31,7 +31,7 @@ enum LogoDev {
     }
     components.queryItems = [
       URLQueryItem(name: "token", value: publishableKey),
-      URLQueryItem(name: "size", value: "64"),
+      URLQueryItem(name: "size", value: "256"),
       URLQueryItem(name: "format", value: "png"),
       URLQueryItem(name: "fallback", value: "404")
     ]

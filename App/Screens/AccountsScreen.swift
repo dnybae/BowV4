@@ -268,6 +268,12 @@ struct AccountsScreen: View {
     }
     .buttonStyle(.bowPress)
     .matchedTransitionSource(id: route, in: zoomNamespace)
+    .contextMenu {
+      if account.closedAt == nil {
+        Button("Add Transaction", systemImage: "plus") { onAddTransaction(account.id) }
+      }
+      Button("Edit Account", systemImage: "pencil") { editingAccount = account }
+    }
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(account.name)
     .accessibilityValue("\(balanceText), \(syncText)")

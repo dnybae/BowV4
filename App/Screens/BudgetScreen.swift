@@ -392,6 +392,31 @@ struct BudgetScreen: View {
     }
     .buttonStyle(.bowPress)
     .matchedTransitionSource(id: route, in: zoomNamespace)
+    .contextMenu { if !isPastMonth { quickActions(for: route) } }
+  }
+
+  /// Long-press shortcuts to what the detail screen's tiles do.
+  @ViewBuilder
+  private func quickActions(for route: BudgetRoute) -> some View {
+    switch route {
+    case .envelope(let id):
+      let available = snapshot.available(for: id)
+      if available < 0 {
+        Button("Cover Overspending", systemImage: "bolt") { onCoverOverspending(.envelope(id)) }
+      }
+      Button("Assign", systemImage: "plus") { onMoveMoney(.readyToAssign, .envelope(id)) }
+      if available > 0 {
+        Button("Move Out", systemImage: "arrow.up.arrow.down") { onMoveMoney(.envelope(id), .readyToAssign) }
+      }
+      Divider()
+      Button("Edit Target", systemImage: "dollarsign") { onEditEnvelopeTarget(id) }
+      Button("Edit Envelope", systemImage: "pencil") { onEditEnvelope(id) }
+    case .cardPayment(let id):
+      Button("Assign to Payment", systemImage: "plus") { onMoveMoney(.readyToAssign, .cardPayment(id)) }
+      if snapshot.paymentAvailable[id, default: 0] > 0 {
+        Button("Move Out", systemImage: "arrow.up.arrow.down") { onMoveMoney(.cardPayment(id), .readyToAssign) }
+      }
+    }
   }
 
   /// A tinted row in the card of actions at the bottom of the screen, like a List button row.

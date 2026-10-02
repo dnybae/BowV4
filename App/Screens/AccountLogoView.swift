@@ -2,7 +2,7 @@ import SwiftUI
 
 struct AccountLogoView: View {
   var appearance: PayeeLogoAppearance
-  var systemImage: String = "building.columns"
+  var systemImage: String = BudgetAccountKind.cash.systemImage
   var size: CGFloat = 38
   var style: MerchantLogoView.Style = .plain
 

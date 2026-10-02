@@ -199,7 +199,8 @@ private struct BudgetHomeView: View {
                 currencyCode: currencyCode,
                 onSelect: selectTransaction,
                 onRecord: { activeSheet = .recordScheduled($0) },
-                onReviewBankRecord: { activeSheet = .reviewBankRecord($0) },
+                onReviewBankRecord: { activeSheet = .bankItem($0, $1) },
+                onEnterPending: { activeSheet = .pendingItem($0) },
                 onAddTransaction: { activeSheet = .newTransaction },
                 onConnectBank: { activeSheet = .bankSync }
               )
@@ -299,22 +300,9 @@ private struct BudgetHomeView: View {
         .sheet(item: $activeSheet) { sheet in
           switch sheet {
           case .newTransaction:
-            TransactionEditorScreen(
-              transaction: nil,
-              accounts: accounts,
-              envelopes: envelopes,
-              payees: payees,
-              currencyCode: currencyCode
-            )
+            transactionSheet(.new())
           case .newTransactionInAccount(let accountID):
-            TransactionEditorScreen(
-              transaction: nil,
-              accounts: accounts,
-              envelopes: envelopes,
-              payees: payees,
-              currencyCode: currencyCode,
-              preferredAccountID: accountID
-            )
+            transactionSheet(.new(preferredAccountID: accountID))
           case .bankSync:
             NavigationStack {
               SimpleFINScreen()
@@ -325,49 +313,21 @@ private struct BudgetHomeView: View {
                 }
             }
             .bowToastHost()
-          case .editTransaction(let id):
-            TransactionEditorScreen(
-              transaction: transaction(for: id),
-              accounts: accounts,
-              envelopes: envelopes,
-              payees: payees,
-              currencyCode: currencyCode
-            )
-          case .reviewTransaction(let id):
-            TransactionEditorScreen(
-              transaction: transaction(for: id),
-              accounts: accounts,
-              envelopes: envelopes,
-              payees: payees,
-              currencyCode: currencyCode
-            )
-          case .reviewBankRecord(let record):
-            TransactionEditorScreen(
-              transaction: nil,
-              accounts: accounts,
-              envelopes: envelopes,
-              payees: payees,
-              currencyCode: currencyCode,
-              reviewRecord: record
-            )
-          case .transactionDetail(let id):
+          case .transaction(let id):
             if let transaction = transaction(for: id) {
-              TransactionDetailSheet(
-                transaction: transaction,
-                accounts: accounts, envelopes: envelopes,
-                payees: payees, currencyCode: currencyCode
-              )
+              transactionSheet(.existing(transaction))
             }
-          case .recordScheduled(let draft):
-            TransactionEditorScreen(
-              transaction: nil,
-              accounts: accounts,
-              envelopes: envelopes,
-              payees: payees,
-              currencyCode: currencyCode,
-              scheduledDraft: draft,
-              onEditSchedule: { activeSheet = .editSchedule($0) }
+          case .bankItem(let record, let occurrence):
+            // Already imported: approve the transaction it became. Otherwise approve the bank item.
+            let imported = record.status == .imported ? record.transactionID.flatMap(transaction(for:)) : nil
+            transactionSheet(
+              imported.map(TransactionSheetSubject.existing) ?? .bankItem(record),
+              relatedOccurrence: occurrence
             )
+          case .pendingItem(let record):
+            transactionSheet(.pendingItem(record))
+          case .recordScheduled(let draft):
+            transactionSheet(.scheduled(draft))
           case .editSchedule(let id):
             ScheduleEditorScreen(
               schedule: schedules.first { $0.id == id },
@@ -484,10 +444,26 @@ private struct BudgetHomeView: View {
     ))
   }
 
-  /// Transactions waiting for review open the review sheet; everything else opens its details.
   private func selectTransaction(_ id: UUID) {
-    activeSheet = transaction(for: id)?.needsImportReview == true
-      ? .reviewTransaction(id) : .transactionDetail(id)
+    activeSheet = .transaction(id)
+  }
+
+  /// The one transaction sheet; what it's opened on decides its status and bottom button.
+  private func transactionSheet(
+    _ subject: TransactionSheetSubject, relatedOccurrence: BudgetScheduleOccurrence? = nil
+  ) -> some View {
+    TransactionEditorScreen(
+      subject: subject,
+      relatedOccurrence: relatedOccurrence,
+      relatedSchedule: relatedOccurrence.flatMap { occurrence in
+        schedules.first { $0.id == occurrence.scheduleID }
+      },
+      accounts: accounts,
+      envelopes: envelopes,
+      payees: payees,
+      currencyCode: currencyCode,
+      onEditSchedule: { activeSheet = .editSchedule($0) }
+    )
   }
 
   private func transaction(for id: UUID) -> BudgetTransaction? {
@@ -545,10 +521,10 @@ private enum BowSheet: Identifiable {
   case newTransaction
   case newTransactionInAccount(UUID)
   case bankSync
-  case editTransaction(UUID)
-  case transactionDetail(UUID)
-  case reviewTransaction(UUID)
-  case reviewBankRecord(SimpleFINImportRecord)
+  /// Every transaction, in any state, opens the same sheet.
+  case transaction(UUID)
+  case bankItem(SimpleFINImportRecord, BudgetScheduleOccurrence?)
+  case pendingItem(SimpleFINImportRecord)
   case recordScheduled(ScheduledTransactionDraft)
   case editSchedule(UUID)
   case newAccount
@@ -565,10 +541,9 @@ private enum BowSheet: Identifiable {
     case .newTransaction: "newTransaction"
     case .newTransactionInAccount(let id): "newTransactionInAccount-\(id)"
     case .bankSync: "bankSync"
-    case .editTransaction(let id): "editTransaction-\(id)"
-    case .transactionDetail(let id): "transactionDetail-\(id)"
-    case .reviewTransaction(let id): "reviewTransaction-\(id)"
-    case .reviewBankRecord(let record): "reviewBankRecord-\(record.id)"
+    case .transaction(let id): "transaction-\(id)"
+    case .bankItem(let record, _): "bankItem-\(record.id)"
+    case .pendingItem(let record): "pendingItem-\(record.id)"
     case .recordScheduled(let draft): "recordScheduled-\(draft.scheduleID)-\(draft.scheduledFor)"
     case .editSchedule(let id): "editSchedule-\(id)"
     case .newAccount: "newAccount"

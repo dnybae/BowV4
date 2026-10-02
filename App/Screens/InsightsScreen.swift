@@ -482,7 +482,7 @@ struct InsightsScreen: View {
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { detail = nil } } }
         .sheet(item: $editingTransaction) { transaction in
           TransactionEditorScreen(
-            transaction: transaction,
+            subject: .existing(transaction),
             accounts: accounts,
             envelopes: envelopes,
             payees: payees,

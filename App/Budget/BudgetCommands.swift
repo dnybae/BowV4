@@ -177,6 +177,7 @@ struct BudgetCommands {
     try context.save()
   }
 
+  @discardableResult
   static func addTransaction(
     kind: BudgetTransactionKind,
     account: BudgetAccount,
@@ -190,7 +191,7 @@ struct BudgetCommands {
     scheduleID: UUID? = nil,
     scheduledFor: Date? = nil,
     in context: ModelContext
-  ) throws {
+  ) throws -> BudgetTransaction {
     try validateEnvelopeID(envelopeID, in: context)
     guard Calendar.current.startOfDay(for: date) <= Calendar.current.startOfDay(for: Date()) else {
       throw BudgetCommandError.futureTransactionNeedsSchedule
@@ -225,6 +226,7 @@ struct BudgetCommands {
     context.insert(transaction)
     try invalidateReconciliation(accountIDs: [account.id, destination?.id].compactMap { $0 }, from: date, in: context)
     try context.save()
+    return transaction
   }
 
   static func addSchedule(

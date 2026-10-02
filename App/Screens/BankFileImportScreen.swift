@@ -141,12 +141,12 @@ struct BankFileImportScreen: View {
 
         if !proposals.isEmpty {
           Section {
-            Text("\(proposals.count) rows · \(reviewCount) will go to Bank Review")
+            Text("\(proposals.count) rows · \(reviewCount) will need review")
               .font(.bowSubhead.weight(.medium))
           } header: {
             Text("Preview")
           } footer: {
-            Text("Clear matches and transactions that already have an envelope are completed automatically. Anything uncertain waits in Spending → Bank Review. Historical imports preserve today’s cash balance.")
+            Text("Clear matches and transactions that already have an envelope are completed automatically. Anything uncertain waits in Spending for you to review. Historical imports preserve today’s cash balance.")
           }
           .listRowBackground(Bow.card)
 
@@ -390,12 +390,12 @@ struct BankFileImportScreen: View {
   }
 
   private func actionLabel(for proposal: BankImportProposal) -> String {
-    if needsReview(proposal) { return "Bank Review · choose a match or envelope" }
+    if needsReview(proposal) { return "Needs review · choose an envelope" }
     switch proposal.decision {
     case .alreadyImported: return "Already in Bow · skipped"
     case .linkManual: return "Matches your existing entry"
     case .createNew: return "Adds automatically"
-    case .review: return "Bank Review"
+    case .review: return "Needs review"
     }
   }
 }

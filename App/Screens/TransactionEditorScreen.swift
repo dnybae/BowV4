@@ -1,11 +1,15 @@
 import SwiftUI
 import SwiftData
 
+/// The one transaction sheet. Adding, editing, approving a bank item, entering a pending one and
+/// entering a scheduled bill all use the same fields in the same order. Only the status under
+/// the amount, one context row and the bottom button change with the sheet's purpose.
 struct TransactionEditorScreen: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
+  @Environment(\.bowToasts) private var toasts
   @Query private var schedules: [BudgetSchedule]
-  /// The bank record behind this transaction, if it was imported.
+  /// The bank records behind the transaction being edited.
   @Query private var importRecords: [SimpleFINImportRecord]
   var transaction: BudgetTransaction?
   var accounts: [BudgetAccount]
@@ -13,10 +17,17 @@ struct TransactionEditorScreen: View {
   var payees: [BudgetPayee]
   var currencyCode: String
   var scheduledDraft: ScheduledTransactionDraft?
-  /// A bank item not yet in the budget, reviewed in this sheet before it's added or matched.
+  /// A posted bank item not yet in the budget.
   var reviewRecord: SimpleFINImportRecord?
-  /// Opens the schedule editor for the bill being recorded.
+  /// A pending bank item not yet entered.
+  var pendingRecord: SimpleFINImportRecord?
+  /// A scheduled bill the bank item lines up with; approving records that date of it.
+  var relatedOccurrence: BudgetScheduleOccurrence?
+  var relatedSchedule: BudgetSchedule?
+  /// Opens the schedule editor for the bill being entered.
   var onEditSchedule: ((UUID) -> Void)?
+  /// Fixed when the sheet opens, so it doesn't change on save.
+  @State private var purpose: TransactionSheetPurpose
   @State private var kind: BudgetTransactionKind
   @State private var accountID: UUID?
   @State private var destinationID: UUID?
@@ -37,27 +48,52 @@ struct TransactionEditorScreen: View {
   @State private var linkScheduledBill = true
   @State private var showingPayeeSelection = false
   @State private var showingIgnoreConfirmation = false
-  /// Transactions you already entered that this bank item might be.
+  /// Transactions you entered that this bank item could be.
   @State private var candidates: [BudgetTransaction] = []
-  @State private var matchChoice: BankMatchChoice?
-  /// Reviewing an imported transaction: fixed when the sheet opens, so it doesn't change on save.
-  @State private var isReviewing: Bool
+  /// The transaction the bank item surely is. Nil adds the bank item as its own transaction.
+  @State private var matchedID: UUID?
+  /// The fields as the bank sent them, to go back to on Unmatch.
+  @State private var bankFields: EditorFields?
+  /// The matched transaction's own fields, to tell whether anything was changed on top of them.
+  @State private var matchFields: EditorFields?
+  @State private var didLoadMatch = false
   /// What the sheet opened with, to tell whether anything was changed before Cancel or a swipe down.
   @State private var initialFields: EditorFields?
-  @Environment(\.bowToasts) private var toasts
 
   init(
-    transaction: BudgetTransaction?,
+    subject: TransactionSheetSubject,
+    relatedOccurrence: BudgetScheduleOccurrence? = nil,
+    relatedSchedule: BudgetSchedule? = nil,
     accounts: [BudgetAccount],
     envelopes: [BudgetEnvelope],
     payees: [BudgetPayee],
     currencyCode: String,
-    scheduledDraft: ScheduledTransactionDraft? = nil,
-    reviewRecord: SimpleFINImportRecord? = nil,
-    preferredAccountID: UUID? = nil,
     onEditSchedule: ((UUID) -> Void)? = nil
   ) {
-    let reviewRecord = transaction == nil ? reviewRecord : nil
+    var transaction: BudgetTransaction?
+    var scheduledDraft: ScheduledTransactionDraft?
+    var reviewRecord: SimpleFINImportRecord?
+    var pendingRecord: SimpleFINImportRecord?
+    var preferredAccountID: UUID?
+    let purpose: TransactionSheetPurpose
+    switch subject {
+    case .new(let accountID):
+      preferredAccountID = accountID
+      purpose = .add
+    case .existing(let existing):
+      transaction = existing
+      purpose = TransactionSheetPurpose(existingNeedsReview: existing.needsApproval
+        || (existing.kind == .expense && existing.envelopeID == nil))
+    case .bankItem(let record):
+      reviewRecord = record
+      purpose = .approve
+    case .pendingItem(let record):
+      pendingRecord = record
+      purpose = .enterPending
+    case .scheduled(let draft):
+      scheduledDraft = draft
+      purpose = .enterScheduled
+    }
     self.transaction = transaction
     self.accounts = accounts
     self.envelopes = envelopes
@@ -65,64 +101,91 @@ struct TransactionEditorScreen: View {
     self.currencyCode = currencyCode
     self.scheduledDraft = scheduledDraft
     self.reviewRecord = reviewRecord
+    self.pendingRecord = pendingRecord
+    self.relatedOccurrence = relatedOccurrence
+    self.relatedSchedule = relatedSchedule
     self.onEditSchedule = onEditSchedule
-    let recordKind: BudgetTransactionKind? = reviewRecord.map { $0.amountMinor < 0 ? .expense : .inflow }
-    _kind = State(initialValue: transaction?.kind ?? scheduledDraft?.kind ?? recordKind ?? .expense)
+    _purpose = State(initialValue: purpose)
+
+    let bank = reviewRecord ?? pendingRecord
+    // A bank transfer leg that lines up with a scheduled transfer is entered as that transfer.
+    let scheduledTransfer = reviewRecord != nil && relatedSchedule?.kind == .transfer ? relatedSchedule : nil
+    let bankKind: BudgetTransactionKind? = bank.map { $0.amountMinor < 0 ? .expense : .inflow }
+    _kind = State(initialValue: transaction?.kind ?? scheduledDraft?.kind
+      ?? (scheduledTransfer != nil ? .transfer : nil) ?? bankKind ?? .expense)
     let fallbackAccountID: UUID? = accounts.first(where: { $0.kind == .cash })?.id
       ?? accounts.first(where: { $0.kind == .credit })?.id
       ?? accounts.first?.id
-    let sourceAccountID: UUID? = transaction?.accountID ?? scheduledDraft?.accountID
-    let defaultAccountID: UUID? = sourceAccountID ?? reviewRecord?.localAccountID
+    let defaultAccountID: UUID? = transaction?.accountID ?? scheduledDraft?.accountID
+      ?? scheduledTransfer?.accountID ?? bank?.localAccountID
       ?? preferredAccountID ?? fallbackAccountID
     self.defaultAccountID = defaultAccountID
     _accountID = State(initialValue: defaultAccountID)
-    _destinationID = State(initialValue: transaction?.transferAccountID ?? scheduledDraft?.transferAccountID)
-    _envelopeID = State(initialValue: transaction?.envelopeID ?? scheduledDraft?.envelopeID)
+    _destinationID = State(initialValue: transaction?.transferAccountID
+      ?? scheduledDraft?.transferAccountID ?? scheduledTransfer?.transferAccountID)
+    _envelopeID = State(initialValue: transaction?.envelopeID ?? scheduledDraft?.envelopeID
+      ?? (reviewRecord != nil ? relatedSchedule?.envelopeID : nil))
     _amountMinor = State(initialValue: transaction.map { abs($0.amountMinor) }
-      ?? scheduledDraft.map { abs($0.amountMinor) } ?? reviewRecord.map { abs($0.amountMinor) } ?? 0)
-    _payee = State(initialValue: transaction?.payee ?? scheduledDraft?.payee ?? reviewRecord?.payee ?? "")
+      ?? scheduledDraft.map { abs($0.amountMinor) } ?? scheduledTransfer.map { abs($0.amountMinor) }
+      ?? bank.map { abs($0.amountMinor) } ?? 0)
+    _payee = State(initialValue: transaction?.payee ?? scheduledDraft?.payee
+      ?? scheduledTransfer?.payee ?? bank?.payee ?? "")
     _merchantDomain = State(initialValue: transaction?.merchantDomain)
-    _notes = State(initialValue: transaction?.notes ?? scheduledDraft?.notes ?? reviewRecord?.memo ?? "")
-    _date = State(initialValue: transaction?.date ?? scheduledDraft?.date ?? reviewRecord?.date ?? Date())
-    _isReviewing = State(initialValue: transaction?.needsImportReview == true || reviewRecord != nil)
-    let transactionID = transaction?.id
+    _notes = State(initialValue: transaction?.notes ?? scheduledDraft?.notes ?? bank?.memo ?? "")
+    _date = State(initialValue: transaction?.date ?? scheduledDraft?.date ?? bank?.date ?? Date())
+    // A new transaction has no bank records; the placeholder ID matches none.
+    let transactionID: UUID? = transaction?.id ?? UUID()
     _importRecords = Query(filter: #Predicate<SimpleFINImportRecord> { $0.transactionID == transactionID })
   }
 
-  /// The posted bank record this review came from; ignoring it removes the transaction.
+  /// The posted bank record an imported transaction came from.
   private var importRecord: SimpleFINImportRecord? {
     guard transaction != nil else { return nil }
     return importRecords.first { $0.status == .imported && $0.bankState == .posted }
   }
 
-  /// The bank item under review: the one passed in, or the record behind an imported transaction.
+  /// The bank transaction this one was matched with.
+  private var linkedRecord: SimpleFINImportRecord? {
+    importRecords.first { $0.status == .linked }
+  }
+
+  /// A pending bank authorization for a transaction you already entered.
+  private var pendingAtBankRecord: SimpleFINImportRecord? {
+    importRecords.first { $0.bankState == .pending && $0.isVisiblePending }
+  }
+
+  /// The posted bank item being approved.
   private var bankRecord: SimpleFINImportRecord? { reviewRecord ?? importRecord }
 
-  private var isMatching: Bool {
-    if case .match = matchChoice { return true }
-    return false
+  private var matchedCandidate: BudgetTransaction? {
+    candidates.first { $0.id == matchedID }
   }
 
-  /// A matched expense still needs an envelope when the transaction you entered doesn't have one.
-  private var matchNeedsEnvelope: Bool {
-    guard case .match(let id) = matchChoice, let bankRecord, bankRecord.amountMinor < 0 else { return false }
-    return candidates.first { $0.id == id }?.envelopeID == nil
+  /// The bank decides which account a bank item is in; a match keeps the account you entered.
+  private var locksAccount: Bool {
+    matchedID != nil || (purpose == .approve && bankRecord != nil) || purpose == .enterPending
   }
 
-  private var canApprove: Bool {
-    switch matchChoice {
-    case .match: !matchNeedsEnvelope || envelopeID != nil
-    case .addNew: canSave
-    case nil: false
-    }
+  private var status: TransactionSheetStatus? {
+    TransactionSheetStatus(
+      purpose: purpose,
+      isPendingAtBank: pendingAtBankRecord != nil,
+      isMatched: linkedRecord != nil || transaction?.sourceRaw == "manualLinked",
+      isCleared: transaction?.isCleared == true,
+      dueDate: scheduledDraft?.scheduledFor
+    )
   }
 
-  private var approveTitle: String {
-    switch matchChoice {
-    case .match: "Match and approve"
-    case .addNew:
-      transaction == nil || transaction?.needsApproval == true ? "Approve and add to budget" : "Add to budget"
-    case nil: "Choose an option"
+  private var statusPill: StatusPill? {
+    guard let status else { return nil }
+    switch status {
+    case .needsReview: return .needsReview
+    case .pendingAtBank: return .pendingAtBank
+    case .dueToday, .due: return .scheduled(status.text)
+    case .overdue: return StatusPill(text: status.text, state: .needs)
+    case .matched: return StatusPill(text: status.text, state: .funded, symbol: "link")
+    case .cleared: return .cleared
+    case .uncleared: return StatusPill(text: status.text, state: .empty)
     }
   }
 
@@ -130,7 +193,20 @@ struct TransactionEditorScreen: View {
     EditorFields(kind: kind, accountID: accountID, destinationID: destinationID, envelopeID: envelopeID,
                  amountMinor: amountMinor, payee: payee, notes: notes, date: date, isScheduled: isScheduled,
                  recurrence: recurrence, merchantDomain: merchantDomain,
-                 linkScheduledBill: linkScheduledBill, matchChoice: matchChoice)
+                 linkScheduledBill: linkScheduledBill, matchedID: matchedID)
+  }
+
+  private func apply(_ fields: EditorFields) {
+    kind = fields.kind
+    accountID = fields.accountID
+    destinationID = fields.destinationID
+    envelopeID = fields.envelopeID
+    amountMinor = fields.amountMinor
+    payee = fields.payee
+    notes = fields.notes
+    date = fields.date
+    merchantDomain = fields.merchantDomain
+    matchedID = fields.matchedID
   }
 
   private var hasChanges: Bool {
@@ -138,13 +214,13 @@ struct TransactionEditorScreen: View {
     return fields != initialFields
   }
 
-  /// The bottom button: what tapping it will do, with the amount.
   private var primaryTitle: String {
-    if isReviewing { return approveTitle }
-    if isRecordingBill { return recordTitle }
-    if transaction != nil { return "Save changes" }
-    if isScheduled { return "Schedule \(signedAmountText)" }
-    return amountMinor == 0 ? "Add transaction" : "Add \(signedAmountText)"
+    purpose.primaryTitle(signedAmount: signedAmountText, amountIsZero: amountMinor == 0,
+                         isScheduling: isScheduled)
+  }
+
+  private var isPrimaryEnabled: Bool {
+    purpose == .edit ? canSave && hasChanges : canSave
   }
 
   private var signedAmountText: String {
@@ -158,22 +234,6 @@ struct TransactionEditorScreen: View {
       ? accounts.first { $0.id == destinationID }?.name
       : envelopes.first { $0.id == envelopeID }?.name ?? (payee.isEmpty ? nil : payee)
     return [signedAmountText, destination].compactMap { $0 }.joined(separator: " · ")
-  }
-
-  /// Recording a scheduled bill that's come due.
-  private var isRecordingBill: Bool { transaction == nil && scheduledDraft != nil }
-
-  private var title: String {
-    if isReviewing { return "Review transaction" }
-    if transaction != nil { return "Edit transaction" }
-    return scheduledDraft == nil ? "New transaction" : "Scheduled bill"
-  }
-
-  /// "Record −$280.00": the amount as it will land in the account.
-  private var recordTitle: String {
-    let signed = kind == .expense ? -amountMinor : amountMinor
-    let amount = BudgetMoney.formatted(signed, currencyCode: currencyCode, showsPlusSign: kind == .inflow)
-    return "Record \(amount)"
   }
 
   private var canSave: Bool {
@@ -192,6 +252,10 @@ struct TransactionEditorScreen: View {
     return destination.kind == .asset || destination.kind == .liability
   }
 
+  private var chosenEnvelopeID: UUID? {
+    kind == .transfer && !needsEnvelopeForTransfer ? nil : envelopeID
+  }
+
   private var envelopeNoneTitle: String {
     if kind == .inflow {
       return selectedAccount?.kind == .cash ? "Ready to Assign" : "No envelope"
@@ -199,8 +263,10 @@ struct TransactionEditorScreen: View {
     return "Needs an envelope"
   }
 
+  /// A scheduled bill this transaction could be recorded as, offered with a toggle.
   private var matchingSchedule: BudgetSchedule? {
-    guard let transaction, transaction.needsApproval, transaction.scheduleID == nil,
+    guard relatedOccurrence == nil, matchedID == nil,
+          let transaction, transaction.needsApproval, transaction.scheduleID == nil,
           kind == .expense, let accountID else { return nil }
     let minor = amountMinor
     let matches = schedules.filter { schedule in
@@ -219,122 +285,41 @@ struct TransactionEditorScreen: View {
   var body: some View {
     NavigationStack {
       Form {
-        if isReviewing {
-          Section {
-            reviewContextCard
-          }
-          .listRowBackground(Color.clear)
-          .listRowInsets(EdgeInsets())
-        } else if isRecordingBill, let scheduledDraft {
-          Section {
-            ScheduledBillContextCard(
-              draft: scheduledDraft, kind: kind,
-              frequency: schedules.first { $0.id == scheduledDraft.scheduleID }?.frequency
-            )
-          }
-          .listRowBackground(Color.clear)
-          .listRowInsets(EdgeInsets())
-        }
         Section {
           VStack(spacing: Bow.Space.s4) {
             CurrencyAmountField("Amount", minor: $amountMinor, currencyCode: currencyCode, style: .editorHero,
-                                focusOnAppear: transaction == nil && reviewRecord == nil && scheduledDraft == nil)
+                                focusOnAppear: purpose == .add)
               // A match uses the posted bank amount.
-              .disabled(isMatching)
-            // The bank sets an imported transaction's direction; the schedule sets a bill's.
-            if !isReviewing && !isRecordingBill {
-              Picker("Type", selection: $kind) {
-                ForEach(BudgetTransactionKind.allCases) { option in
-                  Text(option.title).tag(option)
-                }
+              .disabled(matchedID != nil)
+            Picker("Type", selection: $kind) {
+              ForEach(BudgetTransactionKind.allCases) { option in
+                Text(option.title).tag(option)
               }
-              .pickerStyle(.segmented)
+            }
+            .pickerStyle(.segmented)
+            .disabled(purpose.locksType || matchedID != nil)
+            if let statusPill {
+              statusPill
             }
           }
           .padding(.bottom, Bow.Space.s2)
           .listRowBackground(Color.clear)
           .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         }
-        if !candidates.isEmpty, let bankRecord {
-          BankMatchSection(
-            candidates: candidates, choice: $matchChoice, envelopeID: $envelopeID,
-            record: bankRecord, envelopes: envelopes, currencyCode: currencyCode,
-            showsEnvelope: matchNeedsEnvelope
-          )
-        }
-        if !isMatching {
         Section {
-          if kind == .transfer {
-            AccountSelectionField(title: "From account", selection: $accountID, accounts: accounts,
-                                  systemImage: "creditcard")
-            AccountSelectionField(
-              title: "To account", selection: $destinationID,
-              accounts: accounts, excludingID: accountID, systemImage: "arrow.right"
-            )
-          } else {
-            Button {
-              showingPayeeSelection = true
-            } label: {
-              HStack(spacing: 12) {
-                BowFieldTitle(title: kind == .expense ? "Payee" : "Source", systemImage: "person")
-                Spacer(minLength: 12)
-                Text(payee.isEmpty ? "Choose a payee" : payee)
-                  .foregroundStyle(payee.isEmpty ? Bow.inkSoft : Bow.ink)
-                  .lineLimit(1)
-                Image(systemName: "chevron.right")
-                  .font(.bowFootnote.weight(.semibold))
-                  .foregroundStyle(Bow.inkFaint)
-                  .accessibilityHidden(true)
-              }
-              .contentShape(Rectangle())
-            }
-            .accessibilityLabel("\(kind == .expense ? "Payee" : "Source"), \(payee.isEmpty ? "Choose a payee" : payee)")
-          }
-          if kind != .transfer || needsEnvelopeForTransfer {
-            EnvelopeSelectionField(
-              title: "Envelope", selection: $envelopeID,
-              envelopes: envelopes, noneTitle: envelopeNoneTitle, systemImage: "square.grid.2x2",
-              highlightsNone: kind == .expense
-            )
-          }
-          if kind != .transfer {
-            if isReviewing {
-              // The bank decides which account an imported transaction is in.
-              LabeledContent {
-                Text(selectedAccount?.name ?? "Account")
-              } label: {
-                Label("Account", systemImage: "creditcard").labelStyle(.bowTile)
-              }
-            } else {
-              AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts,
-                                    systemImage: "creditcard")
-            }
-          }
-          NavigationLink {
-            BowDatePickerScreen(title: isScheduled ? "First due" : "Date", date: $date)
-          } label: {
-            LabeledContent {
-              Text(date.formatted(date: .abbreviated, time: .omitted))
-            } label: {
-              Label(isScheduled ? "First due" : "Date", systemImage: "calendar")
-                .labelStyle(.bowTile)
-            }
-          }
-          BowNotesRow(notes: $notes)
+          fieldRows
         } footer: {
           if let fieldsFootnote {
             Text(fieldsFootnote)
           }
         }
         .listRowBackground(Bow.card)
+        Section {
+          BowNotesRow(notes: $notes)
         }
-        if let matchingSchedule, !isMatching {
-          ScheduledMatchSection(
-            payee: matchingSchedule.payee, date: date,
-            isLinked: $linkScheduledBill
-          )
-        }
-        if isRecordingBill, let scheduledDraft {
+        .listRowBackground(Bow.card)
+        contextSection
+        if purpose == .enterScheduled, let scheduledDraft {
           Section {
             Button("Skip this date") { skip(scheduledDraft) }
             if let onEditSchedule {
@@ -345,7 +330,7 @@ struct TransactionEditorScreen: View {
           }
           .listRowBackground(Bow.card)
         }
-        if transaction == nil && scheduledDraft == nil {
+        if purpose == .add {
           Section {
             Toggle(isOn: $isScheduled) {
               Label("Schedule for later", systemImage: "repeat").labelStyle(.bowTile)
@@ -379,7 +364,7 @@ struct TransactionEditorScreen: View {
           .listRowBackground(Bow.card)
         }
 
-        if isReviewing && bankRecord != nil {
+        if purpose == .approve && bankRecord != nil {
           BowDestructiveSection("Ignore bank transaction") {
             showingIgnoreConfirmation = true
           }
@@ -389,17 +374,20 @@ struct TransactionEditorScreen: View {
           }
         }
       }
-      .bowSkyList(mood: isReviewing ? .review : .dawn, height: 420)
+      .bowSkyList(mood: .dawn, height: 420)
       .bowEditorSheet(hasChanges: hasChanges)
-      .sensoryFeedback(.selection, trigger: matchChoice)
-      .bowAnimation(value: matchChoice)
+      .bowAnimation(value: matchedID)
       // One primary action, at the bottom, riding above the keyboard. No Save in the toolbar.
       .safeAreaInset(edge: .bottom) {
-        BowBottomAction(primaryTitle, isEnabled: isReviewing ? canApprove : canSave) {
-          isReviewing ? approve() : save()
+        BowBottomAction(isEnabled: isPrimaryEnabled, action: performPrimaryAction) {
+          if let symbol = purpose.primarySystemImage {
+            Label(primaryTitle, systemImage: symbol)
+          } else {
+            Text(primaryTitle)
+          }
         }
       }
-      .navigationTitle(title)
+      .navigationTitle(purpose == .add ? "New transaction" : "Transaction")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         BowCancelButton(hasChanges: hasChanges) { dismiss() }
@@ -446,14 +434,10 @@ struct TransactionEditorScreen: View {
         Text("An imported transaction may already represent this payment. Updating it keeps one ledger entry and uses the details you entered.")
       }
       .bowErrorAlert("Couldn’t save transaction", message: $errorMessage)
-      .task(id: bankRecord?.id) {
-        let wasUnchanged = !hasChanges
-        loadCandidates()
-        if wasUnchanged { initialFields?.matchChoice = matchChoice }
-      }
+      .task(id: bankRecord?.id) { loadMatch() }
       .onAppear {
-        // A new bank item gets the same envelope suggestion the old review screen made.
-        if reviewRecord != nil && envelopeID == nil { applyPayeeRule() }
+        // A bank item gets the envelope its payee usually goes to.
+        if (reviewRecord != nil || pendingRecord != nil) && envelopeID == nil { applyPayeeRule() }
         if initialFields == nil { initialFields = fields }
       }
       .onChange(of: payee) { _, _ in applyPayeeRule() }
@@ -474,7 +458,147 @@ struct TransactionEditorScreen: View {
     }
   }
 
-  /// Explains the fields when something needs it; shown under the main section so Notes stays last.
+  /// Payee, Envelope, Account and Date: the same rows, in the same order, in every state.
+  @ViewBuilder
+  private var fieldRows: some View {
+    if kind == .transfer {
+      AccountSelectionField(title: "From account", selection: $accountID, accounts: accounts,
+                            systemImage: "creditcard")
+        .disabled(locksAccount)
+      AccountSelectionField(
+        title: "To account", selection: $destinationID,
+        accounts: accounts, excludingID: accountID, systemImage: "arrow.right"
+      )
+      .disabled(locksAccount)
+    } else {
+      Button {
+        showingPayeeSelection = true
+      } label: {
+        HStack(spacing: 12) {
+          BowFieldTitle(title: kind == .expense ? "Payee" : "Source", systemImage: "person")
+          Spacer(minLength: 12)
+          Text(payee.isEmpty ? "Choose a payee" : payee)
+            .foregroundStyle(payee.isEmpty ? Bow.inkSoft : Bow.ink)
+            .lineLimit(1)
+          Image(systemName: "chevron.right")
+            .font(.bowFootnote.weight(.semibold))
+            .foregroundStyle(Bow.inkFaint)
+            .accessibilityHidden(true)
+        }
+        .contentShape(Rectangle())
+      }
+      .accessibilityLabel("\(kind == .expense ? "Payee" : "Source"), \(payee.isEmpty ? "Choose a payee" : payee)")
+    }
+    if kind != .transfer || needsEnvelopeForTransfer {
+      EnvelopeSelectionField(
+        title: "Envelope", selection: $envelopeID,
+        envelopes: envelopes, noneTitle: envelopeNoneTitle, systemImage: "square.grid.2x2",
+        highlightsNone: kind == .expense
+      )
+    }
+    if kind != .transfer {
+      if locksAccount {
+        LabeledContent {
+          Text(selectedAccount?.name ?? "Account")
+        } label: {
+          Label("Account", systemImage: "creditcard").labelStyle(.bowTile)
+        }
+      } else {
+        AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts,
+                              systemImage: "creditcard")
+      }
+    }
+    NavigationLink {
+      BowDatePickerScreen(title: isScheduled ? "First due" : "Date", date: $date)
+    } label: {
+      LabeledContent {
+        Text(date.formatted(date: .abbreviated, time: .omitted))
+      } label: {
+        Label(isScheduled ? "First due" : "Date", systemImage: "calendar")
+          .labelStyle(.bowTile)
+      }
+    }
+  }
+
+  /// The one row that differs by state: the match, or the scheduled bill this becomes.
+  @ViewBuilder
+  private var contextSection: some View {
+    if let candidate = matchedCandidate, let bankRecord {
+      Section {
+        NavigationLink {
+          MatchDetailsScreen(
+            entered: side(for: candidate, seenFrom: bankRecord), bank: side(for: bankRecord),
+            unmatchFootnote: "Unmatching adds the bank transaction as a new one when you approve.",
+            onUnmatch: unmatchBeforeApproving
+          )
+        } label: {
+          matchRow(bankRecord)
+        }
+      }
+      .listRowBackground(Bow.card)
+    } else if purpose == .edit, let transaction, let linkedRecord {
+      Section {
+        NavigationLink {
+          MatchDetailsScreen(
+            entered: side(for: transaction, seenFrom: linkedRecord), bank: side(for: linkedRecord),
+            unmatchFootnote: "Unmatching keeps your transaction and returns the bank transaction to review.",
+            onUnmatch: { unmatch(linkedRecord) }
+          )
+        } label: {
+          matchRow(linkedRecord)
+        }
+      }
+      .listRowBackground(Bow.card)
+    } else if let relatedSchedule, let relatedOccurrence {
+      Section {
+        LabeledContent {
+          Text(relatedSchedule.payee.isEmpty ? "Scheduled" : relatedSchedule.payee)
+        } label: {
+          Label("Scheduled bill", systemImage: "calendar.badge.clock").labelStyle(.bowTile)
+        }
+      } footer: {
+        Text("Approving records the \(relatedOccurrence.scheduledFor.formatted(.dateTime.month(.abbreviated).day())) date of this schedule.")
+      }
+      .listRowBackground(Bow.card)
+    } else if let matchingSchedule {
+      ScheduledMatchSection(
+        payee: matchingSchedule.payee, date: date,
+        isLinked: $linkScheduledBill
+      )
+    }
+  }
+
+  private func matchRow(_ record: SimpleFINImportRecord) -> some View {
+    LabeledContent {
+      VStack(alignment: .trailing, spacing: 2) {
+        Text(record.payee.isEmpty ? "Bank transaction" : record.payee)
+          .lineLimit(1)
+        Text(record.date.formatted(.dateTime.month(.abbreviated).day().year()))
+          .font(.bowSubhead)
+      }
+    } label: {
+      Label("Match details", systemImage: "link").labelStyle(.bowTile)
+    }
+  }
+
+  private func side(for transaction: BudgetTransaction, seenFrom record: SimpleFINImportRecord) -> MatchDetailsScreen.Side {
+    MatchDetailsScreen.Side(
+      payee: TransactionRowModel.title(payee: transaction.payee, kind: transaction.kind),
+      date: transaction.date,
+      amountMinor: transaction.transferAccountID == record.localAccountID
+        ? -transaction.amountMinor : transaction.amountMinor,
+      currencyCode: currencyCode
+    )
+  }
+
+  private func side(for record: SimpleFINImportRecord) -> MatchDetailsScreen.Side {
+    MatchDetailsScreen.Side(
+      payee: record.payee, date: record.date, amountMinor: record.amountMinor,
+      currencyCode: currencyCode, isPending: record.bankState == .pending
+    )
+  }
+
+  /// Explains the fields when something needs it; shown under the main section.
   private var fieldsFootnote: String? {
     if (kind != .transfer || needsEnvelopeForTransfer) && kind == .expense && envelopeID == nil {
       return "Choose an envelope before saving this expense."
@@ -482,30 +606,18 @@ struct TransactionEditorScreen: View {
     if kind != .transfer && (selectedAccount?.kind == .asset || selectedAccount?.kind == .liability) {
       return "Envelopes on tracking accounts are for reference and don't change your budget."
     }
+    if purpose == .enterPending {
+      return "The final amount and date may change when it posts. Bow will match it then."
+    }
     return nil
   }
 
-  @ViewBuilder
-  private var reviewContextCard: some View {
-    let source = transaction
-    let origin: String? = if bankRecord?.origin == .bankFile || source?.sourceRaw == "bankFile" {
-      "From a bank file"
-    } else if bankRecord != nil || source?.isFromBank == true {
-      "From your bank"
-    } else {
-      nil
+  private func performPrimaryAction() {
+    switch purpose {
+    case .add, .edit, .enterScheduled: save()
+    case .approve: approve()
+    case .enterPending: enterPending()
     }
-    let accountName = accounts.first { $0.id == (source?.accountID ?? reviewRecord?.localAccountID) }?.name
-    let shownDate = source?.date ?? reviewRecord?.date ?? date
-    ReviewContextCard(
-      name: source?.payee ?? reviewRecord?.payee ?? "",
-      domain: source?.merchantDomain,
-      kind: source?.kind ?? kind,
-      context: [origin, accountName, shownDate.formatted(.dateTime.month(.abbreviated).day())]
-        .compactMap { $0 }.joined(separator: ", "),
-      pill: source == nil || source?.needsApproval == true
-        ? .needsReview : StatusPill(text: "Choose an envelope", state: .needs)
-    )
   }
 
   private func applyPayeeRule() {
@@ -534,8 +646,8 @@ struct TransactionEditorScreen: View {
       .lastUsed(payee: payee, kind: kind, excluding: transaction?.id)
     guard !Task.isCancelled else { return }
 
-    if transaction == nil && scheduledDraft == nil
-        && (accountID == defaultAccountID || accountID == autoFilledAccountID) {
+    // Only a new transaction's account is a guess; everything else already has its account.
+    if purpose == .add && (accountID == defaultAccountID || accountID == autoFilledAccountID) {
       let suggested = lastUsed.flatMap { used in accounts.first { $0.id == used.accountID }?.id }
       accountID = suggested ?? defaultAccountID
       autoFilledAccountID = suggested
@@ -564,13 +676,11 @@ struct TransactionEditorScreen: View {
       errorMessage = "Choose today or a future date for a scheduled transaction."
       return
     }
-    let chosenEnvelopeID = kind == .transfer && !needsEnvelopeForTransfer
-      ? nil : envelopeID
-    let linkedScheduleID = scheduledDraft?.scheduleID
+    let linkedScheduleID = scheduledDraft?.scheduleID ?? relatedOccurrence?.scheduleID
       ?? (linkScheduledBill ? matchingSchedule?.id : nil)
-    let linkedScheduledFor = scheduledDraft?.scheduledFor
+    let linkedScheduledFor = scheduledDraft?.scheduledFor ?? relatedOccurrence?.scheduledFor
       ?? (linkScheduledBill && matchingSchedule != nil ? date : nil)
-    if isScheduled && transaction == nil && scheduledDraft == nil {
+    if isScheduled && purpose == .add {
       do {
         try BudgetCommands.addSchedule(
           kind: kind, account: account, destination: destination,
@@ -630,83 +740,174 @@ struct TransactionEditorScreen: View {
           in: modelContext
         )
       }
-      toasts?.show(.saved(transaction == nil ? "Added · \(savedSummary)" : "Saved · \(savedSummary)"))
+      let verb = switch purpose {
+      case .approve: "Approved"
+      case .edit: "Saved"
+      case .add, .enterPending, .enterScheduled: transaction == nil ? "Added" : "Saved"
+      }
+      toasts?.show(.saved("\(verb) · \(savedSummary)"))
       dismiss()
     } catch {
       errorMessage = error.localizedDescription
     }
   }
 
-  /// Finds transactions you entered that this bank item could be, and picks a starting choice
-  /// the same way the bank review screen does.
-  private func loadCandidates() {
-    guard let bankRecord else { return }
+  /// Finds what the bank item surely is. A sure match fills the sheet with the transaction you
+  /// entered (matching keeps its payee, envelope and notes); otherwise nothing is suggested.
+  private func loadMatch() {
+    guard !didLoadMatch, purpose == .approve, let bankRecord else { return }
+    didLoadMatch = true
+    let wasUnchanged = initialFields == nil || !hasChanges
     do {
       let nearby = try BudgetTransactionLookup.near(
         accountID: bankRecord.localAccountID, date: bankRecord.date, days: 10, in: modelContext
       )
       let records = try modelContext.fetch(FetchDescriptor<SimpleFINImportRecord>())
-      candidates = SimpleFINSyncCoordinator.shared.possibleMatches(
+      var possible = SimpleFINSyncCoordinator.shared.possibleMatches(
         for: bankRecord, among: nearby, records: records
       ).filter { $0.id != transaction?.id }
+      // A scheduled transfer's bank leg can only match a transfer.
+      if relatedSchedule?.kind == .transfer { possible = possible.filter { $0.kind == .transfer } }
+      candidates = possible
+      let sureID = BankMatchPicker().sureMatch(
+        bankAmountMinor: bankRecord.amountMinor,
+        linkedID: bankRecord.status == .review ? bankRecord.transactionID : nil,
+        scheduleID: relatedSchedule?.id,
+        among: possible.map { candidate in
+          BankMatchPicker.Candidate(
+            id: candidate.id,
+            bankAmountMinor: candidate.transferAccountID == bankRecord.localAccountID
+              ? -candidate.amountMinor : candidate.amountMinor,
+            scheduleID: candidate.scheduleID
+          )
+        }
+      )
+      if let sureID, let candidate = possible.first(where: { $0.id == sureID }) {
+        bankFields = fields
+        var matched = fields
+        matched.kind = candidate.kind
+        matched.accountID = candidate.accountID
+        matched.destinationID = candidate.transferAccountID
+        matched.amountMinor = candidate.kind == .transfer
+          ? abs(candidate.amountMinor) : abs(bankRecord.amountMinor)
+        matched.payee = candidate.payee
+        matched.merchantDomain = candidate.merchantDomain
+        matched.notes = candidate.notes
+        matched.date = candidate.date
+        matched.matchedID = sureID
+        matched.envelopeID = candidate.envelopeID
+        matchFields = matched
+        // Keep the suggested envelope when the entered transaction doesn't have one yet.
+        if candidate.envelopeID == nil { matched.envelopeID = envelopeID }
+        apply(matched)
+      }
     } catch {
       errorMessage = error.localizedDescription
     }
-    guard matchChoice == nil else { return }
-    if bankRecord.status == .imported || candidates.isEmpty {
-      matchChoice = .addNew
-    } else if let id = bankRecord.transactionID, candidates.contains(where: { $0.id == id }) {
-      matchChoice = .match(id)
+    if wasUnchanged { initialFields = fields }
+  }
+
+  /// Unmatch before approving: back to the bank's own details, added as a new transaction.
+  private func unmatchBeforeApproving() {
+    guard let bankFields else { return }
+    apply(bankFields)
+  }
+
+  /// Unmatch a saved match: your transaction stays, and the bank item goes back to review.
+  private func unmatch(_ record: SimpleFINImportRecord) {
+    do {
+      try SimpleFINSyncCoordinator.shared.unmatch(record, in: modelContext)
+      toasts?.show(.saved("Unmatched · bank transaction back in review"))
+      dismiss()
+    } catch {
+      errorMessage = error.localizedDescription
     }
   }
 
-  /// The review sheet's main action: match, approve the imported transaction, or add the bank item.
+  /// Approve: match the bank item to what you entered, or add it to the budget.
   private func approve() {
-    switch matchChoice {
-    case .match(let id):
-      guard let bankRecord else { return }
-      resolve(bankRecord, as: .link(id))
-    case .addNew:
-      if let reviewRecord {
-        addReviewRecord(reviewRecord)
+    guard let account = selectedAccount else {
+      errorMessage = "Choose an account."
+      return
+    }
+    let coordinator = SimpleFINSyncCoordinator.shared
+    do {
+      if let matchedID, let candidate = matchedCandidate, let bankRecord {
+        try coordinator.resolve(
+          bankRecord, as: .link(matchedID), envelopeID: envelopeID,
+          scheduleID: relatedOccurrence?.scheduleID, scheduledFor: relatedOccurrence?.scheduledFor,
+          in: modelContext
+        )
+        if fields != matchFields {
+          try BudgetCommands.updateTransaction(
+            candidate, kind: candidate.kind, account: account,
+            destination: accounts.first { $0.id == candidate.transferAccountID },
+            envelopeID: chosenEnvelopeID, amountMinor: abs(candidate.amountMinor), date: date,
+            payee: payee, merchantDomain: merchantDomain, notes: notes, in: modelContext
+          )
+        }
+        toasts?.show(.saved("Matched and approved"))
+      } else if let reviewRecord {
+        if relatedSchedule?.kind == .transfer, let relatedOccurrence {
+          // Records the scheduled transfer and matches this bank leg to it, in one step.
+          let recorded = try BudgetCommands.addTransaction(
+            kind: .transfer, account: account,
+            destination: accounts.first { $0.id == destinationID },
+            envelopeID: chosenEnvelopeID, amountMinor: amountMinor, date: date,
+            payee: payee, notes: notes,
+            scheduleID: relatedOccurrence.scheduleID, scheduledFor: relatedOccurrence.scheduledFor,
+            in: modelContext
+          )
+          try coordinator.resolve(
+            reviewRecord, as: .link(recorded.id),
+            scheduleID: relatedOccurrence.scheduleID, scheduledFor: relatedOccurrence.scheduledFor,
+            in: modelContext
+          )
+        } else {
+          try coordinator.resolve(
+            reviewRecord, as: .importNew, envelopeID: envelopeID,
+            scheduleID: relatedOccurrence?.scheduleID, scheduledFor: relatedOccurrence?.scheduledFor,
+            in: modelContext
+          )
+          try applyEdits(madeTo: reviewRecord, account: account)
+        }
+        toasts?.show(.saved("Approved · \(savedSummary)"))
       } else {
         save()
+        return
       }
-    case nil:
-      break
-    }
-  }
-
-  private func resolve(_ record: SimpleFINImportRecord, as decision: SimpleFINReviewDecision) {
-    do {
-      try SimpleFINSyncCoordinator.shared.resolve(record, as: decision, envelopeID: envelopeID, in: modelContext)
-      if case .link = decision { toasts?.show(.saved("Matched and approved")) }
       dismiss()
     } catch {
       errorMessage = error.localizedDescription
     }
   }
 
-  /// Adds a bank item to the budget, then applies anything changed in the sheet.
-  private func addReviewRecord(_ record: SimpleFINImportRecord) {
+  /// Enter Now: puts a pending bank item in the budget before it posts.
+  private func enterPending() {
+    guard let pendingRecord, let account = selectedAccount else { return }
     do {
-      try SimpleFINSyncCoordinator.shared.resolve(record, as: .importNew, envelopeID: envelopeID, in: modelContext)
-      let edited = payee != record.payee || notes != record.memo || merchantDomain != nil
-        || amountMinor != abs(record.amountMinor)
-        || !Calendar.current.isDate(date, inSameDayAs: record.date)
-      if edited, let account = selectedAccount,
-         let added = try record.transactionID.flatMap({ try BudgetTransactionLookup.byID($0, in: modelContext) }) {
-        try BudgetCommands.updateTransaction(
-          added, kind: kind, account: account, destination: nil, envelopeID: envelopeID,
-          amountMinor: amountMinor, date: date, payee: payee, merchantDomain: merchantDomain,
-          notes: notes, in: modelContext
-        )
-      }
-      toasts?.show(.saved("Added · \(savedSummary)"))
+      try SimpleFINSyncCoordinator.shared.enterPending(pendingRecord, envelopeID: envelopeID, in: modelContext)
+      try applyEdits(madeTo: pendingRecord, account: account)
+      toasts?.show(.saved("Entered · \(savedSummary)"))
       dismiss()
     } catch {
       errorMessage = error.localizedDescription
     }
+  }
+
+  /// Once a bank item is in the budget, applies anything changed in the sheet.
+  private func applyEdits(madeTo record: SimpleFINImportRecord, account: BudgetAccount) throws {
+    let edited = payee != record.payee || notes != record.memo || merchantDomain != nil
+      || amountMinor != abs(record.amountMinor)
+      || !Calendar.current.isDate(date, inSameDayAs: record.date)
+    guard edited,
+          let added = try record.transactionID.flatMap({ try BudgetTransactionLookup.byID($0, in: modelContext) })
+    else { return }
+    try BudgetCommands.updateTransaction(
+      added, kind: kind, account: account, destination: nil, envelopeID: envelopeID,
+      amountMinor: amountMinor, date: date, payee: payee, merchantDomain: merchantDomain,
+      notes: notes, in: modelContext
+    )
   }
 
   /// Skips this date of the bill, the same as Skip in Spending; the schedule stays active.
@@ -765,7 +966,7 @@ private struct EditorFields: Equatable {
   var recurrence: ScheduleFrequency
   var merchantDomain: String?
   var linkScheduledBill: Bool
-  var matchChoice: BankMatchChoice?
+  var matchedID: UUID?
 }
 
 private struct PayeeDefaultsTrigger: Equatable {
@@ -800,140 +1001,5 @@ private struct ScheduledMatchSection: View {
       Text("Linking marks this bill recorded without creating another transaction.")
     }
     .listRowBackground(Bow.card)
-  }
-}
-
-/// The card at the top of the review sheet: where the transaction came from and why it's here.
-private struct ReviewContextCard: View {
-  var name: String
-  var domain: String?
-  var kind: BudgetTransactionKind
-  var context: String
-  var pill: StatusPill
-
-  var body: some View {
-    BowContextCard(name: name.isEmpty ? "Bank transaction" : name, context: context) {
-      MerchantLogoView(merchantName: name, domain: domain, kind: kind, size: 44, style: .glossy)
-    } trailing: {
-      pill
-    }
-  }
-}
-
-/// The card at the top of the record sheet: the bill, how often it repeats and when it's due.
-private struct ScheduledBillContextCard: View {
-  var draft: ScheduledTransactionDraft
-  var kind: BudgetTransactionKind
-  var frequency: ScheduleFrequency?
-
-  private var calendar: Calendar { .current }
-  private var isDueToday: Bool { calendar.isDateInToday(draft.scheduledFor) }
-  private var isOverdue: Bool { !isDueToday && draft.scheduledFor < Date() }
-  private var dueDate: String { draft.scheduledFor.formatted(.dateTime.month(.abbreviated).day()) }
-
-  private var context: String {
-    let due = isDueToday ? "due today" : "due \(dueDate)"
-    return ["Scheduled", frequency?.title.lowercased(), due].compactMap { $0 }.joined(separator: ", ")
-  }
-
-  private var pill: StatusPill {
-    if isDueToday { return .scheduled("Due today") }
-    if isOverdue { return StatusPill(text: "Overdue", state: .needs) }
-    return .scheduled("Due \(dueDate)")
-  }
-
-  var body: some View {
-    BowContextCard(name: draft.payee.isEmpty ? "Scheduled bill" : draft.payee, context: context) {
-      MerchantLogoView(merchantName: draft.payee, kind: kind, size: 44, style: .glossy)
-    } trailing: {
-      pill
-    }
-  }
-}
-
-private enum BankMatchChoice: Equatable {
-  case match(UUID)
-  case addNew
-}
-
-/// "Already entered?": the transactions this bank item might be, or add it as new.
-private struct BankMatchSection: View {
-  var candidates: [BudgetTransaction]
-  @Binding var choice: BankMatchChoice?
-  @Binding var envelopeID: UUID?
-  var record: SimpleFINImportRecord
-  var envelopes: [BudgetEnvelope]
-  var currencyCode: String
-  var showsEnvelope: Bool
-
-  var body: some View {
-    Section {
-      ForEach(candidates) { candidate in
-        option(.match(candidate.id)) {
-          HStack(spacing: Bow.Space.s3) {
-            VStack(alignment: .leading, spacing: 2) {
-              Text(candidate.payee.isEmpty ? "Transfer" : candidate.payee)
-                .foregroundStyle(Bow.ink)
-              Text(detail(for: candidate))
-                .font(.bowSubhead)
-                .foregroundStyle(Bow.inkSoft)
-              if candidate.amountMinor != record.amountMinor {
-                Text("Amount differs; matching uses the posted bank amount")
-                  .font(.bowSubhead)
-                  .foregroundStyle(Bow.needsInk)
-              }
-            }
-            Spacer(minLength: Bow.Space.s2)
-            MoneyText(
-              minor: candidate.transferAccountID == record.localAccountID
-                ? -candidate.amountMinor : candidate.amountMinor,
-              currencyCode: currencyCode
-            )
-            .foregroundStyle(Bow.ink)
-          }
-        }
-      }
-      if showsEnvelope {
-        EnvelopeSelectionField(
-          title: "Envelope", selection: $envelopeID,
-          envelopes: envelopes, noneTitle: "Choose an envelope", systemImage: "square.grid.2x2"
-        )
-      }
-      // For an already imported transaction, this approves it as its own transaction.
-      option(.addNew) {
-        Text("No, add as new transaction")
-          .foregroundStyle(Bow.ink)
-      }
-    } header: {
-      Text("Already entered?")
-    } footer: {
-      Text("Matching keeps your payee, envelope and notes. You can unmatch it later.")
-    }
-    .listRowBackground(Bow.card)
-  }
-
-  private func option<Label: View>(_ value: BankMatchChoice, @ViewBuilder label: () -> Label) -> some View {
-    Button {
-      choice = value
-    } label: {
-      HStack(spacing: Bow.Space.s3) {
-        Image(systemName: choice == value ? "largecircle.fill.circle" : "circle")
-          .font(.bowIconTitle)
-          .contentTransition(.symbolEffect(.replace))
-          .foregroundStyle(choice == value ? AnyShapeStyle(.tint) : AnyShapeStyle(Bow.inkFaint))
-          .accessibilityHidden(true)
-        label()
-      }
-      .contentShape(.rect)
-    }
-    .accessibilityAddTraits(choice == value ? .isSelected : [])
-  }
-
-  private func detail(for candidate: BudgetTransaction) -> String {
-    [
-      candidate.date.formatted(.dateTime.month(.abbreviated).day()),
-      envelopes.first { $0.id == candidate.envelopeID }?.name,
-      candidate.sourceRaw == "manual" ? "entered by you" : nil
-    ].compactMap { $0 }.joined(separator: ", ")
   }
 }

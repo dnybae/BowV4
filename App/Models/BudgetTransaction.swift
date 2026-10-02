@@ -45,11 +45,6 @@ final class BudgetTransaction {
   /// Imported from SimpleFIN or a bank file.
   var isFromBank: Bool { sourceRaw == "simplefin" || sourceRaw == "bankFile" }
 
-  /// Opens in the editor's review mode: not yet approved, or a bank expense still without an envelope.
-  var needsImportReview: Bool {
-    needsApproval || (isFromBank && kind == .expense && envelopeID == nil)
-  }
-
   init(
     accountID: UUID,
     transferAccountID: UUID? = nil,

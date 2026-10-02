@@ -21,7 +21,8 @@ struct TransactionsScreen: View {
   var currencyCode: String
   var onSelect: (UUID) -> Void
   var onRecord: (ScheduledTransactionDraft) -> Void
-  var onReviewBankRecord: (SimpleFINImportRecord) -> Void
+  var onReviewBankRecord: (SimpleFINImportRecord, BudgetScheduleOccurrence?) -> Void
+  var onEnterPending: (SimpleFINImportRecord) -> Void
   var onAddTransaction: () -> Void
   var onConnectBank: () -> Void
   @State private var searchText = ""
@@ -94,10 +95,8 @@ struct TransactionsScreen: View {
           Section(group.title) {
             ForEach(group.items) { item in
               SpendingTimelineEntryView(
-                item: item, accounts: accounts, envelopes: envelopes,
-                schedules: schedules, onSelect: onSelect,
-                onRecord: onRecord,
-                onReviewBankRecord: onReviewBankRecord
+                item: item, onSelect: onSelect, onRecord: onRecord,
+                onReviewBankRecord: onReviewBankRecord, onEnterPending: onEnterPending
               )
             }
           }

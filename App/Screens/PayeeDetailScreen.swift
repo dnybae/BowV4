@@ -287,13 +287,11 @@ struct PayeeDetailScreen: View {
     }
     // Transactions open as a sheet, the same as everywhere else in the app.
     .sheet(item: $selectedTransaction) { transaction in
-      TransactionDetailSheet(
-        transaction: transaction,
+      TransactionEditorScreen(
+        subject: .existing(transaction),
         accounts: accounts, envelopes: envelopes,
         payees: payees, currencyCode: currencyCode
       )
-      // Opening this payee again from its own transaction would only loop.
-      .environment(\.currentPayeeKey, payeeKey)
     }
     .sheet(isPresented: $showingMerge) {
       if let entry {

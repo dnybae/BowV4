@@ -4,7 +4,6 @@ import SwiftData
 struct ManagePayeesScreen: View {
   @Environment(\.modelContext) private var modelContext
   @Query private var payees: [BudgetPayee]
-  @Query private var envelopes: [BudgetEnvelope]
   @State private var searchText = ""
   @State private var showingAdd = false
   @State private var directoryEntries: [PayeeDirectory.Entry] = []
@@ -122,29 +121,19 @@ struct ManagePayeesScreen: View {
 
   private func payeeRow(_ entry: PayeeDirectory.Entry) -> some View {
     let payee = payees.first { $0.id == entry.ruleID }
-    let envelopeName = envelopes.first { $0.id == payee?.defaultEnvelopeID }?.name
     return NavigationLink {
       PayeeDetailScreen(payeeKey: entry.key)
     } label: {
       HStack {
         MerchantLogoView(merchantName: entry.name, domain: payee?.merchantDomain)
-        VStack(alignment: .leading, spacing: 2) {
-          Text(entry.name)
-          if let envelopeName {
-            Label(envelopeName, systemImage: "envelope")
-              .font(.bowSubhead)
-              .foregroundStyle(Bow.inkSoft)
-          }
-        }
+        Text(entry.name)
         Spacer(minLength: 12)
         Text(entry.transactionCount, format: .number)
           .font(.bowSubhead)
           .foregroundStyle(Bow.inkSoft)
       }
       .accessibilityElement(children: .combine)
-      .accessibilityLabel(envelopeName.map {
-        "\(entry.name), default envelope \($0), \(entry.transactionCount) transactions"
-      } ?? "\(entry.name), \(entry.transactionCount) transactions")
+      .accessibilityLabel("\(entry.name), \(entry.transactionCount) transactions")
     }
   }
 }

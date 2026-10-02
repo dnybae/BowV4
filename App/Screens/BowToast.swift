@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Brief, self-dismissing confirmations ("Moved $50.00 to Groceries"), shown as a Liquid Glass
-/// capsule floating at the top of the screen. One center for the whole app, so a sheet can
+/// capsule floating at the bottom of the screen. One center for the whole app, so a sheet can
 /// confirm its save after it closes.
 @MainActor
 @Observable
@@ -72,9 +72,10 @@ extension EnvironmentValues {
 
 extension View {
   /// Shows the app's toasts over this view: the app root, and any sheet that stays open while it
-  /// confirms something (Settings, for bank sync).
-  func bowToastHost() -> some View {
-    modifier(BowToastHost())
+  /// confirms something (Settings, for bank sync). Pass `clearsTabBar` on the tab view, so the
+  /// toast floats above the tab bar rather than on it.
+  func bowToastHost(clearsTabBar: Bool = false) -> some View {
+    modifier(BowToastHost(clearsTabBar: clearsTabBar))
   }
 }
 
@@ -83,21 +84,22 @@ private struct BowToastHost: ViewModifier {
   @State private var hostID = UUID()
   @State private var undoError: String?
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  /// Height of an inline navigation bar, so the toast clears it.
-  private static let navigationBarClearance: CGFloat = 58
+  var clearsTabBar: Bool
+  /// Height of the floating tab bar, so the toast sits just above it.
+  private static let tabBarClearance: CGFloat = 64
 
   private var isFrontmost: Bool { center?.hosts.last == hostID }
   private var visibleToast: BowToast? { isFrontmost ? center?.current : nil }
 
   func body(content: Content) -> some View {
     content
-      .overlay(alignment: .top) {
+      .overlay(alignment: .bottom) {
         if let toast = visibleToast {
           BowToastView(toast: toast, onDismiss: { center?.dismiss(toast) }, onUndoError: { undoError = $0 })
             .padding(.horizontal, Bow.Space.s4)
-            // Just below the navigation bar, so glass never sits on the bar's own glass controls.
-            .padding(.top, Self.navigationBarClearance)
-            .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+            // Just above the tab bar, so glass never sits on the bar's own glass controls.
+            .padding(.bottom, clearsTabBar ? Self.tabBarClearance : Bow.Space.s4)
+            .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
             .task(id: toast.id) {
               try? await Task.sleep(for: toast.duration)
               if !Task.isCancelled { center?.dismiss(toast) }

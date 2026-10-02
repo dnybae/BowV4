@@ -306,7 +306,7 @@ private struct BudgetHomeView: View {
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .bowAppTint()
-        .bowToastHost()
+        .bowToastHost(clearsTabBar: true)
         .transition(.opacity)
         .sheet(isPresented: $showingSettings) {
           SettingsScreen()

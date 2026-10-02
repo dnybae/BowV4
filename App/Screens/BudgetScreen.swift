@@ -286,24 +286,24 @@ struct BudgetScreen: View {
       if !matching.isEmpty {
         let key = group.id.uuidString
         Section {
-          BudgetCardStack(
-            groupName: group.name, items: matching,
+          BowCardStack(
+            items: matching,
             isCollapsed: collapseState.isCollapsed(key),
-            onExpand: { toggleGroup(key) },
-            route: { .envelope($0.id) },
-            onOpen: open,
-            zoomNamespace: zoomNamespace
+            collapsedLabel: Text("\(group.name), ^[\(matching.count) envelope](inflect: true), collapsed"),
+            onExpand: { toggleGroup(key) }
           ) { envelope in
-            EnvelopeBudgetRow(
-              name: envelope.name,
-              availableMinor: snapshot.available(for: envelope.id),
-              cashOverspentMinor: snapshot.cashShortfall[envelope.id, default: 0],
-              creditOverspentMinor: snapshot.creditShortfall[envelope.id, default: 0],
-              assignedMinor: snapshot.assigned[envelope.id, default: 0],
-              activityMinor: snapshot.activity[envelope.id, default: 0],
-              monthlyTargetMinor: monthlyTarget(for: envelope, scheduled: scheduled),
-              currencyCode: currencyCode
-            )
+            budgetCard(.envelope(envelope.id)) {
+              EnvelopeBudgetRow(
+                name: envelope.name,
+                availableMinor: snapshot.available(for: envelope.id),
+                cashOverspentMinor: snapshot.cashShortfall[envelope.id, default: 0],
+                creditOverspentMinor: snapshot.creditShortfall[envelope.id, default: 0],
+                assignedMinor: snapshot.assigned[envelope.id, default: 0],
+                activityMinor: snapshot.activity[envelope.id, default: 0],
+                monthlyTargetMinor: monthlyTarget(for: envelope, scheduled: scheduled),
+                currencyCode: currencyCode
+              )
+            }
           }
           .budgetCardStackRow()
         } header: {
@@ -319,15 +319,15 @@ struct BudgetScreen: View {
     if !creditCards.isEmpty {
       let key = BudgetGroupCollapseState.creditCardsKey
       Section {
-        BudgetCardStack(
-          groupName: "Credit card payments", items: creditCards,
+        BowCardStack(
+          items: creditCards,
           isCollapsed: collapseState.isCollapsed(key),
-          onExpand: { toggleGroup(key) },
-          route: { .cardPayment($0.id) },
-          onOpen: open,
-          zoomNamespace: zoomNamespace
+          collapsedLabel: Text("Credit card payments, ^[\(creditCards.count) card](inflect: true), collapsed"),
+          onExpand: { toggleGroup(key) }
         ) { card in
-          CardPaymentRow(card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode)
+          budgetCard(.cardPayment(card.id)) {
+            CardPaymentRow(card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode)
+          }
         }
         .budgetCardStackRow()
       } header: {
@@ -363,8 +363,20 @@ struct BudgetScreen: View {
     path.append(route)
   }
 
+  /// One envelope or card payment card, opening its route. Cards use buttons, not
+  /// NavigationLinks: several links in one List row make the List treat the whole row as one
+  /// link, so taps open the wrong (or several) envelopes.
+  private func budgetCard<Row: View>(_ route: BudgetRoute, @ViewBuilder row: () -> Row) -> some View {
+    let content = row()
+    return Button { open(route) } label: {
+      BowItemCard { content }
+    }
+    .buttonStyle(.bowPress)
+    .matchedTransitionSource(id: route, in: zoomNamespace)
+  }
+
   private func toggleGroup(_ key: String) {
-    withAnimation(Bow.motion(reduceMotion: reduceMotion)) { collapseState.toggle(key) }
+    withAnimation(Bow.stackMotion(reduceMotion: reduceMotion)) { collapseState.toggle(key) }
   }
 
   private func handle(_ notice: BudgetNotice) {

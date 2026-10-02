@@ -76,6 +76,7 @@ struct AccountsScreen: View {
     }
     .bowSoftScrollEdge()
     .navigationTitle("Accounts")
+    .sensoryFeedback(.selection, trigger: collapsedAccountGroups)
     .navigationBarTitleDisplayMode(.inline)
     .navigationDestination(for: AccountRoute.self) { route in
       if let account = accounts.first(where: { $0.id == route.id }) {
@@ -133,12 +134,13 @@ struct AccountsScreen: View {
         }
         .padding(.leading, Bow.Space.s1)
 
-        if !isCollapsed {
-          ForEach(matching) { account in
-            accountCard(account)
-              .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
-          }
-        }
+        BowCardStack(
+          items: matching,
+          isCollapsed: isCollapsed,
+          collapsedLabel: Text("\(title), ^[\(matching.count) account](inflect: true), collapsed"),
+          onExpand: { toggleGroup(kind) },
+          card: accountCard
+        )
       }
     }
   }
@@ -182,7 +184,7 @@ struct AccountsScreen: View {
     if !updated.insert(kind).inserted {
       updated.remove(kind)
     }
-    withAnimation(Bow.motion(reduceMotion: reduceMotion)) {
+    withAnimation(Bow.stackMotion(reduceMotion: reduceMotion)) {
       collapsedAccountGroups = updated.map(\.rawValue).sorted().joined(separator: ",")
     }
   }

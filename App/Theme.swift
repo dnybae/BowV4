@@ -135,6 +135,13 @@ extension Bow {
 
     /// The house spring, or no animation when Reduce Motion is on.
     static func motion(reduceMotion: Bool) -> Animation? { reduceMotion ? nil : motion }
+
+    /// Card stacks collapsing and expanding: a touch of bounce, so the cards settle into place.
+    static let stackMotion = Animation.spring(duration: 0.45, bounce: 0.15)
+    /// The stack spring, or a short cross-fade when Reduce Motion is on.
+    static func stackMotion(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeInOut(duration: 0.2) : stackMotion
+    }
 }
 
 private struct BowAnimation<Value: Equatable>: ViewModifier {

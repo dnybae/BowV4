@@ -598,10 +598,7 @@ private struct BudgetOverviewSection: View {
   }
 
   private func banner(_ notice: BudgetNotice) -> some View {
-    BudgetBanner(
-      notice: notice, currencyCode: currencyCode,
-      assignedShare: notice.kind == .readyToAssign ? summary.assignedShare : nil
-    )
+    BudgetBanner(notice: notice, currencyCode: currencyCode)
   }
 
   private var metrics: some View {

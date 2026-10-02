@@ -1,20 +1,14 @@
 import SwiftUI
 
-/// A notification-style card on the Budget screen. Tone sets the icon, tint and edge;
-/// each kind also has its own symbol so the meaning never depends on color alone.
-/// Ready to Assign is the screen's focal point: green like a funded envelope's pill, larger,
-/// and just the amount with a small ring showing how much of this month's cash has a job.
-/// Warnings (overspending, over budget) get the same solid tint in red, matching an overspent envelope's pill.
+/// A notification-style card on the Budget screen. Ready to Assign and warnings share one
+/// layout, since they matter equally: a tinted icon tile, the amount and title on one line,
+/// and a chevron. Tone sets the colors, matching the envelope pills (green for money waiting,
+/// red for overspending); each kind also has its own symbol so meaning never depends on color.
 struct BudgetBanner: View {
   @Environment(\.colorSchemeContrast) private var contrast
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   var notice: BudgetNotice
   var currencyCode: String
-  /// Share of this month's cash that's assigned, for the Ready to Assign ring.
-  var assignedShare: Double? = nil
-
-  /// Ready to Assign shows only its amount; warnings also explain what to do.
-  private var isHero: Bool { notice.tone == .positive }
 
   private var ink: Color {
     switch notice.tone {
@@ -42,36 +36,24 @@ struct BudgetBanner: View {
   }
 
   var body: some View {
-    HStack(alignment: isHero ? .center : .top, spacing: Bow.Space.s3) {
+    HStack(spacing: Bow.Space.s3) {
       // The icon is decorative; at accessibility sizes the text needs the width more.
       if !dynamicTypeSize.isAccessibilitySize {
-        if isHero, let assignedShare {
-          AssignedRing(fraction: assignedShare, symbol: notice.symbol)
-        } else {
-          icon
-        }
+        icon
       }
-      VStack(alignment: .leading, spacing: Bow.Space.s1) {
-        // One line: the amount keeps its full width first and the title fades out if it's cut.
-        // At accessibility sizes they stack and wrap instead.
-        if dynamicTypeSize.isAccessibilitySize {
-          VStack(alignment: .leading, spacing: 0) {
-            amount
-              .lineLimit(1)
-              .minimumScaleFactor(0.7)
-            title
-          }
-        } else {
-          HStack(alignment: .firstTextBaseline, spacing: 5) {
-            amount.fadingTail().layoutPriority(1)
-            title.fadingTail()
-          }
+      // One line: the amount keeps its full width first and the title fades out if it's cut.
+      // At accessibility sizes they stack and wrap instead.
+      if dynamicTypeSize.isAccessibilitySize {
+        VStack(alignment: .leading, spacing: 0) {
+          amount
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+          title
         }
-        if !isHero {
-          Text(notice.message)
-            .font(.bowSubhead)
-            .foregroundStyle(Bow.inkSoft)
-            .fixedSize(horizontal: false, vertical: true)
+      } else {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+          amount.fadingTail().layoutPriority(1)
+          title.fadingTail()
         }
       }
       Spacer(minLength: 0)
@@ -79,7 +61,6 @@ struct BudgetBanner: View {
         Image(systemName: "chevron.right")
           .font(.bowFootnote.weight(.semibold))
           .foregroundStyle(ink.opacity(0.7))
-          .frame(maxHeight: isHero ? nil : .infinity)
           .accessibilityHidden(true)
       }
     }
@@ -91,12 +72,13 @@ struct BudgetBanner: View {
     }
     .contentShape(shape)
     .accessibilityElement(children: .combine)
-    .accessibilityValue(assignedShare.map { "\(Int(($0 * 100).rounded())) percent of this month’s money assigned" } ?? "")
+    // The explanation no longer shows on screen, but VoiceOver still reads it.
+    .accessibilityValue(notice.message)
   }
 
   private var amount: some View {
     MoneyText(minor: notice.amountMinor, currencyCode: currencyCode)
-      .font(isHero ? .bowTitle : .bowAmount)
+      .font(.bowAmount)
       .foregroundStyle(ink)
   }
 
@@ -112,29 +94,5 @@ struct BudgetBanner: View {
       .foregroundStyle(ink)
       .background(accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
       .accessibilityHidden(true)
-  }
-}
-
-/// The small ring on the Ready to Assign banner: how much of this month's cash has a job.
-/// It sweeps as money is assigned.
-private struct AssignedRing: View {
-  var fraction: Double
-  var symbol: String
-  @ScaledMetric private var scale: CGFloat = 1
-
-  var body: some View {
-    let side = 40 * min(scale, Bow.maxGraphicScale)
-    ZStack {
-      Circle().stroke(Bow.funded.opacity(0.25), lineWidth: 4)
-      Circle().trim(from: 0, to: fraction)
-        .stroke(Bow.funded, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-        .rotationEffect(.degrees(-90))
-      Image(systemName: symbol)
-        .font(.system(size: side * 0.36, weight: .semibold))
-        .foregroundStyle(Bow.fundedInk)
-    }
-    .frame(width: side, height: side)
-    .bowAnimation(Bow.ringMotion, value: fraction)
-    .accessibilityHidden(true)
   }
 }

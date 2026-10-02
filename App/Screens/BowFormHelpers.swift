@@ -79,7 +79,7 @@ struct BowBottomAction<Label: View>: View {
       label()
         .fontWeight(.semibold)
         .monospacedDigit()
-        .frame(maxWidth: .infinity, minHeight: 44)
+        .frame(maxWidth: .infinity)
     }
     .bowPrimaryButton()
     .disabled(!isEnabled)

@@ -12,7 +12,6 @@ struct CurrencyAmountField: View {
   var systemImage: String? = nil
   /// Puts the cursor here as soon as the field is on screen, e.g. a new transaction's amount.
   var focusOnAppear = false
-  @State private var isFocused = false
 
   enum Style {
     /// A form row with the title on the leading side and the amount trailing.
@@ -51,10 +50,7 @@ struct CurrencyAmountField: View {
         BowFieldTitle(title: title, systemImage: systemImage)
       }
     case .hero:
-      VStack(spacing: Bow.Space.s1) {
-        field
-        focusMark
-      }
+      field
     case .editorHero:
       VStack(spacing: Bow.Space.s1) {
         Text(title)
@@ -62,7 +58,6 @@ struct CurrencyAmountField: View {
           .foregroundStyle(Bow.inkSoft)
           .accessibilityHidden(true)
         field
-        focusMark
       }
       .frame(maxWidth: .infinity)
     }
@@ -71,19 +66,8 @@ struct CurrencyAmountField: View {
   private var field: some View {
     CurrencyTextFieldRepresentable(
       title: title, minor: $minor, currencyCode: currencyCode, allowsNegative: allowsNegative,
-      heroSize: style.heroSize, focusOnAppear: focusOnAppear,
-      onFocusChange: { isFocused = $0 }
+      heroSize: style.heroSize, focusOnAppear: focusOnAppear
     )
-  }
-
-  /// A quiet brand underline under a hero amount while it's being edited.
-  private var focusMark: some View {
-    Capsule()
-      .fill(Bow.bow)
-      .frame(width: isFocused ? 44 : 12, height: 3)
-      .opacity(isFocused ? 1 : 0)
-      .bowAnimation(value: isFocused)
-      .accessibilityHidden(true)
   }
 }
 
@@ -95,7 +79,6 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
   /// Point size of a hero amount; nil for a form row.
   var heroSize: CGFloat?
   var focusOnAppear = false
-  var onFocusChange: (Bool) -> Void = { _ in }
   private var isHero: Bool { heroSize != nil }
   @Environment(\.isEnabled) private var isEnabled
 
@@ -126,6 +109,8 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
     if isHero {
       field.adjustsFontSizeToFitWidth = true
       field.minimumFontSize = 24
+      // The big number itself shows what's being typed; no blinking caret.
+      field.tintColor = .clear
     }
     field.adjustsFontForContentSizeCategory = true
     field.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -137,7 +122,6 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
 
   func updateUIView(_ field: CurrencyInputTextField, context: Context) {
     context.coordinator.parent = self
-    context.coordinator.refreshAccessoryBar()
     field.accessibilityLabel = title
     field.isEnabled = isEnabled
     context.coordinator.render(in: field)
@@ -150,8 +134,6 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
 
   final class Coordinator: NSObject, UITextFieldDelegate {
     var parent: CurrencyTextFieldRepresentable
-    private var signButton: UIBarButtonItem?
-    private weak var accessoryBar: UIToolbar?
     /// Lets someone choose a negative sign before typing any digits.
     private var isNegativeZero = false
 
@@ -186,10 +168,7 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
 
     func textFieldDidBeginEditing(_ textField: UITextField) {
       moveCaretToEnd(textField)
-      parent.onFocusChange(true)
     }
-
-    func textFieldDidEndEditing(_ textField: UITextField) { parent.onFocusChange(false) }
 
     func textFieldDidChangeSelection(_ textField: UITextField) {
       guard let range = textField.selectedTextRange,
@@ -202,7 +181,10 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
       textField.selectedTextRange = textField.textRange(from: end, to: end)
     }
 
-    func makeAccessoryBar(for field: UITextField) -> UIToolbar {
+    /// Only fields that take a negative amount get a bar above the keyboard, holding the sign toggle.
+    /// Everywhere else the keyboard sits flush; tapping outside the field or scrolling dismisses it.
+    func makeAccessoryBar(for field: UITextField) -> UIToolbar? {
+      guard parent.allowsNegative else { return nil }
       let bar = UIToolbar()
       bar.sizeToFit()
       let sign = UIBarButtonItem(title: "+/−", primaryAction: UIAction { [weak self] _ in
@@ -215,30 +197,23 @@ private struct CurrencyTextFieldRepresentable: UIViewRepresentable {
         self.render(in: field)
       })
       sign.accessibilityLabel = "Toggle Negative"
-      let done = UIBarButtonItem(systemItem: .done, primaryAction: UIAction { [weak field] _ in
-        field?.resignFirstResponder()
-      })
-      signButton = sign
-      accessoryBar = bar
-      refreshAccessoryBar(done: done)
+      bar.items = [sign, .flexibleSpace()]
       return bar
-    }
-
-    func refreshAccessoryBar(done: UIBarButtonItem? = nil) {
-      guard let bar = accessoryBar, let signButton else { return }
-      let doneItem = done ?? bar.items?.last ?? UIBarButtonItem(systemItem: .done)
-      let items = parent.allowsNegative
-        ? [signButton, .flexibleSpace(), doneItem]
-        : [.flexibleSpace(), doneItem]
-      if bar.items != items { bar.items = items }
     }
   }
 }
 
-final class CurrencyInputTextField: UITextField {
+final class CurrencyInputTextField: UITextField, UIGestureRecognizerDelegate {
   /// Becomes first responder the first time the field lands in a window.
   var focusOnAppear = false
   private var didFocusOnAppear = false
+  /// While editing, a tap anywhere outside the field puts the keyboard away.
+  private lazy var outsideTap: UITapGestureRecognizer = {
+    let tap = UITapGestureRecognizer(target: self, action: #selector(handleOutsideTap(_:)))
+    tap.cancelsTouchesInView = false
+    tap.delegate = self
+    return tap
+  }()
 
   override func didMoveToWindow() {
     super.didMoveToWindow()
@@ -264,9 +239,31 @@ final class CurrencyInputTextField: UITextField {
 
   override func becomeFirstResponder() -> Bool {
     let becameFirstResponder = super.becomeFirstResponder()
-    if becameFirstResponder { didFocusOnAppear = true }
+    if becameFirstResponder {
+      didFocusOnAppear = true
+      window?.addGestureRecognizer(outsideTap)
+    }
     return becameFirstResponder
   }
+
+  override func resignFirstResponder() -> Bool {
+    let resigned = super.resignFirstResponder()
+    if resigned { outsideTap.view?.removeGestureRecognizer(outsideTap) }
+    return resigned
+  }
+
+  override func willMove(toWindow newWindow: UIWindow?) {
+    super.willMove(toWindow: newWindow)
+    if newWindow == nil { outsideTap.view?.removeGestureRecognizer(outsideTap) }
+  }
+
+  @objc private func handleOutsideTap(_ tap: UITapGestureRecognizer) {
+    guard isFirstResponder, !bounds.contains(tap.location(in: self)) else { return }
+    _ = resignFirstResponder()
+  }
+
+  func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                         shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
 
   private func focusInitially() {
     guard focusOnAppear, !didFocusOnAppear, window != nil else { return }

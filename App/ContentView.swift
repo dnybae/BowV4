@@ -371,6 +371,14 @@ private struct BudgetHomeView: View {
     .environment(\.budgetSnapshotRepository, snapshotRepository)
     .environment(tabReselect)
     .environment(\.payeeLogoDirectory, PayeeLogoDirectory(payees: payees))
+    .task(id: profiles.first?.id) {
+      guard !isDemoMode else { return }
+      do {
+        try BundledPayeeInstaller.installIfNeeded(in: modelContext.container)
+      } catch {
+        ledgerError = error.localizedDescription
+      }
+    }
     .task {
       try? BudgetCommands.ensureCardPaymentEnvelopes(in: modelContext)
       try? BankMemoNotesCleanup().runOnce(in: modelContext)

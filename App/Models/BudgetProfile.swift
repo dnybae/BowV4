@@ -7,6 +7,7 @@ final class BudgetProfile {
   var currencyCode: String = "USD"
   var name: String = "My Budget"
   var createdAt: Date = Date()
+  var bundledPayeesVersion: Int = 0
 
   init(currencyCode: String) {
     self.currencyCode = currencyCode

@@ -114,7 +114,7 @@ struct PayeeEditorScreen: View {
         } header: {
           Text("Icon")
         } footer: {
-          Text("\(logoSource.title). Every payee starts with a native icon. You can use your own image or choose a Logo.dev logo instead.")
+          Text("\(logoSource.title). You can use a native icon, your own image, or a Logo.dev logo.")
             .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)

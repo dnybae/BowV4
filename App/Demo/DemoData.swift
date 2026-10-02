@@ -37,6 +37,7 @@ enum DemoData {
     let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
     let container = try ModelContainer(for: schema, configurations: configuration)
     try seed(scenario: scenario, in: container.mainContext)
+    try BundledPayeeInstaller.installIfNeeded(in: container)
     return container
   }
 

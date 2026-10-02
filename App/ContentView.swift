@@ -372,7 +372,6 @@ private struct BudgetHomeView: View {
     .environment(tabReselect)
     .environment(\.payeeLogoDirectory, PayeeLogoDirectory(payees: payees))
     .task(id: profiles.first?.id) {
-      guard !isDemoMode else { return }
       do {
         try BundledPayeeInstaller.installIfNeeded(in: modelContext.container)
       } catch {

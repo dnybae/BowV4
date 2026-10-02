@@ -8,17 +8,9 @@ struct EnvelopeManagementScreen: View {
   @Query private var groups: [BudgetGroup]
   @Query private var envelopes: [BudgetEnvelope]
   @Query private var accounts: [BudgetAccount]
-  @Query private var allocations: [BudgetAllocation]
-  @Query private var schedules: [BudgetSchedule]
-  @Query private var payees: [BudgetPayee]
   @State private var editor: EnvelopeGroupEditor?
-  @State private var pendingHide: BudgetEnvelope?
-  @State private var pendingDelete: BudgetEnvelope?
-  @State private var movingEnvelope: BudgetEnvelope?
   @State private var message: String?
   @State private var snapshot: BudgetSnapshot?
-  @State private var usedEnvelopeIDs: Set<UUID> = []
-  @State private var historyLoaded = false
   @State private var refreshVersion = 0
   @State private var showingDirectory = false
   @State private var showingGroupOrder = false
@@ -91,7 +83,15 @@ struct EnvelopeManagementScreen: View {
       if !hiddenEnvelopes.isEmpty {
         Section("Hidden envelopes") {
           ForEach(hiddenEnvelopes) { envelope in
-            envelopeRow(envelope)
+            // Two buttons in one row: each keeps to its own area.
+            HStack(spacing: Bow.Space.s3) {
+              envelopeRow(envelope)
+                .buttonStyle(.plain)
+              Button("Unhide") { setHidden(envelope, false) }
+                .buttonStyle(.borderless)
+                .font(.bowSubhead.weight(.semibold))
+                .accessibilityLabel("Unhide \(envelope.name)")
+            }
           }
         }
         .listRowBackground(Bow.card)
@@ -111,15 +111,6 @@ struct EnvelopeManagementScreen: View {
     .task(id: refreshVersion) {
       let repository = sharedRepository ?? BudgetSnapshotRepository(modelContainer: modelContext.container)
       snapshot = try? await repository.snapshot(month: Date())
-      let transactionRepository = TransactionPageRepository(modelContainer: modelContext.container)
-      var used: Set<UUID> = []
-      for envelope in envelopes {
-        if (try? await transactionRepository.hasTransaction(inEnvelope: envelope.id)) == true {
-          used.insert(envelope.id)
-        }
-      }
-      usedEnvelopeIDs = used
-      historyLoaded = true
     }
     .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
       refreshVersion += 1
@@ -136,34 +127,6 @@ struct EnvelopeManagementScreen: View {
       case .editEnvelope(let envelope):
         EnvelopeEditorScreen(groups: orderedGroups, nextOrder: envelopes.count, envelope: envelope)
       }
-    }
-    .sheet(item: $movingEnvelope) { envelope in
-      MoneyMoveScreen(
-        currencyCode: currencyCode, month: Date(),
-        source: .envelope(envelope.id), target: .readyToAssign
-      )
-    }
-    .bowConfirmationDialog("Hide envelope with money?", item: $pendingHide) { envelope in
-      Button("Move money first") {
-        movingEnvelope = envelope
-        pendingHide = nil
-      }
-      Button("Hide and keep balance") {
-        setHidden(envelope, true)
-        pendingHide = nil
-      }
-    } message: { envelope in
-      Text("\(BudgetMoney.formatted(snapshot?.available(for: envelope.id) ?? 0, currencyCode: currencyCode)) will remain in this hidden envelope and in your budget.")
-    }
-    .bowConfirmationDialog("Delete unused envelope?", item: $pendingDelete) { envelope in
-      Button("Delete envelope", role: .destructive) {
-        do {
-          try BudgetCommands.deleteUnusedEnvelope(envelope, in: modelContext)
-        } catch { message = error.localizedDescription }
-        pendingDelete = nil
-      }
-    } message: { _ in
-      Text("This cannot be undone.")
     }
     .bowErrorAlert("Envelope", message: $message)
   }
@@ -193,38 +156,9 @@ struct EnvelopeManagementScreen: View {
           .foregroundStyle(Bow.inkFaint)
           .accessibilityHidden(true)
       }
+      .contentShape(.rect)
     }
-    .swipeActions {
-      if snapshot?.available(for: envelope.id) ?? 0 > 0 {
-        Button("Move Money", systemImage: "arrow.left.arrow.right") {
-          movingEnvelope = envelope
-        }
-      }
-      if envelope.isHidden {
-        Button("Unhide", systemImage: "eye") { setHidden(envelope, false) }
-      } else {
-        Button("Hide", systemImage: "eye.slash") {
-          if snapshot?.available(for: envelope.id) ?? 0 > 0 {
-            pendingHide = envelope
-          } else {
-            setHidden(envelope, true)
-          }
-        }
-      }
-      if !hasHistory(envelope) {
-        Button("Delete", systemImage: "trash", role: .destructive) {
-          pendingDelete = envelope
-        }
-      }
-    }
-    .accessibilityHint("Edit envelope. Swipe for hide or delete actions.")
-  }
-
-  private func hasHistory(_ envelope: BudgetEnvelope) -> Bool {
-    !historyLoaded || usedEnvelopeIDs.contains(envelope.id)
-      || allocations.contains { $0.sourceEnvelopeID == envelope.id || $0.targetEnvelopeID == envelope.id }
-      || schedules.contains { $0.envelopeID == envelope.id }
-      || payees.contains { $0.defaultEnvelopeID == envelope.id }
+    .accessibilityHint("Edit envelope")
   }
 
   private func setHidden(_ envelope: BudgetEnvelope, _ hidden: Bool) {

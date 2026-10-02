@@ -21,7 +21,6 @@ struct TransactionsScreen: View {
   var currencyCode: String
   var onSelect: (UUID) -> Void
   var onRecord: (ScheduledTransactionDraft) -> Void
-  var onEditSchedule: (UUID) -> Void
   var onReviewBankRecord: (SimpleFINImportRecord) -> Void
   var onAddTransaction: () -> Void
   var onConnectBank: () -> Void
@@ -97,7 +96,7 @@ struct TransactionsScreen: View {
               SpendingTimelineEntryView(
                 item: item, accounts: accounts, envelopes: envelopes,
                 schedules: schedules, onSelect: onSelect,
-                onRecord: onRecord, onEditSchedule: onEditSchedule,
+                onRecord: onRecord,
                 onReviewBankRecord: onReviewBankRecord
               )
             }

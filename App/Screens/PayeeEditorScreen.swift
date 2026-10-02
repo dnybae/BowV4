@@ -128,9 +128,17 @@ struct PayeeEditorScreen: View {
         .listRowBackground(Bow.card)
         Section {
           ForEach(bankNames, id: \.self) { bankName in
-            Text(bankName)
+            HStack {
+              Text(bankName)
+              Spacer(minLength: Bow.Space.s2)
+              Button("Remove \(bankName)", systemImage: "minus.circle.fill", role: .destructive) {
+                bankNames.removeAll { $0 == bankName }
+              }
+              .labelStyle(.iconOnly)
+              .buttonStyle(.borderless)
+              .foregroundStyle(Bow.inkFaint)
+            }
           }
-          .onDelete { bankNames.remove(atOffsets: $0) }
           HStack(spacing: Bow.Space.s3) {
             BowTileIcon(systemImage: "plus")
             TextField("Add bank name", text: $newBankName)
@@ -144,7 +152,7 @@ struct PayeeEditorScreen: View {
         } header: {
           Text("Bank names")
         } footer: {
-          Text("Imported transactions with one of these descriptions are filed under this payee and use its default envelope. Swipe to remove one.")
+          Text("Imported transactions with one of these descriptions are filed under this payee and use its default envelope.")
         }
         .listRowBackground(Bow.card)
         Section {

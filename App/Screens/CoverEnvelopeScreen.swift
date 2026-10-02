@@ -72,16 +72,6 @@ struct CoverEnvelopeScreen: View {
       Section {
         ForEach(draft.donors) { donor in
           donorRow(donor)
-            .swipeActions {
-              Button("Remove", systemImage: "trash", role: .destructive) {
-                withAnimation(Bow.motion(reduceMotion: reduceMotion)) { draft.remove(donor.bucket) }
-              }
-            }
-            .contextMenu {
-              Button("Remove", systemImage: "trash", role: .destructive) {
-                withAnimation(Bow.motion(reduceMotion: reduceMotion)) { draft.remove(donor.bucket) }
-              }
-            }
         }
         Button {
           showingDonorPicker = true
@@ -177,6 +167,12 @@ struct CoverEnvelopeScreen: View {
         CurrencyAmountField("Amount from \(name)", minor: amount, currencyCode: currencyCode)
           .labelsHidden()
           .frame(width: amountFieldWidth)
+        Button("Remove \(name)", systemImage: "minus.circle.fill", role: .destructive) {
+          withAnimation(Bow.motion(reduceMotion: reduceMotion)) { draft.remove(donor.bucket) }
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(.borderless)
+        .foregroundStyle(Bow.inkFaint)
       }
       Slider(
         value: Binding(

@@ -60,8 +60,8 @@ struct CalendarScreen: View {
   }
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: Bow.Space.s4) {
+    List {
+      Section {
         if dynamicTypeSize.isAccessibilitySize {
           VStack(alignment: .leading, spacing: Bow.Space.s2) {
             Text("Choose a day")
@@ -78,18 +78,20 @@ struct CalendarScreen: View {
           monthCard
         }
         selectedDayHeader
-        agenda
       }
-      .padding(.horizontal, Bow.Space.s5)
-      .padding(.top, Bow.Space.s2)
-      .padding(.bottom, Bow.Space.s6)
+      // Hero rows sit on the sky, edge to edge with the day's card below, like Budget's stat strip.
+      .listRowBackground(Color.clear)
+      .listRowSeparator(.hidden)
+      .listRowInsets(EdgeInsets(top: Bow.Space.s2, leading: 0, bottom: Bow.Space.s2, trailing: 0))
+      agenda
     }
     .scrollsToTopOnReselect(of: .calendar)
-    .background {
+    .bowListBackground {
       Bow.mist.overlay(alignment: .top) { SkyBackground(mood: .dawn) }
-        .ignoresSafeArea()
     }
     .bowSoftScrollEdge()
+    .bowAnimation(value: scheduleEntries.map(\.id))
+    .bowAnimation(value: dayTransactions.map(\.id))
     // One title: the month, in the bar, sliding the way the user moved (like Budget).
     .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))
     .navigationBarTitleDisplayMode(.inline)
@@ -210,12 +212,10 @@ struct CalendarScreen: View {
   private var agenda: some View {
     if selectedSchedules.isEmpty && dayTransactions.isEmpty {
       if isLoadingMonth && loadedMonth == nil {
-        VStack(spacing: 0) {
+        Section {
           BowTransactionSkeletonRows(count: 2)
-            .padding(.horizontal, Bow.Space.s4)
-            .padding(.vertical, Bow.Space.s2)
         }
-        .bowCard(radius: Bow.Radius.lg)
+        .listRowBackground(Bow.card)
       } else {
         ContentUnavailableView(
           "Nothing on this day",
@@ -225,34 +225,26 @@ struct CalendarScreen: View {
             : "Scheduled bills and recorded transactions will appear here.")
         )
         .frame(maxWidth: .infinity)
+        .listRowBackground(Color.clear)
       }
     } else {
-      // The same rows and status lines as Spending, in one card.
-      LazyVStack(spacing: 0) {
+      // The same rows and status lines as Spending, each with its own tint.
+      Section {
         ForEach(scheduleEntries) { entry in
-          scheduleRow(entry, showsDivider: entry.id != scheduleEntries.last?.id || !dayTransactions.isEmpty)
+          scheduleRow(entry)
         }
         ForEach(dayTransactions) { transaction in
-          CalendarAgendaRow(
-            model: TransactionRowModel(
-              transaction,
-              accountName: accounts.first { $0.id == transaction.accountID }?.name ?? "Account",
-              envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name
-            ),
-            currencyCode: currencyCode,
-            showsDivider: transaction.id != dayTransactions.last?.id,
-            action: { onSelectTransaction(transaction.id) }
-          ) {
-            EmptyView()
+          let model = TransactionRowModel(
+            transaction,
+            accountName: accounts.first { $0.id == transaction.accountID }?.name ?? "Account",
+            envelopeName: envelopes.first { $0.id == transaction.envelopeID }?.name
+          )
+          Button { onSelectTransaction(transaction.id) } label: {
+            TransactionRowView(model: model, currencyCode: currencyCode)
           }
+          .listRowBackground(model.state.rowStatus?.rowBackground ?? Bow.card)
         }
       }
-      .bowSwipeActionsContainer()
-      // No card fill: each row paints its own background, so a swiped row reveals the sky behind its actions.
-      .clipShape(RoundedRectangle(cornerRadius: Bow.Radius.lg, style: .continuous))
-      .shadow(color: .black.opacity(0.05), radius: 10, y: 6)
-      .bowAnimation(value: scheduleEntries.map(\.id))
-      .bowAnimation(value: dayTransactions.map(\.id))
     }
   }
 
@@ -279,47 +271,25 @@ struct CalendarScreen: View {
     selectedDate <= Date() && schedule.accountID != nil
   }
 
-  private func scheduleRow(_ entry: CalendarScheduleEntry, showsDivider: Bool) -> some View {
+  private func scheduleRow(_ entry: CalendarScheduleEntry) -> some View {
     let schedule = entry.schedule
     let isSkipped = entry.occurrence?.isSkipped == true
     let canRecordBill = canRecord(schedule) && !isSkipped && entry.recorded == nil
-    let skippable = canRecordBill ? entry.occurrence : nil
-    return CalendarAgendaRow(
-      model: scheduleModel(entry),
-      currencyCode: currencyCode,
-      showsDivider: showsDivider,
-      accessibilityHint: entry.recorded != nil ? "Opens the recorded transaction"
-        : canRecordBill ? "Opens the bill to record it" : "Opens the schedule",
-      action: {
-        if let recorded = entry.recorded {
-          onSelectTransaction(recorded.id)
-        } else if canRecordBill {
-          onRecord(draft(for: schedule))
-        } else {
-          editingSchedule = schedule
-        }
-      },
-      onRecord: canRecordBill ? { onRecord(draft(for: schedule)) } : nil,
-      onSkip: skippable.map { occurrence in { setSkipped(occurrence, true) } }
-    ) {
-      if entry.recorded == nil {
-        if canRecordBill {
-          Button("Record", systemImage: "plus") { onRecord(draft(for: schedule)) }
-          if let occurrence = entry.occurrence {
-            Button("Skip This Date", systemImage: "forward") { setSkipped(occurrence, true) }
-          }
-        }
-        if isSkipped, let occurrence = entry.occurrence {
-          Button("Restore Reminder", systemImage: "arrow.uturn.backward") { setSkipped(occurrence, false) }
-        }
+    let model = scheduleModel(entry)
+    return Button {
+      if let recorded = entry.recorded {
+        onSelectTransaction(recorded.id)
+      } else if canRecordBill {
+        onRecord(draft(for: schedule))
+      } else {
+        editingSchedule = schedule
       }
-      Button("Edit Schedule", systemImage: "calendar") { editingSchedule = schedule }
+    } label: {
+      TransactionRowView(model: model, currencyCode: currencyCode)
     }
-  }
-
-  private func setSkipped(_ occurrence: BudgetScheduleOccurrence, _ skipped: Bool) {
-    withAnimation(Bow.motion(reduceMotion: reduceMotion)) { occurrence.isSkipped = skipped }
-    try? modelContext.save()
+    .accessibilityHint(entry.recorded != nil ? "Opens the recorded transaction"
+      : canRecordBill ? "Opens the bill to record it" : "Opens the schedule")
+    .listRowBackground(model.state.rowStatus?.rowBackground ?? Bow.card)
   }
 
   /// A bill as a Spending row. The status line carries what the old row said: skipped,
@@ -532,51 +502,4 @@ private struct CalendarScheduleEntry: Identifiable {
   var recorded: BudgetTransaction?
 
   var id: UUID { schedule.id }
-}
-
-/// One row of the day's card: the Spending row with its status tint, tappable, with a long-press
-/// menu and (for bills) the same swipe actions as Spending.
-private struct CalendarAgendaRow<MenuItems: View>: View {
-  var model: TransactionRowModel
-  var currencyCode: String
-  var showsDivider: Bool
-  var accessibilityHint: String = ""
-  var action: () -> Void
-  var onRecord: (() -> Void)? = nil
-  var onSkip: (() -> Void)? = nil
-  @ViewBuilder var menuItems: () -> MenuItems
-
-  var body: some View {
-    Button(action: action) {
-      TransactionRowView(model: model, currencyCode: currencyCode)
-        .padding(.horizontal, Bow.Space.s4)
-        .padding(.vertical, Bow.Space.s2)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(model.state.rowStatus?.rowBackground ?? Bow.card)
-        // The divider slides with the row, so nothing is drawn behind the revealed actions.
-        .overlay(alignment: .bottom) {
-          if showsDivider {
-            Rectangle().fill(Bow.line).frame(height: 0.5).padding(.leading, Bow.Space.s4)
-          }
-        }
-        .contentShape(.rect)
-    }
-    .buttonStyle(.bowRowPress)
-    .contentShape(.contextMenuPreview, .rect(cornerRadius: Bow.Radius.md))
-    .contextMenu(menuItems: menuItems)
-    .swipeActions(edge: .leading) {
-      if let onRecord {
-        Button("Record", systemImage: "plus", action: onRecord)
-          .tint(.accentColor)
-      }
-    }
-    .swipeActions(edge: .trailing) {
-      if let onSkip {
-        Button("Skip", systemImage: "forward", action: onSkip)
-      }
-    }
-    .accessibilityHint(accessibilityHint)
-    // Swipeable rows clip to their container shape; a rectangle keeps them full-width bands, as in Spending.
-    .containerShape(.rect)
-  }
 }

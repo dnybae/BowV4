@@ -199,7 +199,6 @@ private struct BudgetHomeView: View {
                 currencyCode: currencyCode,
                 onSelect: selectTransaction,
                 onRecord: { activeSheet = .recordScheduled($0) },
-                onEditSchedule: { activeSheet = .editSchedule($0) },
                 onReviewBankRecord: { activeSheet = .reviewBankRecord($0) },
                 onAddTransaction: { activeSheet = .newTransaction },
                 onConnectBank: { activeSheet = .bankSync }

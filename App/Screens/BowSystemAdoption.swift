@@ -12,16 +12,6 @@ extension View {
     }
   }
 
-  /// Rows outside a List (Calendar's day card) get the same swipe actions as Spending.
-  @ViewBuilder
-  func bowSwipeActionsContainer() -> some View {
-    if #available(iOS 27.0, *) {
-      swipeActionsContainer()
-    } else {
-      self
-    }
-  }
-
   /// Merchant logos load through one cached session, so they don't download again while scrolling.
   @ViewBuilder
   func bowCachedAsyncImages() -> some View {

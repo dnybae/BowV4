@@ -1,18 +1,13 @@
 import SwiftUI
-import SwiftData
 
 struct SpendingTimelineEntryView: View {
-  @Environment(\.modelContext) private var modelContext
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   var item: SpendingTimelineItem
   var accounts: [BudgetAccount]
   var envelopes: [BudgetEnvelope]
   var schedules: [BudgetSchedule]
   var onSelect: (UUID) -> Void
   var onRecord: (ScheduledTransactionDraft) -> Void
-  var onEditSchedule: (UUID) -> Void
   var onReviewBankRecord: (SimpleFINImportRecord) -> Void
-  @State private var message: String?
 
   private var model: TransactionRowModel { TransactionRowModel(item) }
 
@@ -49,22 +44,9 @@ struct SpendingTimelineEntryView: View {
         // Tapping opens the bill in the editor to record it.
         Button { record(occurrence, schedule) } label: { row }
           .accessibilityHint("Opens the bill to record it")
-          .swipeActions(edge: .leading) {
-            Button("Record", systemImage: "plus") { record(occurrence, schedule) }
-              .tint(.accentColor)
-          }
-          .swipeActions(edge: .trailing) {
-            Button("Skip", systemImage: "forward") { skip(occurrence) }
-          }
-          .contextMenu {
-            Button("Record", systemImage: "plus") { record(occurrence, schedule) }
-            Button("Skip This Date", systemImage: "forward") { skip(occurrence) }
-            Button("Edit Schedule", systemImage: "calendar") { onEditSchedule(schedule.id) }
-          }
       }
     }
     .listRowBackground(model.state.rowStatus?.rowBackground ?? Bow.card)
-    .bowErrorAlert("Couldn’t Update Bill", message: $message)
   }
 
   private var row: some View {
@@ -81,11 +63,5 @@ struct SpendingTimelineEntryView: View {
       amountMinor: schedule.amountMinor, payee: schedule.payee,
       notes: schedule.notes, date: occurrence.scheduledFor
     ))
-  }
-
-  private func skip(_ occurrence: BudgetScheduleOccurrence) {
-    withAnimation(Bow.motion(reduceMotion: reduceMotion)) { occurrence.isSkipped = true }
-    do { try modelContext.save() }
-    catch { message = error.localizedDescription }
   }
 }

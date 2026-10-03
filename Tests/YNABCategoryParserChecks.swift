@@ -27,6 +27,14 @@ struct YNABCategoryParserChecks {
     precondition(tabPreview.groups.count == 1)
     precondition(tabPreview.envelopeCount == 1)
 
+    // YNAB writes Windows line endings, quoting every field.
+    let crlf = "\"Month\",\"Category Group/Category\",\"Category Group\",\"Category\"\r\n"
+      + "\"Oct 2026\",\"Bills: Rent\",\"Bills\",\"Rent\"\r\n"
+      + "\"Oct 2026\",\"Bills: Phone\",\"Bills\",\"Phone\"\r\n"
+    let crlfPreview = try YNABCategoryParser().parse(crlf)
+    precondition(crlfPreview.groups.count == 1)
+    precondition(crlfPreview.groups[0].envelopes == ["Rent", "Phone"])
+
     do {
       _ = try YNABCategoryParser().parse("Month,Name\nSep 2026,Groceries")
       preconditionFailure("missing headers should fail")

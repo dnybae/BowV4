@@ -1,6 +1,33 @@
 import Foundation
 
 struct YNABCategoryParser {
+  /// Reads a YNAB export as chosen in Files: the zip YNAB downloads, or a CSV from inside it.
+  /// In a zip, the Plan file is preferred; the Register lists the same categories as a fallback.
+  func parse(data: Data) throws -> YNABCategoryPreview {
+    guard ZipArchiveReader.isArchive(data) else { return try parse(text(from: data)) }
+    let tables = try ZipArchiveReader().entries(in: data)
+      .filter { $0.name.lowercased().hasSuffix(".csv") || $0.name.lowercased().hasSuffix(".tsv") }
+    let isPlan = { (file: ZipArchiveReader.Entry) in file.name.lowercased().hasSuffix("plan.csv") }
+    let files = tables.filter(isPlan) + tables.filter { !isPlan($0) }
+    guard !files.isEmpty else { throw YNABImportError.noExportInArchive }
+    var firstError: Error?
+    for file in files {
+      do {
+        return try parse(text(from: file.data))
+      } catch {
+        firstError = firstError ?? error
+      }
+    }
+    throw firstError ?? YNABImportError.noCategories
+  }
+
+  private func text(from data: Data) throws -> String {
+    guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .utf16) else {
+      throw YNABImportError.unreadableText
+    }
+    return text
+  }
+
   func parse(_ text: String) throws -> YNABCategoryPreview {
     let source = text.replacingOccurrences(of: "\u{FEFF}", with: "")
     let firstLine = source.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
@@ -63,10 +90,8 @@ struct YNABCategoryParser {
       } else if character == delimiter && !inQuotes {
         row.append(field)
         field = ""
-      } else if (character == "\n" || character == "\r") && !inQuotes {
-        if character == "\r" && index + 1 < characters.count && characters[index + 1] == "\n" {
-          index += 1
-        }
+      } else if character.isNewline && !inQuotes {
+        // Swift reads a Windows line ending (\r\n) as one Character, so this tests for any newline.
         row.append(field)
         if row.contains(where: { !$0.isEmpty }) {
           rows.append(row)
@@ -117,6 +142,7 @@ enum YNABImportError: LocalizedError {
   case missingColumns
   case noCategories
   case unreadableText
+  case noExportInArchive
 
   var errorDescription: String? {
     switch self {
@@ -125,6 +151,7 @@ enum YNABImportError: LocalizedError {
       "Choose a YNAB Plan export with Category Group and Category columns."
     case .noCategories: "No category groups and envelopes were found."
     case .unreadableText: "The file couldn’t be read as text."
+    case .noExportInArchive: "This zip doesn’t contain a YNAB Plan or Register file."
     }
   }
 }

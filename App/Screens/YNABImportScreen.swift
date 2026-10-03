@@ -31,7 +31,7 @@ struct YNABImportScreen: View {
         } header: {
           Text("File")
         } footer: {
-          Text("Bow imports your YNAB category groups and categories as groups and envelopes. Transactions, past assignments, balances, and targets are left behind.")
+          Text("Choose the zip from YNAB’s Export Plan, or the Plan file inside it. Bow imports your category groups and categories as groups and envelopes. Transactions, past assignments, balances, and targets are left behind.")
             .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
@@ -67,6 +67,7 @@ struct YNABImportScreen: View {
       .fileImporter(
         isPresented: $showingFilePicker,
         allowedContentTypes: [
+          .zip,
           .commaSeparatedText,
           UTType(filenameExtension: "tsv") ?? .plainText,
           .plainText
@@ -78,12 +79,7 @@ struct YNABImportScreen: View {
           defer {
             if accessed { url.stopAccessingSecurityScopedResource() }
           }
-          let data = try Data(contentsOf: url)
-          guard let content = String(data: data, encoding: .utf8)
-            ?? String(data: data, encoding: .utf16) else {
-            throw YNABImportError.unreadableText
-          }
-          preview = try YNABCategoryParser().parse(content)
+          preview = try YNABCategoryParser().parse(data: Data(contentsOf: url))
         } catch {
           errorMessage = error.localizedDescription
         }

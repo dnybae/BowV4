@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct SettingsScreen: View {
   @Environment(\.dismiss) private var dismiss
@@ -17,6 +18,7 @@ struct SettingsScreen: View {
   @State private var showingBankImport = false
   @State private var showingResetDemo = false
   @State private var showingRename = false
+  @State private var showingMailUnavailable = false
   @State private var budgetNameDraft = ""
 
   private var version: String {
@@ -132,8 +134,10 @@ struct SettingsScreen: View {
         .listRowBackground(Bow.card)
 
         Section("Support") {
-          Link(destination: SupportLink.email(subject: "Bow \(version) feedback")) {
-            Label("Send feedback", systemImage: "bubble.left.and.text.bubble.right")
+          Button("Send feedback", systemImage: "bubble.left.and.text.bubble.right") {
+            openURL(SupportLink.email(subject: "Bow \(version) feedback")) { accepted in
+              if !accepted { showingMailUnavailable = true }
+            }
           }
           if let reviewURL = AppStoreLink.writeReview {
             Button("Leave a review", systemImage: "star.bubble") {
@@ -191,6 +195,14 @@ struct SettingsScreen: View {
         BankFileImportScreen()
       }
       .bowToastHost()
+      .alert("Couldn’t Open Your Mail App", isPresented: $showingMailUnavailable) {
+        Button("Copy Email Address") {
+          UIPasteboard.general.string = SupportLink.address
+        }
+        Button("Cancel", role: .cancel) {}
+      } message: {
+        Text("Set up a mail app on your iPhone, then try again. You can also email \(SupportLink.address).")
+      }
       .alert("Rename Budget", isPresented: $showingRename) {
         TextField("Budget Name", text: $budgetNameDraft)
         Button("Cancel", role: .cancel) {}

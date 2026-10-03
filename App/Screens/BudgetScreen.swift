@@ -330,7 +330,6 @@ struct BudgetScreen: View {
                 status: EnvelopeStatus(
                   availableMinor: snapshot.available(for: envelope.id),
                   assignedMinor: snapshot.assigned[envelope.id, default: 0],
-                  activityMinor: snapshot.activity[envelope.id, default: 0],
                   monthlyTargetMinor: monthlyTarget(for: envelope, scheduled: scheduled),
                   currencyCode: currencyCode
                 )
@@ -674,12 +673,12 @@ private struct CardPaymentRow: View {
     let owed = max(0, -snapshot.accountBalances[card.id, default: 0])
     let reserved = max(0, snapshot.paymentAvailable[card.id, default: 0])
     let status = EnvelopeStatus(card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode)
-    let shortfall = BudgetMoney.formatted(owed - reserved, currencyCode: currencyCode)
     BudgetStatusRow(
       name: card.name, status: status,
-      accessibilityStatus: owed > reserved
-        ? (status.state == .over ? "Carrying \(shortfall) of debt" : "Credit spending needs \(shortfall)")
-        : "Ready to pay in full, \(status.pillText) set aside"
+      accessibilityStatus: "\(status.availableText) available for payment, " + (owed > reserved
+        ? (status.state == .over ? "\(status.detailText) to pay in full, carrying debt"
+           : "Credit spending \(status.detailText.lowercased())")
+        : "Ready to pay in full")
     )
   }
 }

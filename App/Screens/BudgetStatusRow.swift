@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// A Budget screen row: status ring, name and a color-coded status pill. Nothing else.
+/// A Budget screen row: name and color-coded available money.
 /// Used for envelopes and card payments. Always one line: a name too long for the row fades
 /// out at its end. At accessibility text sizes the pill moves under the name.
 struct BudgetStatusRow: View {
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
   var name: String
   var status: EnvelopeStatus
   /// A small symbol inside the pill, e.g. a card for credit overspending.
@@ -16,16 +17,12 @@ struct BudgetStatusRow: View {
     Group {
       if dynamicTypeSize.isAccessibilitySize {
         VStack(alignment: .leading, spacing: Bow.Space.s2) {
-          HStack(spacing: Bow.Space.s3) {
-            ring
-            nameText
-          }
+          nameText
           pill
         }
       } else {
         // One line: the pill keeps its full amount and a long name fades out before it.
         HStack(spacing: Bow.Space.s3) {
-          ring
           nameText
             .fadingTail()
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -40,10 +37,6 @@ struct BudgetStatusRow: View {
     .accessibilityValue(accessibilityStatus)
   }
 
-  private var ring: some View {
-    StatusRing(fraction: status.ringFraction, state: status.state)
-  }
-
   private var nameText: some View {
     Text(name)
       .font(.bowHeadline)
@@ -51,6 +44,9 @@ struct BudgetStatusRow: View {
   }
 
   private var pill: some View {
-    StatusPill(text: status.pillText, state: status.state, symbol: pillSymbol)
+    StatusPill(
+      text: status.availableText, state: status.state,
+      symbol: pillSymbol ?? (differentiateWithoutColor ? status.state.glyph : nil)
+    )
   }
 }

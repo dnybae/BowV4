@@ -73,37 +73,8 @@ struct EnvelopeDetailScreen: View {
     EnvelopeStatus(
       availableMinor: availableMinor,
       assignedMinor: snapshot.assigned[envelope.id, default: 0],
-      activityMinor: snapshot.activity[envelope.id, default: 0],
       monthlyTargetMinor: totalTarget, currencyCode: currencyCode
     )
-  }
-
-  /// Progress toward this month's target; without a target, the same fill as the Budget row.
-  private var heroFraction: Double {
-    guard availableMinor >= 0, let totalTarget else { return status.ringFraction }
-    return min(1, Double(max(0, snapshot.assigned[envelope.id, default: 0])) / Double(totalTarget))
-  }
-
-  private var heroCaption: String {
-    if let totalTarget {
-      let assigned = BudgetMoney.formatted(max(0, snapshot.assigned[envelope.id, default: 0]), currencyCode: currencyCode)
-      return "\(assigned) of \(BudgetMoney.formatted(totalTarget, currencyCode: currencyCode))"
-    }
-    return snapshot.month.formatted(.dateTime.month(.wide).year())
-  }
-
-  private var statusHeadline: (title: String, message: String)? {
-    switch status.state {
-    case .over:
-      return ("Over by \(BudgetMoney.formatted(-availableMinor, currencyCode: currencyCode))",
-              "Cover it from another envelope.")
-    case .needs:
-      return (status.pillText, "to reach this month’s target")
-    case .funded where totalTarget != nil:
-      return ("Target met", "This month’s target is fully assigned.")
-    case .funded, .empty:
-      return nil
-    }
   }
 
   /// "Set target" until the envelope has a target of its own.
@@ -145,40 +116,42 @@ struct EnvelopeDetailScreen: View {
     List {
       Section {
         VStack(spacing: Bow.Space.s4) {
-          // Small enough that the funding target starts on the first screen.
-          GlowRing(fraction: heroFraction, color: status.state.ring, size: 176) {
-            VStack(spacing: Bow.Space.s1) {
-              Text("Available")
-                .font(.bowSubhead)
-                .foregroundStyle(Bow.inkSoft)
-              MoneyText(minor: availableMinor, currencyCode: currencyCode)
-                .bowHeroFont()
-                .foregroundStyle(Bow.ink)
-                .lineLimit(1)
-                .minimumScaleFactor(0.4)
-              Text(heroCaption)
-                .font(.bowFootnote)
-                .monospacedDigit()
-                .foregroundStyle(Bow.inkSoft)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            }
-            .frame(maxWidth: 150)
+          VStack(spacing: Bow.Space.s1) {
+            Text("Available")
+              .font(.bowSubhead)
+              .foregroundStyle(Bow.inkSoft)
+            MoneyText(minor: availableMinor, currencyCode: currencyCode)
+              .bowHeroFont()
+              .foregroundStyle(availableMinor < 0 ? Bow.overInk : Bow.ink)
+              .lineLimit(1)
+              .minimumScaleFactor(0.4)
+            Text(snapshot.month.formatted(.dateTime.month(.wide).year()))
+              .font(.bowFootnote)
+              .foregroundStyle(Bow.inkSoft)
           }
+          .frame(maxWidth: .infinity)
+          .padding(.top, Bow.Space.s3)
           .accessibilityElement(children: .combine)
 
-          if let statusHeadline {
-            VStack(spacing: 2) {
-              Text(statusHeadline.title)
-                .font(.bowTitle)
+          if availableMinor < 0 {
+            VStack(alignment: .leading, spacing: Bow.Space.s1) {
+              Label("Over by \(BudgetMoney.formatted(-availableMinor, currencyCode: currencyCode))",
+                    systemImage: "exclamationmark.triangle.fill")
+                .font(.bowHeadline)
                 .monospacedDigit()
-                .foregroundStyle(Bow.ink)
-              Text(statusHeadline.message)
+                .foregroundStyle(Bow.overInk)
+              Text("Cover it from another envelope.")
                 .font(.bowSubhead)
                 .foregroundStyle(Bow.inkSoft)
             }
-            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Bow.Space.s4)
+            .background(Bow.overTint, in: RoundedRectangle(cornerRadius: Bow.Radius.lg))
             .accessibilityElement(children: .combine)
+          }
+
+          if let progress = status.fundingProgress {
+            EnvelopeFundingProgressView(progress: progress, currencyCode: currencyCode)
           }
 
           BowStatStrip(stats: [

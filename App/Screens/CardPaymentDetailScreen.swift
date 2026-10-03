@@ -108,9 +108,9 @@ struct CardPaymentDetailScreen: View {
   private var statusHeadline: (title: String, message: String)? {
     switch status.state {
     case .over:
-      return (status.pillText, "to pay this card in full")
+      return (status.detailText, "to pay this card in full")
     case .needs:
-      return (status.pillText, "to cover this month’s card spending")
+      return (status.detailText, "to cover this month’s card spending")
     case .funded:
       return ("Ready to pay in full", "Payment money covers the full card balance.")
     case .empty:
@@ -122,7 +122,7 @@ struct CardPaymentDetailScreen: View {
     List {
       Section {
         VStack(spacing: Bow.Space.s4) {
-          GlowRing(fraction: status.ringFraction, color: status.state.ring, size: 200) {
+          GlowRing(fraction: status.paymentFundingFraction, color: status.state.ring, size: 200) {
             VStack(spacing: Bow.Space.s1) {
               Text("Payment ready")
                 .font(.bowSubhead)

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A budget envelope row: status ring, name and status pill.
+/// A budget envelope row: name and signed available money, colored by funding status.
 struct EnvelopeBudgetRow: View {
   var name: String
   var availableMinor: Int64
@@ -13,7 +13,7 @@ struct EnvelopeBudgetRow: View {
 
   private var status: EnvelopeStatus {
     EnvelopeStatus(
-      availableMinor: availableMinor, assignedMinor: assignedMinor, activityMinor: activityMinor,
+      availableMinor: availableMinor, assignedMinor: assignedMinor,
       monthlyTargetMinor: monthlyTargetMinor, currencyCode: currencyCode
     )
   }
@@ -25,16 +25,18 @@ struct EnvelopeBudgetRow: View {
 
   private var accessibilityStatus: String {
     let status = status
+    let available = "\(status.availableText) available"
     let spent = BudgetMoney.formatted(max(0, -activityMinor), currencyCode: currencyCode)
     switch status.state {
     case .over:
       let over = BudgetMoney.formatted(-availableMinor, currencyCode: currencyCode)
-      return isCreditOverspending ? "Over by \(over) on credit, adds debt"
+      let explanation = isCreditOverspending ? "Over by \(over) on credit, adds debt"
         : cashOverspentMinor > 0 ? "Cash overspent by \(over)" : "Over by \(over)"
+      return "\(available), \(explanation)"
     case .needs:
-      return "\(status.pillText), spent \(spent)"
+      return "\(available), \(status.detailText), spent \(spent)"
     case .funded, .empty:
-      return "\(BudgetMoney.formatted(max(0, availableMinor), currencyCode: currencyCode)) available, spent \(spent)"
+      return "\(available), spent \(spent)"
     }
   }
 

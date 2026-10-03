@@ -168,40 +168,11 @@ extension EnvelopeState {
     var ring: Color { switch self { case .funded: Bow.funded; case .needs: Bow.needs; case .over: Bow.over; case .empty: Bow.well } }
     var ink: Color  { switch self { case .funded: Bow.fundedInk; case .needs: Bow.needsInk; case .over: Bow.overInk; case .empty: Bow.inkSoft } }
     var tint: Color { switch self { case .funded: Bow.fundedTint; case .needs: Bow.needsTint; case .over: Bow.overTint; case .empty: Bow.well } }
-    /// Shown inside rings when Differentiate Without Color is on.
+    /// Shown in available amount pills when Differentiate Without Color is on.
     var glyph: String? { switch self { case .funded: "checkmark"; case .needs: "minus"; case .over: "exclamationmark"; case .empty: nil } }
 }
 
-// MARK: - Small ring (rows, 28pt)
-
-struct StatusRing: View {
-    var fraction: Double
-    var state: EnvelopeState
-    var size: CGFloat = 28
-    @ScaledMetric private var scale: CGFloat = 1
-    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
-    var body: some View {
-        let side = size * min(scale, Bow.maxGraphicScale)
-        ZStack {
-            Circle().stroke(Bow.well, lineWidth: 3)
-            Circle().trim(from: 0, to: state == .over ? 1 : fraction)
-                .stroke(state.ring, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-            // With Differentiate Without Color, the ring's state also reads as a shape.
-            if differentiateWithoutColor, let glyph = state.glyph {
-                Image(systemName: glyph)
-                    .font(.system(size: side * 0.4, weight: .bold))
-                    .foregroundStyle(state.ink)
-            }
-        }
-        .frame(width: side, height: side)
-        .bowAnimation(Bow.ringMotion, value: fraction)
-        .bowAnimation(Bow.ringMotion, value: state)
-        .accessibilityHidden(true)
-    }
-}
-
-// MARK: - Status pill ("Over $196.80", "Needs $80.00", "$330.00")
+// MARK: - Status pill
 
 struct StatusPill: View {
     var text: String
@@ -246,7 +217,7 @@ extension StatusPill {
 // MARK: - Glow ring (hero)
 
 /// Budget: fraction = share of cash assigned, color Bow.bow.
-/// Envelope / card payment: fraction = progress to target, color = state.ring.
+/// Card payment: fraction = payment money set aside against what's owed, color = state.ring.
 struct GlowRing<Center: View>: View {
     var fraction: Double
     var color: Color

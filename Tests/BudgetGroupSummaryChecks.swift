@@ -59,7 +59,7 @@ struct BudgetGroupSummaryChecks {
   private static func envelope(available: Int64, assigned: Int64, target: Int64?) -> BudgetGroupSummary.Item {
     BudgetGroupSummary.Item(
       availableMinor: available,
-      status: EnvelopeStatus(availableMinor: available, assignedMinor: assigned, activityMinor: 0,
+      status: EnvelopeStatus(availableMinor: available, assignedMinor: assigned,
                              monthlyTargetMinor: target, currencyCode: "USD")
     )
   }

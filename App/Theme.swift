@@ -284,14 +284,20 @@ struct PulseTarget<Content: View>: View {
 
 extension View {
     /// Main action: system Liquid Glass prominent button, tinted ink. One per screen.
+    /// Titles always show: left to the automatic label style, a symbol-and-title button outside
+    /// a toolbar can collapse to its symbol in a tall, narrow capsule.
     func bowPrimaryButton(size: ControlSize = .large) -> some View {
-        self.buttonStyle(.glassProminent).tint(Bow.button)
+        self.labelStyle(.titleAndIcon)
+            .buttonStyle(.glassProminent).tint(Bow.button)
             .foregroundStyle(Bow.onButton)
             .buttonBorderShape(.capsule).controlSize(size)
+            .buttonSizing(.fitted)
     }
     /// Secondary action: system Liquid Glass button.
     func bowSecondaryButton(size: ControlSize = .large) -> some View {
-        self.buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(size)
+        self.labelStyle(.titleAndIcon)
+            .buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(size)
+            .buttonSizing(.fitted)
     }
     /// Put on a List or Form so the Bow background shows through.
     /// Row text defaults to `.bowHeadline`, the weight of envelope names on Budget.

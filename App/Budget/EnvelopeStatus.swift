@@ -50,6 +50,17 @@ struct EnvelopeStatus {
     }
   }
 
+  /// Use the same debt classification for a card's row and its collapsed group.
+  init(card: BudgetAccount, snapshot: BudgetSnapshot, previousSnapshot: BudgetSnapshot?, currencyCode: String) {
+    let previousOwed = max(0, -(previousSnapshot?.accountBalances[card.id] ?? 0))
+    let previousReserved = max(0, previousSnapshot?.paymentAvailable[card.id] ?? 0)
+    self.init(
+      cardOwedMinor: max(0, -snapshot.accountBalances[card.id, default: 0]),
+      reservedMinor: max(0, snapshot.paymentAvailable[card.id, default: 0]),
+      isCarryingDebt: previousOwed > previousReserved, currencyCode: currencyCode
+    )
+  }
+
   private static func fraction(_ part: Int64, of whole: Int64) -> Double {
     guard whole > 0 else { return 0 }
     return min(1, max(0, Double(part) / Double(whole)))

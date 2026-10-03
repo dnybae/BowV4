@@ -19,7 +19,7 @@ struct AccountsScreen: View {
   @State private var collapsedKinds = Self.savedCollapsedKinds
   @State private var reconcilingAccount: BudgetAccount?
   @State private var editingAccount: BudgetAccount?
-  @State private var showsClosedAccounts = false
+  @State private var showsClosedAccounts = UserDefaults.standard.bool(forKey: "bow.showsClosedAccountGroup")
   @Namespace private var zoomNamespace
 
   private var balances: [UUID: Int64] { balanceReport.balances }
@@ -30,14 +30,6 @@ struct AccountsScreen: View {
     accounts.filter { $0.closedAt != nil }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
   }
 
-  private var hasOnBudgetAccounts: Bool {
-    openAccounts.contains { $0.kind == .cash || $0.kind == .credit }
-  }
-
-  private var hasOffBudgetAccounts: Bool {
-    openAccounts.contains { $0.kind == .asset || $0.kind == .liability }
-  }
-
   private static let collapsedGroupsKey = "bow.collapsedAccountGroups"
 
   private static var savedCollapsedKinds: Set<BudgetAccountKind> {
@@ -46,7 +38,7 @@ struct AccountsScreen: View {
   }
 
   var body: some View {
-    ScrollView {
+    List {
       if accounts.isEmpty {
         ContentUnavailableView {
           Label("No accounts yet", systemImage: "banknote.fill")
@@ -57,39 +49,28 @@ struct AccountsScreen: View {
             .bowPrimaryButton()
         }
         .frame(maxWidth: .infinity)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
       } else {
-        VStack(alignment: .leading, spacing: Bow.Space.s6) {
+        Section {
           netWorthCard
-
-          if hasOnBudgetAccounts {
-            budgetGroup("On budget") {
-              accountGroup(.cash, title: "Cash")
-              accountGroup(.credit, title: "Credit")
-            }
-          }
-
-          if hasOffBudgetAccounts {
-            budgetGroup("Off budget") {
-              accountGroup(.asset, title: "Investments")
-              accountGroup(.liability, title: "Loans")
-            }
-          }
-
-          if !closedAccounts.isEmpty {
-            closedGroup
-          }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets())
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Bow.Space.s5)
-        .padding(.top, Bow.Space.s3)
-        .padding(.bottom, Bow.Space.s8)
+
+        accountGroup(.cash, title: "Cash", context: "On budget")
+        accountGroup(.credit, title: "Credit", context: openAccounts.contains { $0.kind == .cash } ? nil : "On budget")
+        accountGroup(.asset, title: "Investments", context: "Off budget")
+        accountGroup(.liability, title: "Loans", context: openAccounts.contains { $0.kind == .asset } ? nil : "Off budget")
+
+        if !closedAccounts.isEmpty {
+          closedGroup
+        }
       }
     }
     .scrollsToTopOnReselect(of: .accounts)
-    .background {
-      Bow.mist
-        .ignoresSafeArea()
-    }
+    .bowListBackground { Bow.mist }
     .bowSoftScrollEdge()
     .navigationTitle("Accounts")
     .sensoryFeedback(.selection, trigger: collapsedKinds)
@@ -122,66 +103,98 @@ struct AccountsScreen: View {
     }
   }
 
-  /// "On budget" / "Off budget": a quiet label over its account groups.
-  private func budgetGroup<Content: View>(
-    _ title: String,
-    @ViewBuilder content: () -> Content
-  ) -> some View {
-    VStack(alignment: .leading, spacing: Bow.Space.s4) {
-      Text(title)
-        .font(.bowFootnote.weight(.semibold))
-        .foregroundStyle(Bow.inkSoft)
-        .padding(.leading, Bow.Space.s1)
-        .accessibilityAddTraits(.isHeader)
-      content()
-    }
-  }
-
-  /// One kind of account, as separate cards like Budget's envelopes, under the same header.
+  /// One native section per account kind, keeping the on/off-budget hierarchy.
   @ViewBuilder
-  private func accountGroup(_ kind: BudgetAccountKind, title: String) -> some View {
+  private func accountGroup(_ kind: BudgetAccountKind, title: String, context: String?) -> some View {
     let matching = openAccounts.filter { $0.kind == kind }.sorted { $0.name < $1.name }
     if !matching.isEmpty {
-      let total = matching.reduce(0) { $0 + balances[$1.id, default: 0] }
+      let summary = groupSummary(for: matching)
       let isCollapsed = collapsedKinds.contains(kind)
-      VStack(alignment: .leading, spacing: Bow.Space.s2) {
-        BowGroupHeader(name: title, isCollapsed: isCollapsed, onToggle: { toggleGroup(kind) }) {
-          MoneyText(minor: total, currencyCode: currencyCode)
-            .fontWeight(.semibold)
-            .lineLimit(1)
-            .minimumScaleFactor(0.5)
+      Section {
+        if isCollapsed {
+          Button { toggleGroup(kind) } label: {
+            BowGroupSummaryRow(
+              count: Text("^[\(summary.count) account](inflect: true)"),
+              totalMinor: summary.balanceMinor, totalLabel: "Balance", currencyCode: currencyCode
+            ) {
+              Text(updateSummary(summary))
+                .foregroundStyle(Bow.inkSoft)
+            }
+          }
+          .accessibilityValue("\(title), collapsed")
+        } else {
+          ForEach(matching, content: accountRow)
         }
-        .padding(.leading, Bow.Space.s1)
-
-        BowCardStack(
-          items: matching,
-          isCollapsed: isCollapsed,
-          collapsedLabel: Text("\(title), ^[\(matching.count) account](inflect: true), collapsed"),
-          onExpand: { toggleGroup(kind) },
-          card: accountCard
-        )
+      } header: {
+        VStack(alignment: .leading, spacing: Bow.Space.s3) {
+          if let context {
+            Text(context)
+              .font(.bowFootnote.weight(.semibold))
+              .foregroundStyle(Bow.inkSoft)
+              .accessibilityAddTraits(.isHeader)
+          }
+          BowGroupHeader(name: title, isCollapsed: isCollapsed, onToggle: { toggleGroup(kind) }) {
+            if !isCollapsed {
+              MoneyText(minor: summary.balanceMinor, currencyCode: currencyCode)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+            }
+          }
+        }
+        .textCase(nil)
       }
+      .listRowBackground(Bow.card)
     }
   }
 
   /// Closed accounts, folded away under one header until asked for.
   private var closedGroup: some View {
-    VStack(alignment: .leading, spacing: Bow.Space.s2) {
-      BowGroupHeader(name: "Closed", isCollapsed: !showsClosedAccounts, onToggle: {
-        withAnimation(Bow.stackMotion(reduceMotion: reduceMotion)) { showsClosedAccounts.toggle() }
-      }) {
-        Text("\(closedAccounts.count)")
-          .foregroundStyle(Bow.inkSoft)
+    let summary = groupSummary(for: closedAccounts)
+    return Section {
+      if !showsClosedAccounts {
+        Button { toggleClosedGroup() } label: {
+          BowGroupSummaryRow(
+            count: Text("^[\(summary.count) account](inflect: true)"),
+            totalMinor: summary.balanceMinor, totalLabel: "Balance", currencyCode: currencyCode
+          ) {
+            Text("Excluded from net worth")
+              .foregroundStyle(Bow.inkSoft)
+          }
+        }
+        .accessibilityValue("Closed accounts, collapsed")
+      } else {
+        ForEach(closedAccounts, content: accountRow)
       }
-      .padding(.leading, Bow.Space.s1)
-      BowCardStack(
-        items: closedAccounts,
-        isCollapsed: !showsClosedAccounts,
-        collapsedLabel: Text("Closed, ^[\(closedAccounts.count) account](inflect: true), collapsed"),
-        onExpand: { withAnimation(Bow.stackMotion(reduceMotion: reduceMotion)) { showsClosedAccounts = true } },
-        card: accountCard
-      )
+    } header: {
+      BowGroupHeader(name: "Closed", isCollapsed: !showsClosedAccounts, onToggle: {
+        toggleClosedGroup()
+      }) {
+        if showsClosedAccounts {
+          Text("^[\(closedAccounts.count) account](inflect: true)")
+            .foregroundStyle(Bow.inkSoft)
+        }
+      }
     }
+    .listRowBackground(Bow.card)
+  }
+
+  private func toggleClosedGroup() {
+    withAnimation(Bow.motion(reduceMotion: reduceMotion)) { showsClosedAccounts.toggle() }
+    UserDefaults.standard.set(showsClosedAccounts, forKey: "bow.showsClosedAccountGroup")
+  }
+
+  private func groupSummary(for accounts: [BudgetAccount]) -> AccountGroupSummary {
+    AccountGroupSummary(
+      accounts: accounts, balances: balances,
+      linkedAccountIDs: Set(simpleFINLinks.compactMap(\.localAccountID))
+    )
+  }
+
+  private func updateSummary(_ summary: AccountGroupSummary) -> String {
+    if summary.linkedCount == 0 { return "Updated by you" }
+    if summary.manualCount == 0 { return "Linked to bank sync" }
+    return "\(summary.linkedCount) linked · \(summary.manualCount) manual"
   }
 
   private var netWorthCard: some View {
@@ -219,7 +232,7 @@ struct AccountsScreen: View {
   }
 
   private func toggleGroup(_ kind: BudgetAccountKind) {
-    withAnimation(Bow.stackMotion(reduceMotion: reduceMotion)) {
+    withAnimation(Bow.motion(reduceMotion: reduceMotion)) {
       if !collapsedKinds.insert(kind).inserted {
         collapsedKinds.remove(kind)
       }
@@ -237,7 +250,7 @@ struct AccountsScreen: View {
     return "Synced \(reportedAt.formatted(.relative(presentation: .named)))"
   }
 
-  private func accountCard(_ account: BudgetAccount) -> some View {
+  private func accountRow(_ account: BudgetAccount) -> some View {
     let balance = balances[account.id, default: 0]
     let balanceText = BudgetMoney.formatted(balance, currencyCode: currencyCode)
     let syncText = syncDescription(for: account)
@@ -246,31 +259,30 @@ struct AccountsScreen: View {
       ? AnyLayout(VStackLayout(alignment: .leading, spacing: Bow.Space.s2))
       : AnyLayout(HStackLayout(spacing: Bow.Space.s3))
     return NavigationLink(value: route) {
-      BowItemCard {
-        layout {
-          if !dynamicTypeSize.isAccessibilitySize {
-            AccountLogoView(appearance: account.logoAppearance, systemImage: account.accountType.systemImage, size: 36)
-          }
-          VStack(alignment: .leading, spacing: 2) {
-            Text(account.name)
-              .font(.bowHeadline)
-              .foregroundStyle(Bow.ink)
-            Text(syncText)
-              .font(.bowSubhead)
-              .foregroundStyle(Bow.inkSoft)
-          }
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .multilineTextAlignment(.leading)
-          MoneyText(minor: balance, currencyCode: currencyCode)
-            .font(.bowAmount)
-            .foregroundStyle(Bow.ink)
-            .lineLimit(1)
-            .minimumScaleFactor(0.5)
+      layout {
+        if !dynamicTypeSize.isAccessibilitySize {
+          AccountLogoView(appearance: account.logoAppearance, systemImage: account.accountType.systemImage, size: 36)
         }
-        .padding(.vertical, Bow.Space.s3)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(account.name)
+            .font(.bowHeadline)
+            .foregroundStyle(Bow.ink)
+          Text(syncText)
+            .font(.bowSubhead)
+            .foregroundStyle(Bow.inkSoft)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(.leading)
+        MoneyText(minor: balance, currencyCode: currencyCode)
+          .font(.bowAmount)
+          .foregroundStyle(Bow.ink)
+          .lineLimit(1)
+          .minimumScaleFactor(0.5)
       }
+      .padding(.vertical, Bow.Space.s1)
+      .frame(minHeight: 44)
+      .contentShape(.rect)
     }
-    .buttonStyle(.bowPress)
     .matchedTransitionSource(id: route, in: zoomNamespace)
     .contextMenu {
       if account.closedAt == nil {

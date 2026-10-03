@@ -29,7 +29,7 @@ struct BudgetSummary {
     spentThisMonthMinor = max(0, budgetEnvelopes.reduce(0) { total, envelope in
       total - snapshot.activity[envelope.id, default: 0]
     })
-    // Only the envelopes on screen, so the total matches the cards below it.
+    // Only the envelopes on screen, so the total matches their positive available balances.
     availableMinor = budgetEnvelopes.filter { !$0.isHidden }.reduce(0) { total, envelope in
       total + max(0, snapshot.available(for: envelope.id))
     }

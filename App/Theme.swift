@@ -135,13 +135,6 @@ extension Bow {
 
     /// The house spring, or no animation when Reduce Motion is on.
     static func motion(reduceMotion: Bool) -> Animation? { reduceMotion ? nil : motion }
-
-    /// Card stacks collapsing and expanding: a touch of bounce, so the cards settle into place.
-    static let stackMotion = Animation.spring(duration: 0.45, bounce: 0.15)
-    /// The stack spring, or a short cross-fade when Reduce Motion is on.
-    static func stackMotion(reduceMotion: Bool) -> Animation {
-        reduceMotion ? .easeInOut(duration: 0.2) : stackMotion
-    }
 }
 
 private struct BowAnimation<Value: Equatable>: ViewModifier {
@@ -171,8 +164,7 @@ extension View {
 
 // MARK: - Envelope status
 
-enum EnvelopeState {
-    case funded, needs, over, empty
+extension EnvelopeState {
     var ring: Color { switch self { case .funded: Bow.funded; case .needs: Bow.needs; case .over: Bow.over; case .empty: Bow.well } }
     var ink: Color  { switch self { case .funded: Bow.fundedInk; case .needs: Bow.needsInk; case .over: Bow.overInk; case .empty: Bow.inkSoft } }
     var tint: Color { switch self { case .funded: Bow.fundedTint; case .needs: Bow.needsTint; case .over: Bow.overTint; case .empty: Bow.well } }

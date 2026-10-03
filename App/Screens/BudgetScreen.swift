@@ -149,23 +149,12 @@ struct BudgetScreen: View {
   }
 
   var body: some View {
-    // A ScrollView, not a List: List resizes rows on its own timing, which fought the card
-    // stacks' collapse animation.
-    ScrollView {
-      VStack(alignment: .leading, spacing: Bow.Space.s6) {
-        screenContent
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.horizontal, Bow.Space.s5)
-      .padding(.top, Bow.Space.s3)
-      .padding(.bottom, Bow.Space.s8)
+    List {
+      screenContent
     }
-    .font(.bowHeadline)
     .offset(x: swipeOffset)
     .scrollsToTopOnReselect(of: .budget)
-    .background {
-      Bow.mist.ignoresSafeArea()
-    }
+    .bowListBackground { Bow.mist }
     .bowSoftScrollEdge()
     .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))
     .navigationBarTitleDisplayMode(.inline)
@@ -221,7 +210,7 @@ struct BudgetScreen: View {
       }
       .onEnded { value in
         withAnimation(Bow.motion(reduceMotion: reduceMotion)) { swipeOffset = 0 }
-        // Let a card's release (which can land just after this) see the swipe, then clear it.
+        // Let a row's release (which can land just after this) see the swipe, then clear it.
         Task {
           try? await Task.sleep(for: .milliseconds(250))
           isSwipingMonth = false
@@ -295,27 +284,36 @@ struct BudgetScreen: View {
 
   @ViewBuilder
   private var screenContent: some View {
-    BudgetOverviewSection(
-      summary: summary,
-      notices: notices,
-      currencyCode: currencyCode,
-      isPastMonth: isPastMonth,
-      onSelectNotice: handle
-    )
+    Section {
+      BudgetOverviewSection(
+        summary: summary,
+        notices: notices,
+        currencyCode: currencyCode,
+        isPastMonth: isPastMonth,
+        onSelectNotice: handle
+      )
+      .listRowInsets(EdgeInsets())
+      .listRowSeparator(.hidden)
+      .listRowBackground(Color.clear)
+    }
 
     if showsSetup {
-      BudgetSetupCard(
-        hasAccount: hasOpenAccount,
-        hasEnvelopes: hasBudgetEnvelopes,
-        hasAssigned: !allocations.isEmpty,
-        onAddAccount: onAddAccount,
-        onAddEnvelopes: orderedGroups.isEmpty ? onAddGroup : onAddEnvelope,
-        onImportYNAB: onImportYNAB,
-        onAssign: {
-          if let envelope = assignableEnvelope { onMoveMoney(.readyToAssign, .envelope(envelope.id)) }
-        }
-      )
-      .transition(.opacity)
+      Section {
+        BudgetSetupCard(
+          hasAccount: hasOpenAccount,
+          hasEnvelopes: hasBudgetEnvelopes,
+          hasAssigned: !allocations.isEmpty,
+          onAddAccount: onAddAccount,
+          onAddEnvelopes: orderedGroups.isEmpty ? onAddGroup : onAddEnvelope,
+          onImportYNAB: onImportYNAB,
+          onAssign: {
+            if let envelope = assignableEnvelope { onMoveMoney(.readyToAssign, .envelope(envelope.id)) }
+          }
+        )
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+      }
     }
 
     let scheduled = scheduledTargets
@@ -323,71 +321,106 @@ struct BudgetScreen: View {
       let matching = visibleEnvelopes(in: group)
       if !matching.isEmpty {
         let key = group.id.uuidString
-        VStack(alignment: .leading, spacing: Bow.Space.s2) {
-          BowGroupHeader(
-            name: group.name, count: matching.count,
-            isCollapsed: collapseState.isCollapsed(key),
-            onToggle: { toggleGroup(key) }
-          )
-          .padding(.leading, Bow.Space.s1)
-
-          BowCardStack(
-            items: matching,
-            isCollapsed: collapseState.isCollapsed(key),
-            collapsedLabel: Text("\(group.name), ^[\(matching.count) envelope](inflect: true), collapsed"),
-            onExpand: { toggleGroup(key) }
-          ) { envelope in
-            budgetCard(.envelope(envelope.id)) {
-              EnvelopeBudgetRow(
-                name: envelope.name,
+        let isCollapsed = collapseState.isCollapsed(key)
+        Section {
+          if isCollapsed {
+            let summary = BudgetGroupSummary(items: matching.map { envelope in
+              BudgetGroupSummary.Item(
                 availableMinor: snapshot.available(for: envelope.id),
-                cashOverspentMinor: snapshot.cashShortfall[envelope.id, default: 0],
-                creditOverspentMinor: snapshot.creditShortfall[envelope.id, default: 0],
-                assignedMinor: snapshot.assigned[envelope.id, default: 0],
-                activityMinor: snapshot.activity[envelope.id, default: 0],
-                monthlyTargetMinor: monthlyTarget(for: envelope, scheduled: scheduled),
-                currencyCode: currencyCode
+                status: EnvelopeStatus(
+                  availableMinor: snapshot.available(for: envelope.id),
+                  assignedMinor: snapshot.assigned[envelope.id, default: 0],
+                  activityMinor: snapshot.activity[envelope.id, default: 0],
+                  monthlyTargetMinor: monthlyTarget(for: envelope, scheduled: scheduled),
+                  currencyCode: currencyCode
+                )
               )
+            })
+            Button { toggleGroup(key) } label: {
+              BowGroupSummaryRow(
+                count: Text("^[\(summary.count) envelope](inflect: true)"),
+                totalMinor: summary.availableMinor, totalLabel: "Available", currencyCode: currencyCode
+              ) {
+                BudgetGroupStatusLine(summary: summary)
+              }
+            }
+            .accessibilityValue("\(group.name), collapsed")
+          } else {
+            ForEach(matching) { envelope in
+              budgetRow(.envelope(envelope.id)) {
+                EnvelopeBudgetRow(
+                  name: envelope.name,
+                  availableMinor: snapshot.available(for: envelope.id),
+                  cashOverspentMinor: snapshot.cashShortfall[envelope.id, default: 0],
+                  creditOverspentMinor: snapshot.creditShortfall[envelope.id, default: 0],
+                  assignedMinor: snapshot.assigned[envelope.id, default: 0],
+                  activityMinor: snapshot.activity[envelope.id, default: 0],
+                  monthlyTargetMinor: monthlyTarget(for: envelope, scheduled: scheduled),
+                  currencyCode: currencyCode
+                )
+              }
             }
           }
+        } header: {
+          BowGroupHeader(
+            name: group.name, count: matching.count,
+            isCollapsed: isCollapsed,
+            onToggle: { toggleGroup(key) }
+          )
         }
+        .listRowBackground(Bow.card)
       }
     }
 
     if !creditCards.isEmpty {
       let key = BudgetGroupCollapseState.creditCardsKey
-      VStack(alignment: .leading, spacing: Bow.Space.s2) {
-        BowGroupHeader(
-          name: "Credit card payments", count: creditCards.count,
-          isCollapsed: collapseState.isCollapsed(key),
-          onToggle: { toggleGroup(key) }
-        )
-        .padding(.leading, Bow.Space.s1)
-
-        BowCardStack(
-          items: creditCards,
-          isCollapsed: collapseState.isCollapsed(key),
-          collapsedLabel: Text("Credit card payments, ^[\(creditCards.count) card](inflect: true), collapsed"),
-          onExpand: { toggleGroup(key) }
-        ) { card in
-          budgetCard(.cardPayment(card.id)) {
-            CardPaymentRow(card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode)
+      let isCollapsed = collapseState.isCollapsed(key)
+      Section {
+        if isCollapsed {
+          let summary = BudgetGroupSummary(items: creditCards.map { card in
+            BudgetGroupSummary.Item(
+              availableMinor: max(0, snapshot.paymentAvailable[card.id, default: 0]),
+              status: EnvelopeStatus(
+                card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode
+              )
+            )
+          })
+          Button { toggleGroup(key) } label: {
+            BowGroupSummaryRow(
+              count: Text("^[\(summary.count) card](inflect: true)"),
+              totalMinor: summary.availableMinor, totalLabel: "Set aside", currencyCode: currencyCode
+            ) {
+              BudgetGroupStatusLine(summary: summary, isCardPayments: true)
+            }
+          }
+          .accessibilityValue("Credit card payments, collapsed")
+        } else {
+          ForEach(creditCards) { card in
+            budgetRow(.cardPayment(card.id)) {
+              CardPaymentRow(card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode)
+            }
           }
         }
+      } header: {
+        BowGroupHeader(
+          name: "Credit card payments",
+          isCollapsed: isCollapsed,
+          onToggle: { toggleGroup(key) }
+        ) {
+          if !isCollapsed { Text("^[\(creditCards.count) card](inflect: true)") }
+        }
       }
+      .listRowBackground(Bow.card)
       .id(key)
     }
 
     if !isPastMonth && hasBudgetEnvelopes {
-      VStack(spacing: 0) {
+      Section {
         actionRow("Add Envelope", systemImage: "plus", isDisabled: orderedGroups.isEmpty, action: onAddEnvelope)
-        Divider().padding(.leading, Bow.Space.s4)
         actionRow("Add Group", systemImage: "folder.badge.plus", action: onAddGroup)
-        Divider().padding(.leading, Bow.Space.s4)
         actionRow("Manage Envelopes", systemImage: "slider.horizontal.3") { open(.manageEnvelopes) }
       }
-      .clipShape(RoundedRectangle(cornerRadius: Bow.Radius.lg, style: .continuous))
-      .bowCard()
+      .listRowBackground(Bow.card)
     }
   }
 
@@ -403,14 +436,21 @@ struct BudgetScreen: View {
     path.append(route)
   }
 
-  /// One envelope or card payment card, opening its route. A button rather than a
+  /// One envelope or card payment list row, opening its route. A button rather than a
   /// NavigationLink, so `open` can ignore a finger lifted at the end of a month swipe.
-  private func budgetCard<Row: View>(_ route: BudgetRoute, @ViewBuilder row: () -> Row) -> some View {
+  private func budgetRow<Row: View>(_ route: BudgetRoute, @ViewBuilder row: () -> Row) -> some View {
     let content = row()
     return Button { open(route) } label: {
-      BowItemCard { content }
+      HStack(spacing: Bow.Space.s3) {
+        content
+          .frame(maxWidth: .infinity, alignment: .leading)
+        Image(systemName: "chevron.right")
+          .font(.bowFootnote.weight(.semibold))
+          .foregroundStyle(Bow.inkFaint)
+          .accessibilityHidden(true)
+      }
+      .contentShape(.rect)
     }
-    .buttonStyle(.bowPress)
     .matchedTransitionSource(id: route, in: zoomNamespace)
     .contextMenu { if !isPastMonth { quickActions(for: route) } }
   }
@@ -446,7 +486,7 @@ struct BudgetScreen: View {
     }
   }
 
-  /// A tinted row in the card of actions at the bottom of the screen, like a List button row.
+  /// A native action row at the bottom of the budget.
   private func actionRow(
     _ title: String, systemImage: String, isDisabled: Bool = false, action: @escaping () -> Void
   ) -> some View {
@@ -459,17 +499,15 @@ struct BudgetScreen: View {
       }
       .font(.bowHeadline)
       .foregroundStyle(.tint)
-      .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-      .padding(.horizontal, Bow.Space.s4)
+      .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
       .contentShape(.rect)
     }
-    .buttonStyle(.bowRowPress)
     .disabled(isDisabled)
     .opacity(isDisabled ? 0.4 : 1)
   }
 
   private func toggleGroup(_ key: String) {
-    withAnimation(Bow.stackMotion(reduceMotion: reduceMotion)) { collapseState.toggle(key) }
+    withAnimation(Bow.motion(reduceMotion: reduceMotion)) { collapseState.toggle(key) }
     collapseState.save()
   }
 
@@ -635,18 +673,12 @@ private struct CardPaymentRow: View {
   var body: some View {
     let owed = max(0, -snapshot.accountBalances[card.id, default: 0])
     let reserved = max(0, snapshot.paymentAvailable[card.id, default: 0])
-    let previousOwed = max(0, -(previousSnapshot?.accountBalances[card.id] ?? 0))
-    let previousReserved = max(0, previousSnapshot?.paymentAvailable[card.id] ?? 0)
-    let isCarryingDebt = previousOwed > previousReserved
-    let status = EnvelopeStatus(
-      cardOwedMinor: owed, reservedMinor: reserved,
-      isCarryingDebt: isCarryingDebt, currencyCode: currencyCode
-    )
+    let status = EnvelopeStatus(card: card, snapshot: snapshot, previousSnapshot: previousSnapshot, currencyCode: currencyCode)
     let shortfall = BudgetMoney.formatted(owed - reserved, currencyCode: currencyCode)
     BudgetStatusRow(
       name: card.name, status: status,
       accessibilityStatus: owed > reserved
-        ? (isCarryingDebt ? "Carrying \(shortfall) of debt" : "Credit spending needs \(shortfall)")
+        ? (status.state == .over ? "Carrying \(shortfall) of debt" : "Credit spending needs \(shortfall)")
         : "Ready to pay in full, \(status.pillText) set aside"
     )
   }

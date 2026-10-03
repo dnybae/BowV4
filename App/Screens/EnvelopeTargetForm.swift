@@ -62,11 +62,7 @@ struct EnvelopeTargetForm: View {
 
       if kind == .byDate {
         Section {
-          NavigationLink {
-            BowDatePickerScreen(title: "Goal date", date: $targetDate, range: Date()...Date.distantFuture)
-          } label: {
-            LabeledContent("Goal date", value: targetDate.formatted(.dateTime.month(.wide).year()))
-          }
+          BowDateRow(title: "Goal date", date: $targetDate, range: Date()...Date.distantFuture)
         }
         .listRowBackground(Bow.card)
       }

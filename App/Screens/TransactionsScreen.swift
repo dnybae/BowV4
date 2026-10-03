@@ -216,6 +216,7 @@ extension TransactionsScreen {
       } actions: {
         Button("Clear Filters") { filter = TransactionFilter() }
           .bowSecondaryButton(size: .regular)
+          .fixedSize()
       }
     } else {
       let canConnect = bankConnections.isEmpty && !isDemoMode
@@ -228,9 +229,11 @@ extension TransactionsScreen {
       } actions: {
         Button("Add Transaction", systemImage: "plus", action: onAddTransaction)
           .bowPrimaryButton(size: .regular)
+          .fixedSize()
         if canConnect {
           Button("Connect Bank", systemImage: "link", action: onConnectBank)
             .bowSecondaryButton(size: .regular)
+            .fixedSize()
         }
       }
     }

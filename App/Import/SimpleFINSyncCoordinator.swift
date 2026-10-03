@@ -6,6 +6,8 @@ import SwiftData
 final class SimpleFINSyncCoordinator {
   static let shared = SimpleFINSyncCoordinator()
   private(set) var isSyncing = false
+  /// SimpleFIN warns about, and may cap, requests reaching back more than 45 days.
+  static let historyWindow: TimeInterval = 44 * 86_400
 
   private init() {}
 
@@ -23,7 +25,7 @@ final class SimpleFINSyncCoordinator {
     do {
       let response = try await SimpleFINClient().fetch(
         accessURL: accessURL,
-        startDate: max(Date().addingTimeInterval(-89 * 86_400), startDate ?? .distantPast)
+        startDate: max(Date().addingTimeInterval(-Self.historyWindow), startDate ?? .distantPast)
       )
       updateAccounts(response.accounts, in: context)
       connection.lastMessage = response.messages.isEmpty ? nil : response.messages.joined(separator: "\n")
@@ -65,7 +67,7 @@ final class SimpleFINSyncCoordinator {
     }
     try work.save()
 
-    let earliest = now.addingTimeInterval(-89 * 86_400)
+    let earliest = now.addingTimeInterval(-Self.historyWindow)
     let mappingChanged = (connection.lastMappingChangeAt ?? .distantPast)
       > (connection.lastSuccessfulAt ?? .distantPast)
     let recentStart = max(earliest,
@@ -84,7 +86,7 @@ final class SimpleFINSyncCoordinator {
         .importTransactions(response.accounts)
       var messages = response.messages
       if let last = connection.lastSuccessfulAt, last < earliest {
-        messages.append("This connection was inactive for over 90 days. Check your bank for older transactions that SimpleFIN could not return in this refresh.")
+        messages.append("This connection was inactive for over 45 days. Check your bank for older transactions that SimpleFIN could not return in this refresh.")
       }
       connection.lastMessage = messages.isEmpty ? nil : messages.joined(separator: "\n")
       if response.messages.isEmpty { connection.lastSuccessfulAt = now }

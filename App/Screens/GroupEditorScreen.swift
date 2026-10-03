@@ -11,6 +11,7 @@ struct GroupEditorScreen: View {
   @State private var name = ""
   @State private var errorMessage: String?
   @State private var showingDelete = false
+  @FocusState private var nameIsFocused: Bool
 
   init(nextOrder: Int, group: BudgetGroup? = nil, onAdded: ((BudgetGroup) -> Void)? = nil) {
     self.nextOrder = nextOrder
@@ -23,7 +24,14 @@ struct GroupEditorScreen: View {
     NavigationStack {
       Form {
         Section {
-          BowNameHeader(placeholder: "For example, Food & Home", name: $name) {}
+          BowNameHeader(placeholder: "For example, Food & Home", name: $name, isFocused: $nameIsFocused) {}
+            .task {
+              guard group == nil else { return }
+              // The keyboard only comes up once the sheet has finished presenting.
+              try? await Task.sleep(for: .milliseconds(400))
+              guard !Task.isCancelled else { return }
+              nameIsFocused = true
+            }
         } footer: {
           Group {
             Text("Groups hold related envelopes on the Budget screen, like bills or everyday spending.")

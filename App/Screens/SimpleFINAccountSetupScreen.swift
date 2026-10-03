@@ -17,7 +17,7 @@ struct SimpleFINAccountSetupScreen: View {
   @State private var balanceDrafts: [String: Int64] = [:]
   @State private var initializedKeys = Set<String>()
   @State private var importHistory = false
-  @State private var historyStart = Date().addingTimeInterval(-89 * 86_400)
+  @State private var historyStart = Date().addingTimeInterval(-SimpleFINSyncCoordinator.historyWindow)
   @State private var isWorking = false
   @State private var needsToken = false
   @State private var message: String?
@@ -28,6 +28,9 @@ struct SimpleFINAccountSetupScreen: View {
   }
   private var availableLinks: [SimpleFINAccountLink] {
     allLinks.filter { $0.localAccountID == nil }
+  }
+  private var linkedLinks: [SimpleFINAccountLink] {
+    allLinks.filter { $0.localAccountID != nil }
   }
   private var currencyCode: String { profiles.first?.currencyCode ?? "USD" }
   private var selectedLinks: [SimpleFINAccountLink] {
@@ -73,73 +76,69 @@ struct SimpleFINAccountSetupScreen: View {
         }
         .listRowBackground(Bow.card)
       } else {
-        Section {
-          Text(isDemoMode
-            ? "This sample connection shows accounts already in Bow and one you can add. No bank is contacted."
-            : "These are the accounts found in your SimpleFIN connection. Select any new accounts to add to Bow.")
-            .font(.bowSubhead)
-            .foregroundStyle(Bow.inkSoft)
-          if !isDemoMode {
-            if let lastCheck = connection?.lastAttemptAt {
-              Text("Last checked \(lastCheck.formatted(date: .abbreviated, time: .shortened))")
-                .font(.bowFootnote)
-                .foregroundStyle(Bow.inkSoft)
-            }
-            Button("Refresh bank accounts", systemImage: "arrow.clockwise") {
-              Task { await refreshAccounts() }
-            }
-            .disabled(isWorking)
-          }
-          if isWorking { BowLoadingLabel("Loading your bank accounts…") }
-          if allLinks.isEmpty && !isWorking {
+        if allLinks.isEmpty {
+          if isWorking {
+            BowLoadingLabel("Loading your bank accounts…")
+              .frame(maxWidth: .infinity)
+              .listRowBackground(Color.clear)
+          } else {
             ContentUnavailableView(
               "No bank accounts found", systemImage: "link",
               description: Text("Check your SimpleFIN connection, then refresh the account list.")
             )
+            .listRowBackground(Color.clear)
           }
-          ForEach(allLinks) { link in
-            accountRow(link)
-          }
-        } header: {
-          Text("Accounts found in SimpleFIN")
-        } footer: {
-          Text("Accounts marked Already in Bow are already connected. Checking, savings, and credit cards affect your budget; investments and loans are tracked in net worth.")
-            .font(.bowFootnote)
         }
-        .listRowBackground(Bow.card)
 
-        if !availableLinks.isEmpty {
-          if !isDemoMode {
-            Section {
-              Toggle("Import past transactions", isOn: $importHistory)
-              if importHistory {
-                DatePicker(
-                  "From", selection: $historyStart,
-                  in: Date().addingTimeInterval(-89 * 86_400)...Date(),
-                  displayedComponents: .date
-                )
-              }
-            } footer: {
-              Group {
-                Text(importHistory
-                  ? "Bow can request up to 90 days of available history. It adjusts the starting balance so past activity is not counted twice."
-                  : "Bow starts with each bank’s latest reported balance and imports new activity from now on.")
-              }
-              .font(.bowFootnote)
-            }
-            .listRowBackground(Bow.card)
-          }
-
+        ForEach(availableLinks) { link in
           Section {
-            Button {
-              Task { await addAccounts() }
-            } label: {
-              Text("Add \(selectedLinks.count) \(selectedLinks.count == 1 ? "Account" : "Accounts")")
-                .frame(maxWidth: .infinity)
+            newAccountRows(link)
+          } header: {
+            if link.id == availableLinks.first?.id {
+              Text("New at your bank")
             }
-            .bowPrimaryButton()
-            .disabled(!canAdd || isWorking)
-            if isWorking { BowLoadingLabel("Adding accounts…") }
+          } footer: {
+            if link.id == availableLinks.last?.id {
+              Text("Checking, savings, and credit cards are on your budget. Investments and loans count toward net worth only.")
+                .font(.bowFootnote)
+            }
+          }
+          .listRowBackground(Bow.card)
+        }
+
+        if !availableLinks.isEmpty && !isDemoMode {
+          Section {
+            Toggle(isOn: $importHistory) {
+              Label("Import past transactions", systemImage: "clock.arrow.circlepath").labelStyle(.bowTile)
+            }
+            if importHistory {
+              BowDateRow(title: "From", systemImage: "calendar", date: $historyStart,
+                         range: Date().addingTimeInterval(-SimpleFINSyncCoordinator.historyWindow)...Date())
+            }
+          } footer: {
+            Text(importHistory
+              ? "Bow can bring in up to 45 days of history, and adjusts each starting balance so it isn’t counted twice."
+              : "Each account starts at the bank’s latest balance, and new activity comes in from now on.")
+              .font(.bowFootnote)
+          }
+          .listRowBackground(Bow.card)
+        }
+
+        if !linkedLinks.isEmpty {
+          Section {
+            ForEach(linkedLinks) { link in
+              linkedAccountRow(link)
+            }
+          } header: {
+            Text("Already in Bow")
+          } footer: {
+            if isDemoMode {
+              Text("Sample accounts. No bank is contacted.")
+                .font(.bowFootnote)
+            } else if let lastCheck = connection?.lastAttemptAt {
+              Text("Checked \(lastCheck.formatted(date: .abbreviated, time: .shortened))")
+                .font(.bowFootnote)
+            }
           }
           .listRowBackground(Bow.card)
         }
@@ -164,9 +163,12 @@ struct SimpleFINAccountSetupScreen: View {
     }
     .task(id: availableLinks.map(\.remoteKey)) {
       let suggester = SimpleFINAccountTypeSuggester()
+      // On first setup every account starts selected. Coming back later, accounts left out
+      // before were skipped on purpose, so nothing is preselected.
+      let isFirstSetup = linkedLinks.isEmpty
       for link in availableLinks where !initializedKeys.contains(link.remoteKey) {
         initializedKeys.insert(link.remoteKey)
-        if link.currencyCode == currencyCode {
+        if isFirstSetup && link.currencyCode == currencyCode {
           selectedKeys.insert(link.remoteKey)
         }
         accountTypes[link.remoteKey] = suggester.type(for: link.name)
@@ -175,87 +177,112 @@ struct SimpleFINAccountSetupScreen: View {
         } ?? 0
       }
     }
-    .bowErrorAlert("SimpleFIN", message: $message)
-  }
-
-  @ViewBuilder
-  private func accountRow(_ link: SimpleFINAccountLink) -> some View {
-    let key = link.remoteKey
-    if let localID = link.localAccountID {
-      HStack(alignment: .center, spacing: 12) {
-        AccountLogoView(appearance: accounts.first { $0.id == localID }?.logoAppearance ?? link.logoAppearance)
-        VStack(alignment: .leading, spacing: 4) {
-          Text(link.name)
-            .font(.bowHeadline)
-          Text("Already in Bow as \(accounts.first { $0.id == localID }?.name ?? "an existing account")")
-            .font(.bowSubhead)
-            .foregroundStyle(Bow.inkSoft)
-          if let reported = link.reportedBalance {
-            Text("Bank-reported balance: \(BudgetMoney.formatted(bankAmount: reported, currencyCode: link.currencyCode))")
-              .font(.bowSubhead)
-              .foregroundStyle(Bow.inkSoft)
-          }
-        }
-        Spacer(minLength: 0)
-        Image(systemName: "checkmark")
-          .foregroundStyle(.tint)
-          .accessibilityHidden(true)
-      }
-      .padding(.vertical, 4)
-      .accessibilityElement(children: .combine)
-    } else {
-      VStack(alignment: .leading, spacing: 10) {
-        Toggle(isOn: Binding(
-          get: { selectedKeys.contains(key) },
-          set: { selected in
-            if selected { selectedKeys.insert(key) }
-            else { selectedKeys.remove(key) }
-          }
-        )) {
-          HStack(spacing: 12) {
-            AccountLogoView(appearance: link.logoAppearance)
-            VStack(alignment: .leading, spacing: 3) {
-              Text(link.name)
-              if let reported = link.reportedBalance {
-                Text("Bank-reported balance: \(BudgetMoney.formatted(bankAmount: reported, currencyCode: link.currencyCode))")
-                  .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
-              } else {
-                Text("Balance unavailable")
-                  .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
-              }
+    .toolbar {
+      if connection != nil && !needsToken && !isDemoMode {
+        ToolbarItem(placement: .topBarTrailing) {
+          if isWorking {
+            ProgressView()
+          } else {
+            Button("Refresh Bank Accounts", systemImage: "arrow.clockwise") {
+              Task { await refreshAccounts() }
             }
           }
         }
-        .disabled(link.currencyCode != currencyCode)
-        if link.currencyCode != currencyCode {
-          Text("This account uses \(link.currencyCode); this Bow budget uses \(currencyCode).")
-            .font(.bowFootnote).foregroundStyle(Bow.inkSoft)
-        } else if selectedKeys.contains(key) {
-          Picker("Account type", selection: Binding(
-            get: { accountTypes[key] ?? .checking },
-            set: { accountTypes[key] = $0 }
-          )) {
-            AccountTypeMenu()
-          }
-          .pickerStyle(.menu)
-          Text((accountTypes[key] ?? .checking).explanation)
-            .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
-          LabeledContent("Starting balance") {
-            CurrencyAmountField("Starting balance", minor: Binding(
-              get: { balanceDrafts[key, default: 0] },
-              set: { balanceDrafts[key] = $0 }
-            ), currencyCode: currencyCode, allowsNegative: true)
-            .labelsHidden()
-          }
-          if (accountTypes[key] ?? .checking).kind == .liability,
-             balanceDrafts[key, default: 0] > 0 {
-            Text("Enter money owed as a negative balance.")
-              .font(.bowFootnote).foregroundStyle(Bow.inkSoft)
-          }
+      }
+    }
+    .safeAreaInset(edge: .bottom) {
+      if connection != nil && !needsToken && !availableLinks.isEmpty {
+        BowBottomAction(isEnabled: canAdd && !isWorking, action: { Task { await addAccounts() } }) {
+          Text(isWorking ? "Adding…"
+            : selectedLinks.isEmpty ? "Choose Accounts to Add"
+            : "Add \(selectedLinks.count) \(selectedLinks.count == 1 ? "Account" : "Accounts")")
         }
       }
-      .padding(.vertical, 4)
     }
+    .bowErrorAlert("SimpleFIN", message: $message)
+  }
+
+  /// An account at the bank that isn't in Bow yet: a toggle, then its type and starting balance.
+  @ViewBuilder
+  private func newAccountRows(_ link: SimpleFINAccountLink) -> some View {
+    let key = link.remoteKey
+    let currencyMatches = link.currencyCode == currencyCode
+    let isSelected = selectedKeys.contains(key)
+    Toggle(isOn: Binding(
+      get: { selectedKeys.contains(key) },
+      set: { selected in
+        if selected { selectedKeys.insert(key) }
+        else { selectedKeys.remove(key) }
+      }
+    )) {
+      HStack(spacing: Bow.Space.s3) {
+        AccountLogoView(appearance: link.logoAppearance, size: 30)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(link.name)
+            .lineLimit(2)
+          Text(bankBalance(link))
+            .font(.bowSubhead)
+            .foregroundStyle(Bow.inkSoft)
+        }
+      }
+    }
+    .disabled(!currencyMatches)
+    if !currencyMatches {
+      Text("This account uses \(link.currencyCode); this budget uses \(currencyCode).")
+        .font(.bowFootnote).foregroundStyle(Bow.inkSoft)
+    } else if isSelected {
+      let type = accountTypes[key] ?? .checking
+      Picker(selection: Binding(
+        get: { accountTypes[key] ?? .checking },
+        set: { accountTypes[key] = $0 }
+      )) {
+        AccountTypeMenu()
+      } label: {
+        Label("Type", systemImage: type.systemImage).labelStyle(.bowTile)
+      }
+      .pickerStyle(.menu)
+      CurrencyAmountField("Starting balance", minor: Binding(
+        get: { balanceDrafts[key, default: 0] },
+        set: { balanceDrafts[key] = $0 }
+      ), currencyCode: currencyCode, allowsNegative: true, systemImage: "dollarsign")
+      if type.kind == .liability, balanceDrafts[key, default: 0] > 0 {
+        Text("Enter money owed as a negative balance.")
+          .font(.bowFootnote).foregroundStyle(Bow.needs)
+      }
+    }
+  }
+
+  /// An account already syncing into Bow: its Bow name, with the bank's balance trailing.
+  private func linkedAccountRow(_ link: SimpleFINAccountLink) -> some View {
+    let account = accounts.first { $0.id == link.localAccountID }
+    let name = account?.name ?? link.name
+    return HStack(spacing: Bow.Space.s3) {
+      AccountLogoView(appearance: account?.logoAppearance ?? link.logoAppearance, size: 30)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(name)
+          .lineLimit(2)
+        // The bank's name only when it was renamed in Bow, so it's still recognizable.
+        if name != link.name {
+          Text(link.name)
+            .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
+            .lineLimit(1)
+        }
+      }
+      .layoutPriority(1)
+      Spacer(minLength: Bow.Space.s2)
+      if let reported = link.reportedBalance {
+        Text(BudgetMoney.formatted(bankAmount: reported, currencyCode: link.currencyCode))
+          .font(.bowSubhead.monospacedDigit())
+          .foregroundStyle(Bow.inkSoft)
+      }
+    }
+    .accessibilityElement(children: .combine)
+  }
+
+  private func bankBalance(_ link: SimpleFINAccountLink) -> String {
+    link.reportedBalance.map {
+      "Bank balance \(BudgetMoney.formatted(bankAmount: $0, currencyCode: link.currencyCode))"
+    } ?? "Balance unavailable"
   }
 
   private func connect() async {

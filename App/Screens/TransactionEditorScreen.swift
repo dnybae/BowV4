@@ -558,6 +558,7 @@ struct TransactionEditorScreen: View {
       } label: {
         HStack(spacing: 12) {
           BowFieldTitle(title: kind == .expense ? "Payee" : "Source", systemImage: "person")
+            .layoutPriority(1)
           Spacer(minLength: 12)
           Text(payee.isEmpty ? "Choose a payee" : payee)
             .foregroundStyle(payee.isEmpty ? Bow.inkSoft : Bow.ink)
@@ -582,26 +583,22 @@ struct TransactionEditorScreen: View {
     }
     if kind != .transfer {
       if locksAccount {
-        LabeledContent {
+        HStack(spacing: 12) {
+          BowFieldTitle(title: "Account", systemImage: "creditcard")
+            .layoutPriority(1)
+          Spacer(minLength: 12)
           Text(selectedAccount?.name ?? "Account")
-        } label: {
-          Label("Account", systemImage: "creditcard").labelStyle(.bowTile)
+            .foregroundStyle(Bow.inkSoft)
+            .lineLimit(1)
+            .truncationMode(.middle)
         }
+        .accessibilityElement(children: .combine)
       } else {
         AccountSelectionField(title: "Account", selection: $accountID, accounts: accounts,
                               systemImage: "creditcard")
       }
     }
-    NavigationLink {
-      BowDatePickerScreen(title: "Date", date: $date)
-    } label: {
-      LabeledContent {
-        Text(date.formatted(date: .abbreviated, time: .omitted))
-      } label: {
-        Label("Date", systemImage: "calendar")
-          .labelStyle(.bowTile)
-      }
-    }
+    BowDateRow(title: "Date", systemImage: "calendar", date: $date)
   }
 
   /// The one row that differs by state: the match, or the scheduled bill this becomes.

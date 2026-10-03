@@ -36,35 +36,37 @@ struct SimpleFINScreen: View {
     Form {
       if let connection {
         Section {
-          VStack(spacing: Bow.Space.s4) {
-            BowIdentityHeader(
-              name: "SimpleFIN",
-              context: coordinator.isSyncing ? nil : connection.lastSuccessfulAt.map {
-                "Last synced \($0.formatted(.dateTime.month(.abbreviated).day().hour().minute()))"
-              } ?? connectionStatus.title,
-              pill: needsAttention ? StatusPill(text: "Sync needs attention", state: .needs)
-                : isDemoMode ? StatusPill(text: "Sample connection", state: .empty) : nil
-            ) {
-              BowGlossyTile(systemImage: needsAttention ? "exclamationmark.triangle" : "link")
-            }
-            if coordinator.isSyncing {
-              BowLoadingLabel("Syncing with your bank…")
-                .transition(.opacity)
-            }
-            if !isDemoMode {
-              Button(coordinator.isSyncing ? "Syncing…" : "Sync now", systemImage: "arrow.triangle.2.circlepath") {
-                Task { await sync() }
-              }
-              .symbolEffect(.rotate, isActive: coordinator.isSyncing)
-              .fontWeight(.semibold)
-              .bowSecondaryButton()
-              .disabled(coordinator.isSyncing)
-            }
+          LabeledContent {
+            Text(connectionStatus.title)
+              .foregroundStyle(needsAttention ? Bow.needs : Bow.inkSoft)
+          } label: {
+            Label("Status", systemImage: needsAttention ? "exclamationmark.triangle" : "link")
+              .labelStyle(.bowTile)
           }
-          .frame(maxWidth: .infinity)
-          .listRowBackground(Color.clear)
-          .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: Bow.Space.s2, trailing: 0))
+          BowTileValueRow("Last synced", systemImage: "clock",
+                          value: connection.lastSuccessfulAt?.formatted(
+                            .dateTime.month(.abbreviated).day().hour().minute()) ?? "Not yet")
+          if !isDemoMode {
+            Button {
+              Task { await sync() }
+            } label: {
+              HStack(spacing: Bow.Space.s3) {
+                Label(coordinator.isSyncing ? "Syncing…" : "Sync Now", systemImage: "arrow.triangle.2.circlepath")
+                  .labelStyle(.bowTile)
+                  .symbolEffect(.rotate, isActive: coordinator.isSyncing)
+                Spacer(minLength: 0)
+                if coordinator.isSyncing { ProgressView() }
+              }
+            }
+            .disabled(coordinator.isSyncing)
+          }
+        } footer: {
+          if let lastMessage = connection.lastMessage, !lastMessage.isEmpty {
+            Text(lastMessage)
+              .font(.bowFootnote)
+          }
         }
+        .listRowBackground(Bow.card)
 
         if !isDemoMode {
           Section {
@@ -97,13 +99,6 @@ struct SimpleFINScreen: View {
           }
         }
 
-        if let lastMessage = connection.lastMessage, !lastMessage.isEmpty {
-          Section("Connection message") {
-            Text(lastMessage).foregroundStyle(Bow.inkSoft)
-          }
-          .listRowBackground(Bow.card)
-        }
-
         Section {
           if linkedAccounts.isEmpty {
             Text("No bank accounts have been added to Bow yet.")
@@ -114,12 +109,11 @@ struct SimpleFINScreen: View {
             let account = accounts.first { $0.id == link.localAccountID }
             Label {
               VStack(alignment: .leading, spacing: 2) {
-                Text(account?.name ?? "Bow account")
+                Text(account?.name ?? link.name)
                   .foregroundStyle(Bow.ink)
-                Text(link.name)
-                  .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
+                  .lineLimit(2)
                 if let reportedAt = link.reportedAt {
-                  Text("Bank data as of \(reportedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()))")
+                  Text("Updated \(reportedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()))")
                     .font(.bowSubhead).foregroundStyle(Bow.inkSoft)
                 }
               }
@@ -136,13 +130,13 @@ struct SimpleFINScreen: View {
             NavigationLink {
               SimpleFINAccountSetupScreen(isDemoMode: isDemoMode)
             } label: {
-              Label("Add \(availableCount) found at your bank", systemImage: "plus")
+              Label("\(availableCount) more at your bank", systemImage: "plus")
                 .labelStyle(.bowTile)
                 .foregroundStyle(Bow.bowInk)
             }
           }
         } header: {
-          Text("Syncing with Bow")
+          Text("Syncing")
         } footer: {
           Text("To stop syncing an account, open it from Accounts.")
             .font(.bowFootnote)
@@ -222,7 +216,7 @@ private enum ConnectionStatus {
     switch self {
     case .sample: "Sample connection"
     case .noAccounts: "No accounts syncing"
-    case .needsAttention: "Sync needs attention"
+    case .needsAttention: "Needs attention"
     case .connected: "Connected"
     }
   }

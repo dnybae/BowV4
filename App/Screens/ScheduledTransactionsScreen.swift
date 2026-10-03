@@ -32,6 +32,7 @@ struct ScheduledTransactionsScreen: View {
         } actions: {
           Button("Add Transaction", systemImage: "plus", action: onAddTransaction)
             .bowPrimaryButton(size: .regular)
+            .fixedSize()
         }
       } else {
         scheduleSection("Needs attention", items: items.filter(\.needsAttention))

@@ -83,6 +83,7 @@ struct MissingItemSheet: View {
       } actions: {
         Button("Close") { dismiss() }
           .bowSecondaryButton(size: .regular)
+          .fixedSize()
       }
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {

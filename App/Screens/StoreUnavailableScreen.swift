@@ -13,8 +13,10 @@ struct StoreUnavailableScreen: View {
     } actions: {
       Button("Try Again", action: onRetry)
         .bowPrimaryButton(size: .regular)
+        .fixedSize()
       Link("Email Support", destination: SupportLink.email(subject: "Bow couldn’t open my budget"))
         .bowSecondaryButton(size: .regular)
+        .fixedSize()
     }
     .background { Bow.mist.ignoresSafeArea() }
     .bowAppTint()

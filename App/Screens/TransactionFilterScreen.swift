@@ -53,12 +53,6 @@ struct TransactionFilterScreen: View {
   var body: some View {
     NavigationStack {
       Form {
-        Section {
-          BowIdentityHeader(name: "Filter transactions", systemImage: "line.3.horizontal.decrease")
-        }
-        .listRowBackground(Color.clear)
-        .listRowInsets(EdgeInsets())
-
         Section("Show") {
           Picker("Show", selection: $draft.status) {
             ForEach(TransactionStatusScope.allCases, id: \.self) { status in

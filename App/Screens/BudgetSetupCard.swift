@@ -31,25 +31,36 @@ struct BudgetSetupCard: View {
            isDone: hasAccount) {
         Button("Add Account", systemImage: "plus", action: onAddAccount)
           .bowPrimaryButton(size: .regular)
+          .fixedSize()
       }
       step(1, title: "Create envelopes", detail: "Bills, groceries, goals: a place for each job your money does.",
            isDone: hasEnvelopes) {
-        HStack(spacing: Bow.Space.s2) {
-          Button("Add Envelopes", systemImage: "plus", action: onAddEnvelopes)
-            .bowPrimaryButton(size: .regular)
-          Button("Import from YNAB", action: onImportYNAB)
-            .bowSecondaryButton(size: .regular)
+        // Side by side when they fit; stacked rather than wrapping a title at large text sizes.
+        ViewThatFits(in: .horizontal) {
+          HStack(spacing: Bow.Space.s2) { envelopeActions }
+          VStack(alignment: .leading, spacing: Bow.Space.s2) { envelopeActions }
         }
       }
       step(2, title: "Assign your money", detail: "Move Ready to Assign into envelopes until it reaches zero.",
            isDone: hasAssigned) {
         Button("Assign Money", systemImage: "arrow.right", action: onAssign)
           .bowPrimaryButton(size: .regular)
+          .fixedSize()
       }
     }
     .padding(Bow.Space.s5)
     .frame(maxWidth: .infinity, alignment: .leading)
     .bowCard()
+  }
+
+  @ViewBuilder
+  private var envelopeActions: some View {
+    Button("Add Envelopes", systemImage: "plus", action: onAddEnvelopes)
+      .bowPrimaryButton(size: .regular)
+      .fixedSize()
+    Button("Import from YNAB", action: onImportYNAB)
+      .bowSecondaryButton(size: .regular)
+      .fixedSize()
   }
 
   private func step<Action: View>(

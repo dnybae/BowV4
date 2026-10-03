@@ -22,6 +22,7 @@ struct AccountSelectionField: View {
     } label: {
       HStack(spacing: 12) {
         BowFieldTitle(title: title, systemImage: systemImage)
+          .layoutPriority(1)
         Spacer(minLength: 12)
         Text(selectedName)
           .foregroundStyle(accounts.contains { $0.id == selection } ? Bow.ink : Bow.inkSoft)

@@ -30,6 +30,7 @@ struct EnvelopeSelectionField: View {
     } label: {
       HStack(spacing: 12) {
         BowFieldTitle(title: title, systemImage: systemImage)
+          .layoutPriority(1)
         Spacer(minLength: 12)
         Text(selectedName)
           .foregroundStyle(valueStyle)
@@ -76,6 +77,7 @@ struct EnvelopeScopeSelectionField: View {
     } label: {
       HStack(spacing: 12) {
         BowFieldTitle(title: "Envelope", systemImage: systemImage)
+          .layoutPriority(1)
         Spacer(minLength: 12)
         Text(selectedName)
           .foregroundStyle(Bow.inkSoft)

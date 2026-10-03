@@ -105,12 +105,8 @@ struct ReconciliationScreen: View {
         }
 
         Section {
-          NavigationLink {
-            BowDatePickerScreen(title: "Statement date", date: $statementDate, range: Date.distantPast...Date())
-          } label: {
-            BowTileValueRow("Statement date", systemImage: "calendar",
-                            value: statementDate.formatted(date: .abbreviated, time: .omitted))
-          }
+          BowDateRow(title: "Statement date", systemImage: "calendar", date: $statementDate,
+                     range: Date.distantPast...Date())
           BowTileValueRow(title: "Cleared balance", systemImage: "checkmark.circle") {
             MoneyText(minor: clearedBalanceMinor, currencyCode: currencyCode)
           }

@@ -117,13 +117,8 @@ struct AccountEditorScreen: View {
             Label("Card is in credit", systemImage: "plusminus").labelStyle(.bowTile)
           }
         }
-        NavigationLink {
-          BowDatePickerScreen(title: account == nil ? "Balance as of" : "Starting balance date",
-                              date: $startDate, range: Date.distantPast...Date())
-        } label: {
-          BowTileValueRow(account == nil ? "Balance as of" : "Starting balance date", systemImage: "calendar",
-                          value: startDate.formatted(date: .abbreviated, time: .omitted))
-        }
+        BowDateRow(title: account == nil ? "Balance as of" : "Starting balance date", systemImage: "calendar",
+                   date: $startDate, range: Date.distantPast...Date())
         BowNotesRow(notes: $note)
       } footer: {
         Text(footerText)

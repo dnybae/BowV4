@@ -48,10 +48,11 @@ struct CurrencyAmountField: View {
   var body: some View {
     switch style {
     case .row:
-      LabeledContent {
-        field
-      } label: {
+      // The text field takes whatever width it's offered, so the title claims its space first.
+      HStack(spacing: Bow.Space.s3) {
         BowFieldTitle(title: title, systemImage: systemImage)
+          .layoutPriority(1)
+        field
       }
     case .hero:
       field

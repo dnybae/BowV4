@@ -126,12 +126,7 @@ struct ScheduleEditorScreen: View {
         }
         .listRowBackground(Bow.card)
         Section {
-          NavigationLink {
-            BowDatePickerScreen(title: "Date", date: $startDate)
-          } label: {
-            BowTileValueRow("Date", systemImage: "calendar",
-                            value: startDate.formatted(date: .abbreviated, time: .omitted))
-          }
+          BowDateRow(title: "Date", systemImage: "calendar", date: $startDate)
           Toggle(isOn: $isRecurring) {
             Label("Recurring", systemImage: "repeat").labelStyle(.bowTile)
           }

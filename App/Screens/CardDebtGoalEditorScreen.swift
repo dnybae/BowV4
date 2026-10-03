@@ -108,11 +108,7 @@ struct CardDebtGoalEditorScreen: View {
 
         if kind == .byDate {
           Section {
-            NavigationLink {
-              BowDatePickerScreen(title: "Pay off by", date: $targetDate, range: Date()...Date.distantFuture)
-            } label: {
-              LabeledContent("Pay off by", value: targetDate.formatted(.dateTime.month(.wide).year()))
-            }
+            BowDateRow(title: "Pay off by", date: $targetDate, range: Date()...Date.distantFuture)
           }
           .listRowBackground(Bow.card)
         }

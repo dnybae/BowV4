@@ -47,6 +47,7 @@ struct AccountsScreen: View {
         } actions: {
           Button("Add Account", systemImage: "plus", action: onAddAccount)
             .bowPrimaryButton()
+            .fixedSize()
         }
         .frame(maxWidth: .infinity)
         .listRowBackground(Color.clear)
@@ -226,6 +227,7 @@ struct AccountsScreen: View {
         }
       }
       .bowSecondaryButton(size: .regular)
+      .fixedSize()
     }
     .frame(maxWidth: .infinity)
     .padding(.vertical, Bow.Space.s6)

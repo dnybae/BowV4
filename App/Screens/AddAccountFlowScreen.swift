@@ -14,25 +14,15 @@ struct AddAccountFlowScreen: View {
     NavigationStack(path: $path) {
       List {
         Section {
-          Text("How do you want to track it?")
-            .font(.bowLargeTitle)
-            .foregroundStyle(Bow.ink)
-            .accessibilityAddTraits(.isHeader)
-            .listRowBackground(Color.clear)
-            .listRowInsets(EdgeInsets(top: Bow.Space.s4, leading: Bow.Space.s1, bottom: 0, trailing: Bow.Space.s1))
-        }
-
-        Section {
           NavigationLink(value: AccountSetupRoute.bank) {
-            optionRow(
-              title: "Connect a bank",
-              detail: connections.isEmpty
-                ? "Sync balances and transactions through SimpleFIN. You review each one before it counts."
-                : "View your SimpleFIN accounts and choose any new ones to add.",
-              note: isDemoMode
-                ? "Explore a sample bank connection. Demo mode never contacts a bank."
-                : "SimpleFIN is read-only and has a separate signup and fee. Updates arrive about once a day.",
-              symbol: "link"
+            optionCard(
+              title: connections.isEmpty ? "Connect a bank" : "Add more from your bank",
+              summary: connections.isEmpty
+                ? "Bring in transactions automatically."
+                : "Choose new accounts from your SimpleFIN connection.",
+              symbol: "link",
+              points: bankPoints,
+              actionTitle: connections.isEmpty ? "Set up SimpleFIN" : "View bank accounts"
             )
           }
         }
@@ -40,11 +30,17 @@ struct AddAccountFlowScreen: View {
 
         Section {
           NavigationLink(value: AccountSetupRoute.manual) {
-            optionRow(
+            optionCard(
               title: "Track it yourself",
-              detail: "Enter a balance and add transactions by hand. You can also import bank files from Settings.",
-              note: "Works with any bank. Stays on this iPhone.",
-              symbol: "pencil"
+              summary: "Enter a balance and add transactions yourself.",
+              symbol: "pencil",
+              points: [
+                .benefit("Free, and works with any bank"),
+                .benefit("Your data stays on this iPhone"),
+                .benefit("Import bank files anytime"),
+                .tradeoff("You add transactions yourself")
+              ],
+              actionTitle: "Create account"
             )
           }
         }
@@ -74,31 +70,73 @@ struct AddAccountFlowScreen: View {
     }
   }
 
-  private func optionRow(title: String, detail: String, note: String, symbol: String) -> some View {
-    HStack(alignment: .top, spacing: Bow.Space.s4) {
-      Image(systemName: symbol)
-        .bowScaledIcon(frame: 44, glyph: 18, weight: .medium)
-        .foregroundStyle(Bow.bowInk)
-        .background(Bow.bowTint, in: Circle())
-        .accessibilityHidden(true)
+  private var bankPoints: [OptionPoint] {
+    if isDemoMode {
+      return [
+        .benefit("Explore sample bank accounts"),
+        .benefit("Try approving imported transactions"),
+        .tradeoff("Demo mode never contacts a bank")
+      ]
+    }
+    if !connections.isEmpty {
+      return [
+        .benefit("Uses your existing connection"),
+        .benefit("New transactions arrive on their own")
+      ]
+    }
+    return [
+      .benefit("New transactions arrive on their own"),
+      .benefit("Read-only; your bank login stays with SimpleFIN"),
+      .benefit("You approve each one before it counts"),
+      .tradeoff("Separate SimpleFIN signup and small yearly fee"),
+      .tradeoff("Updates about once a day")
+    ]
+  }
+
+  private func optionCard(title: String, summary: String, symbol: String,
+                          points: [OptionPoint], actionTitle: String) -> some View {
+    VStack(alignment: .leading, spacing: Bow.Space.s3) {
+      BowTileIcon(systemImage: symbol)
       VStack(alignment: .leading, spacing: Bow.Space.s1) {
         Text(title)
-          .font(.bowHeadline)
+          .font(.bowTitle)
           .foregroundStyle(Bow.ink)
-        Text(detail)
+        Text(summary)
           .font(.bowSubhead)
           .foregroundStyle(Bow.inkSoft)
           .fixedSize(horizontal: false, vertical: true)
-        Text(note)
-          .font(.bowFootnote)
-          .foregroundStyle(Bow.inkSoft)
-          .fixedSize(horizontal: false, vertical: true)
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
+      VStack(alignment: .leading, spacing: Bow.Space.s2) {
+        ForEach(points, id: \.text) { point in
+          Label {
+            Text(point.text)
+              .foregroundStyle(Bow.ink)
+              .fixedSize(horizontal: false, vertical: true)
+          } icon: {
+            Image(systemName: point.isBenefit ? "checkmark.circle" : "exclamationmark.circle")
+              .foregroundStyle(point.isBenefit ? Bow.funded : Bow.needs)
+          }
+          .font(.bowSubhead)
+          .accessibilityLabel("\(point.isBenefit ? "Benefit" : "Note"): \(point.text)")
+        }
+      }
+      Text(actionTitle)
+        .font(.bowSubhead.weight(.semibold))
+        .foregroundStyle(Bow.bowInk)
+        .accessibilityHidden(true)
     }
-    .padding(.vertical, Bow.Space.s3)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.vertical, Bow.Space.s2)
     .accessibilityElement(children: .combine)
   }
+}
+
+private struct OptionPoint {
+  var text: String
+  var isBenefit: Bool
+
+  static func benefit(_ text: String) -> OptionPoint { OptionPoint(text: text, isBenefit: true) }
+  static func tradeoff(_ text: String) -> OptionPoint { OptionPoint(text: text, isBenefit: false) }
 }
 
 private enum AccountSetupRoute: Hashable {

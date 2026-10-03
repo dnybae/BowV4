@@ -55,11 +55,23 @@ struct SimpleFINAccountSetupScreen: View {
         )
       } else if connection == nil || needsToken {
         Section {
-          Text(needsToken
-            ? "Enter a new SimpleFIN setup token to restore your bank connection."
-            : "Connect SimpleFIN to see the bank accounts you can add to Bow.")
-            .foregroundStyle(Bow.inkSoft)
-          Link("Get a SimpleFIN setup token", destination: URL(string: "https://bridge.simplefin.org/simplefin/create")!)
+          setupStep(1, "Sign up at SimpleFIN Bridge")
+          setupStep(2, "Connect your bank there")
+          setupStep(3, "Create a setup token and paste it below")
+          Link(destination: SimpleFINBridge.home) {
+            Label("Open SimpleFIN Bridge", systemImage: "safari").labelStyle(.bowTile)
+          }
+        } header: {
+          Text(needsToken ? "Reconnect your bank" : "Connect your bank")
+        } footer: {
+          if needsToken {
+            Text("Your saved connection is missing. A new setup token restores it.")
+              .font(.bowFootnote)
+          }
+        }
+        .listRowBackground(Bow.card)
+
+        Section {
           SecureField("Setup token", text: $setupToken)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
@@ -68,10 +80,8 @@ struct SimpleFINAccountSetupScreen: View {
             Task { await connect() }
           }
           .disabled(setupToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isWorking)
-        } header: {
-          Text("Connect your bank")
         } footer: {
-          Text("SimpleFIN is read-only and has a separate signup and fee. Bank updates may arrive about once a day.")
+          Text("SimpleFIN is read-only and has a separate signup and small yearly fee. Bank updates arrive about once a day.")
             .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
@@ -200,6 +210,15 @@ struct SimpleFINAccountSetupScreen: View {
       }
     }
     .bowErrorAlert("SimpleFIN", message: $message)
+  }
+
+  private func setupStep(_ number: Int, _ text: String) -> some View {
+    Label {
+      Text(text).foregroundStyle(Bow.ink)
+    } icon: {
+      BowTileIcon { Text("\(number)").font(.bowFootnote.weight(.bold)) }
+    }
+    .accessibilityLabel("Step \(number), \(text)")
   }
 
   /// An account at the bank that isn't in Bow yet: a toggle, then its type and starting balance.

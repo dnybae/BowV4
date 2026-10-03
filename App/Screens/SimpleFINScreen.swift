@@ -60,11 +60,21 @@ struct SimpleFINScreen: View {
             }
             .disabled(coordinator.isSyncing)
           }
-        } footer: {
-          if let lastMessage = connection.lastMessage, !lastMessage.isEmpty {
-            Text(lastMessage)
-              .font(.bowFootnote)
+          if needsAttention {
+            Link(destination: SimpleFINBridge.account) {
+              Label("Fix on SimpleFIN", systemImage: "safari").labelStyle(.bowTile)
+            }
           }
+        } footer: {
+          VStack(alignment: .leading, spacing: Bow.Space.s1) {
+            if needsAttention {
+              Text("If a bank needs you to sign in again, reconnect it on SimpleFIN Bridge.")
+            }
+            if let lastMessage = connection.lastMessage, !lastMessage.isEmpty {
+              Text(lastMessage)
+            }
+          }
+          .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)
 
@@ -144,6 +154,16 @@ struct SimpleFINScreen: View {
         .listRowBackground(Bow.card)
 
         if !isDemoMode {
+          Section {
+            Link(destination: SimpleFINBridge.account) {
+              Label("Manage Banks on SimpleFIN", systemImage: "safari").labelStyle(.bowTile)
+            }
+          } footer: {
+            Text("Add a bank, reconnect one, or update billing on SimpleFIN Bridge.")
+              .font(.bowFootnote)
+          }
+          .listRowBackground(Bow.card)
+
           Section {
             Button("Disconnect SimpleFIN", role: .destructive) {
               showingDisconnect = true

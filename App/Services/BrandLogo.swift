@@ -42,10 +42,23 @@ enum BrandLogoStore {
   nonisolated static func logo(for url: URL) async -> BrandLogo? {
     let key = url.absoluteString
     if let cached = cached(key) { return cached }
-    guard let (data, response) = try? await BowImageSession.shared.data(from: url),
-          (response as? HTTPURLResponse)?.statusCode == 200,
-          let image = UIImage(data: data) else { return nil }
-    return store(BrandLogo.prepare(image), key: key)
+    for attempt in 0..<3 {
+      if attempt > 0 { try? await Task.sleep(for: .seconds(Double(attempt))) }
+      guard !Task.isCancelled else { return nil }
+      var request = URLRequest(url: url)
+      // The session prefers its disk cache, and logo.dev lets errors be cached for a day, so
+      // a retry goes to the network instead of replaying the failure.
+      if attempt > 0 { request.cachePolicy = .reloadIgnoringLocalCacheData }
+      guard let (data, response) = try? await BowImageSession.shared.data(for: request) else { continue }
+      let status = (response as? HTTPURLResponse)?.statusCode
+      if status == 200, let image = UIImage(data: data) {
+        return store(BrandLogo.prepare(image), key: key)
+      }
+      // 404: logo.dev has no logo for this business, so the symbol stays.
+      if status == 404 { return nil }
+      BowImageSession.cache.removeCachedResponse(for: URLRequest(url: url))
+    }
+    return nil
   }
 
   nonisolated static func logo(for data: Data) -> BrandLogo? {

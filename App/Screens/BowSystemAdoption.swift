@@ -44,9 +44,10 @@ extension View {
 
 /// A URL session with a disk cache for logos.
 enum BowImageSession {
+  static let cache = URLCache(memoryCapacity: 8 * 1024 * 1024, diskCapacity: 64 * 1024 * 1024)
   static let shared: URLSession = {
     let configuration = URLSessionConfiguration.default
-    configuration.urlCache = URLCache(memoryCapacity: 8 * 1024 * 1024, diskCapacity: 64 * 1024 * 1024)
+    configuration.urlCache = cache
     configuration.requestCachePolicy = .returnCacheDataElseLoad
     return URLSession(configuration: configuration)
   }()

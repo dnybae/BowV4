@@ -48,7 +48,7 @@
         "CURRENT_PROJECT_VERSION" : "1",
         "LOGO_DEV_PUBLISHABLE_KEY" : "pk_dXt4s8CCQ92jZp3kzg7udQ",
         "MARKETING_VERSION" : "1.0",
-        "PRODUCT_BUNDLE_IDENTIFIER" : "app.bitrig.new.b6ec559c-1e09-43ff-a70f-25c814186523",
+        "PRODUCT_BUNDLE_IDENTIFIER" : "app.bitrig.danielbaeza.bow",
         "PRODUCT_NAME" : "$(TARGET_NAME)",
         "SWIFT_VERSION" : "5.0",
         "TARGETED_DEVICE_FAMILY" : "1"

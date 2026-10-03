@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The line under an incoming item's name in Spending and Calendar: an 8pt dot and short text.
+/// The line under an incoming item's name in Spending and scheduled transactions: an 8pt dot and short text.
 /// Pair it with `.listRowBackground(status.rowBackground)` so the row picks up its tint.
 struct TransactionStatusLine: View {
   var status: TransactionRowStatus

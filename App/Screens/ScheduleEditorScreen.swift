@@ -17,6 +17,7 @@ struct ScheduleEditorScreen: View {
   @State private var envelopeID: UUID?
   @State private var startDate: Date
   @State private var frequency: ScheduleFrequency
+  @State private var isRecurring: Bool
   @State private var notes: String
   @State private var isActive: Bool
   @State private var errorMessage: String?
@@ -40,14 +41,16 @@ struct ScheduleEditorScreen: View {
     _kind = State(initialValue: schedule?.kind ?? .expense)
     _envelopeID = State(initialValue: schedule?.envelopeID ?? draft?.envelopeID)
     _startDate = State(initialValue: schedule?.startDate ?? draft?.startDate ?? Date())
-    _frequency = State(initialValue: schedule?.frequency ?? draft?.frequency ?? .monthly)
+    let initialFrequency = schedule?.frequency ?? draft?.frequency ?? .monthly
+    _frequency = State(initialValue: initialFrequency == .once ? .monthly : initialFrequency)
+    _isRecurring = State(initialValue: initialFrequency != .once)
     _notes = State(initialValue: schedule?.notes ?? "")
     _isActive = State(initialValue: schedule?.isActive ?? true)
   }
 
   private var fields: ScheduleFields {
     ScheduleFields(payee: payee, amountMinor: amountMinor, accountID: accountID, destinationID: destinationID,
-                   kind: kind, envelopeID: envelopeID, startDate: startDate, frequency: frequency,
+                   kind: kind, envelopeID: envelopeID, startDate: startDate, frequency: isRecurring ? frequency : .once,
                    notes: notes, isActive: isActive)
   }
 
@@ -124,19 +127,26 @@ struct ScheduleEditorScreen: View {
         .listRowBackground(Bow.card)
         Section {
           NavigationLink {
-            BowDatePickerScreen(title: "First due", date: $startDate)
+            BowDatePickerScreen(title: "Date", date: $startDate)
           } label: {
-            BowTileValueRow("First due", systemImage: "calendar",
+            BowTileValueRow("Date", systemImage: "calendar",
                             value: startDate.formatted(date: .abbreviated, time: .omitted))
           }
-          Picker(selection: $frequency) {
-            ForEach(ScheduleFrequency.allCases) { value in
-              Text(value.title).tag(value)
-            }
-          } label: {
-            Label("Repeats", systemImage: "repeat").labelStyle(.bowTile)
+          Toggle(isOn: $isRecurring) {
+            Label("Recurring", systemImage: "repeat").labelStyle(.bowTile)
           }
-          .pickerStyle(.menu)
+          .accessibilityLabel("Recurring")
+          if isRecurring {
+            Picker(selection: $frequency) {
+              ForEach(ScheduleFrequency.recurringCases) { value in
+                Text(value.title).tag(value)
+              }
+            } label: {
+              Label("Repeats", systemImage: "repeat").labelStyle(.bowTile)
+            }
+            .pickerStyle(.menu)
+            .accessibilityLabel("Repeats")
+          }
           if schedule != nil {
             Toggle(isOn: $isActive) {
               Label("Active", systemImage: "bolt").labelStyle(.bowTile)
@@ -144,6 +154,14 @@ struct ScheduleEditorScreen: View {
           }
         }
         .listRowBackground(Bow.card)
+        if isRecurring {
+          Section {
+            Text("Repeats from the chosen date. Missed occurrences won’t be added when you change or resume a schedule.")
+              .font(.bowFootnote)
+              .foregroundStyle(Bow.inkSoft)
+          }
+          .listRowBackground(Color.clear)
+        }
         if schedule != nil {
           BowDestructiveSection("Delete schedule") { showingDelete = true }
         }
@@ -151,13 +169,13 @@ struct ScheduleEditorScreen: View {
       .bowListBackground()
       .bowEditorSheet(hasChanges: hasChanges)
       .onAppear { if initialFields == nil { initialFields = fields } }
-      .navigationTitle(schedule == nil ? "New schedule" : "Schedule")
+      .navigationTitle(schedule == nil ? "New transaction" : "Scheduled transaction")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         BowCancelButton(hasChanges: hasChanges) { dismiss() }
       }
       .safeAreaInset(edge: .bottom) {
-        BowBottomAction(schedule == nil ? "Add schedule" : "Save changes",
+        BowBottomAction(schedule == nil ? (Calendar.current.isDateInToday(startDate) || startDate < Date() ? "Add transaction" : "Schedule transaction") : "Save changes",
                         isEnabled: amountMinor > 0) { save() }
       }
       .sheet(isPresented: $showingPayeeSelection) {
@@ -205,19 +223,24 @@ struct ScheduleEditorScreen: View {
         return
       }
     }
-    let item = schedule ?? BudgetSchedule(
-      payee: payee,
-      amountMinor: minor,
-      accountID: accountID,
-      envelopeID: envelopeID,
-      startDate: startDate,
-      frequency: frequency,
-      notes: notes
-    )
-    let recurrenceChanged = schedule != nil && (
-      !Calendar.current.isDate(item.startDate, inSameDayAs: startDate)
-        || item.frequency != frequency || (!isActive && item.isActive)
-    )
+    let effectiveFrequency: ScheduleFrequency = isRecurring ? frequency : .once
+    guard let item = schedule else {
+      do {
+        try TransactionScheduling.save(
+          kind: kind, account: source,
+          destination: accounts.first { $0.id == destinationID },
+          envelopeID: kind == .transfer && !needsEnvelope ? nil : envelopeID,
+          amountMinor: minor, payee: payee, notes: notes,
+          timing: TransactionTiming(date: startDate, isRecurring: isRecurring, frequency: frequency),
+          in: modelContext
+        )
+        toasts?.show(.saved("Saved · \(payee)"))
+        dismiss()
+      } catch { errorMessage = error.localizedDescription }
+      return
+    }
+    let recurrenceChanged = !Calendar.current.isDate(item.startDate, inSameDayAs: startDate)
+      || item.frequency != effectiveFrequency || item.isActive != isActive
     item.payee = kind == .transfer
       ? "Transfer to \(accounts.first(where: { $0.id == destinationID })?.name ?? "Account")"
       : payee.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -229,23 +252,22 @@ struct ScheduleEditorScreen: View {
       [.asset, .liability].contains(accounts.first { $0.id == destinationID }?.kind))
     item.envelopeID = needsEnvelope ? envelopeID : nil
     item.startDate = startDate
-    item.frequencyRaw = frequency.rawValue
+    item.frequencyRaw = effectiveFrequency.rawValue
     item.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
     item.isActive = isActive
     if recurrenceChanged {
       for occurrence in occurrences where occurrence.scheduleID == item.id {
         modelContext.delete(occurrence)
       }
-      item.reviewedThrough = Calendar.current.date(byAdding: .day, value: -1, to: Date())
+      item.reviewedThrough = Calendar.current.startOfDay(for: Date())
     }
-    if schedule == nil { modelContext.insert(item) }
     do {
       try modelContext.save()
       try? ScheduleReviewPlanner().refresh(in: modelContext)
       try? ScheduleTargetSynchronizer().refresh(in: modelContext)
-      toasts?.show(.saved("\(schedule == nil ? "Scheduled" : "Saved") · \(item.payee) · \(frequency.title)"))
+      toasts?.show(.saved("Saved · \(item.payee) · \(effectiveFrequency == .once ? "One-time" : effectiveFrequency.title)"))
       dismiss()
-    } catch { errorMessage = error.localizedDescription }
+    } catch { modelContext.rollback(); errorMessage = error.localizedDescription }
   }
 
   private func delete() {

@@ -57,7 +57,7 @@ struct PayeeRecurrenceSection: View {
       } header: {
         Text("Looks recurring")
       } footer: {
-        Text("A schedule shows this bill on your calendar and adds it to its envelope’s monthly target.")
+        Text("Find this bill in Spending’s scheduled transactions. It also adds to its envelope’s monthly target.")
           .font(.bowFootnote)
       }
       .listRowBackground(Bow.card)

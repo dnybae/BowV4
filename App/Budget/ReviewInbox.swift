@@ -52,7 +52,7 @@ struct ReviewInbox {
         && !bankTransactionIDs.contains($0.id)
     }
       .map(ReviewEntry.transaction)
-    let scheduleByID = Dictionary(uniqueKeysWithValues: schedules.map { ($0.id, $0) })
+    let scheduleByID = Dictionary(uniqueKeysWithValues: schedules.filter(\.isActive).map { ($0.id, $0) })
     let pending = occurrences.filter { occurrence in
       guard !occurrence.isSkipped, scheduleByID[occurrence.scheduleID] != nil else { return false }
       return !transactions.contains {

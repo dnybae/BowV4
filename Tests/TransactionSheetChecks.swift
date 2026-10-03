@@ -12,6 +12,8 @@ struct TransactionSheetChecks {
       signedAmount: "−$5.00", amountIsZero: false, isScheduling: true) == "Schedule −$5.00")
     precondition(TransactionSheetPurpose.edit.primaryTitle(
       signedAmount: "", amountIsZero: false, isScheduling: false) == "Save")
+    precondition(TransactionSheetPurpose.edit.primaryTitle(
+      signedAmount: "−$5.00", amountIsZero: false, isScheduling: true) == "Schedule −$5.00")
     precondition(TransactionSheetPurpose.approve.primaryTitle(
       signedAmount: "", amountIsZero: false, isScheduling: false) == "Approve")
     precondition(TransactionSheetPurpose.enterPending.primaryTitle(

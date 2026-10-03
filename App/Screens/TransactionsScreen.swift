@@ -63,9 +63,38 @@ struct TransactionsScreen: View {
     )
   }
 
+  private var upcomingSchedules: [UpcomingSchedule] {
+    UpcomingSchedules().items(for: schedules, skipped: occurrences)
+  }
+
+  private var scheduledSummary: String {
+    let upcoming = upcomingSchedules
+    guard let next = upcoming.first else { return "One-time and recurring transactions" }
+    return "\(upcoming.count) upcoming · Next \(next.date.formatted(.dateTime.month(.abbreviated).day()))"
+  }
+
   var body: some View {
     let timeline = timeline
     List {
+      Section {
+        NavigationLink(value: SpendingRoute.scheduled) {
+          Label {
+            VStack(alignment: .leading, spacing: Bow.Space.s1) {
+              Text("Scheduled transactions")
+                .font(.bowHeadline)
+                .foregroundStyle(Bow.ink)
+              Text(scheduledSummary)
+                .font(.bowFootnote)
+                .foregroundStyle(Bow.inkSoft)
+            }
+          } icon: {
+            Image(systemName: "calendar.badge.clock")
+              .foregroundStyle(Bow.inkSoft)
+          }
+          .padding(.vertical, Bow.Space.s1)
+        }
+      }
+      .listRowBackground(Bow.card)
       if filter.isActive {
         Section {
           HStack {

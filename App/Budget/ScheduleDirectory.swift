@@ -80,7 +80,9 @@ struct ScheduleDirectoryItem: Identifiable {
 
   var statusLabel: String {
     guard schedule.isActive, let date else { return "Paused · \(frequencyLabel)" }
-    let formatted = date.formatted(.dateTime.month(.abbreviated).day().year())
+    let formatted = Calendar.current.isDate(date, equalTo: Date(), toGranularity: .year)
+      ? date.formatted(.dateTime.month(.abbreviated).day())
+      : date.formatted(.dateTime.month(.abbreviated).day().year())
     return "\(needsAttention ? "Due" : "Next") \(formatted) · \(frequencyLabel)"
   }
 }

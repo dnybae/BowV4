@@ -21,7 +21,6 @@ final class TabReselectCenter {
 enum HomeTab: Hashable {
   case budget
   case transactions
-  case calendar
   case accounts
   case addTransaction
 }

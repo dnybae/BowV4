@@ -88,13 +88,12 @@ private struct BudgetHomeView: View {
   /// Rebuilt when payees change, not on every redraw of the home screen.
   @State private var logoDirectory = PayeeLogoDirectory()
   @State private var selectedMonth = Date()
-  @State private var selectedCalendarDate = Date()
   @Namespace private var transactionZoomNamespace
   @State private var selectedTab: HomeTab = .budget
   @State private var budgetPath: [BudgetRoute] = []
   @State private var accountsPath: [AccountRoute] = []
+  @State private var spendingPath: [SpendingRoute] = []
   @State private var budgetReturnToPresentRequest = 0
-  @State private var calendarReturnToTodayRequest = 0
   @State private var activeSheet: BowSheet?
   /// Presented as soon as the current sheet finishes closing.
   @State private var queuedSheet: BowSheet?
@@ -197,7 +196,7 @@ private struct BudgetHomeView: View {
             }
           }
           Tab("Spending", systemImage: "list.bullet.rectangle", value: .transactions) {
-            NavigationStack {
+            NavigationStack(path: $spendingPath) {
               TransactionsScreen(
                 accounts: accounts,
                 envelopes: envelopes,
@@ -213,30 +212,18 @@ private struct BudgetHomeView: View {
               )
               .environment(\.transactionZoomNamespace, transactionZoomNamespace)
               .environment(\.transactionZoomPrefix, "spending-")
-              .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                  Button { showingSettings = true } label: { BowToolbarLabel("Settings", systemImage: "gearshape") }
-                }
+              .navigationDestination(for: SpendingRoute.self) { _ in
+                ScheduledTransactionsScreen(
+                  schedules: schedules, occurrences: scheduleOccurrences,
+                  accounts: accounts, envelopes: envelopes, currencyCode: currencyCode,
+                  onEditSchedule: { activeSheet = .editSchedule($0) },
+                  onRecord: { activeSheet = .recordScheduled($0) },
+                  onAddTransaction: {
+                    activeSheet = accounts.contains { $0.closedAt == nil }
+                      ? .newScheduledTransaction : .newAccountForTransaction
+                  }
+                )
               }
-            }
-          }
-          Tab("Calendar", systemImage: "calendar", value: .calendar) {
-            NavigationStack {
-              CalendarScreen(
-                schedules: schedules,
-                occurrences: scheduleOccurrences,
-                accounts: accounts,
-                envelopes: envelopes,
-                currencyCode: currencyCode,
-                selectedDate: $selectedCalendarDate,
-                returnToTodayRequest: calendarReturnToTodayRequest,
-                onRecord: { activeSheet = .recordScheduled($0) },
-                onSelectTransaction: selectTransaction,
-                onReviewBankRecord: { activeSheet = .bankItem($0, $1) },
-                onEnterPending: { activeSheet = .pendingItem($0) }
-              )
-              .environment(\.transactionZoomNamespace, transactionZoomNamespace)
-              .environment(\.transactionZoomPrefix, "calendar-")
               .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                   Button { showingSettings = true } label: { BowToolbarLabel("Settings", systemImage: "gearshape") }
@@ -315,6 +302,8 @@ private struct BudgetHomeView: View {
           switch sheet {
           case .newTransaction:
             transactionSheet(.new())
+          case .newScheduledTransaction:
+            transactionSheet(.new(date: Calendar.current.date(byAdding: .day, value: 1, to: Date())))
           case .newTransactionInAccount(let accountID):
             transactionSheet(.new(preferredAccountID: accountID))
           case .bankSync:
@@ -338,9 +327,9 @@ private struct BudgetHomeView: View {
               } else {
                 transactionSheet(.existing(transaction))
                   .bowTransactionZoomDestination(
-                    (selectedTab == .calendar ? "calendar-" : "spending-") + "transaction-\(id)",
+                    "spending-transaction-\(id)",
                     namespace: transactionZoomNamespace,
-                    enabled: !reduceMotion && (selectedTab == .transactions || selectedTab == .calendar)
+                    enabled: !reduceMotion && selectedTab == .transactions && spendingPath.isEmpty
                   )
               }
             } else {
@@ -457,10 +446,6 @@ private struct BudgetHomeView: View {
       if calendar.isDate(selectedMonth, equalTo: lastKnownCurrentMonth, toGranularity: .month) {
         selectedMonth = Date()
       }
-      if calendar.isDate(selectedCalendarDate, inSameDayAs: lastKnownCurrentMonth) {
-        selectedCalendarDate = Date()
-        calendarReturnToTodayRequest += 1
-      }
       lastKnownCurrentMonth = Date()
       // A new month changes which months are "future", so cached months are recalculated.
       Task { await refreshLedger(invalidate: true) }
@@ -468,11 +453,14 @@ private struct BudgetHomeView: View {
   }
 
   /// Tapping the current tab does one thing at a time, like the system apps: pop back to the
-  /// tab's root, then scroll to the top, then the tab's own action (current month, today).
+  /// tab's root, then scroll to the top, then the tab’s own action (current month).
   private func reselect(_ tab: HomeTab) {
     switch tab {
     case .budget where !budgetPath.isEmpty:
       budgetPath.removeAll()
+      return
+    case .transactions where !spendingPath.isEmpty:
+      spendingPath.removeAll()
       return
     case .accounts where !accountsPath.isEmpty:
       accountsPath.removeAll()
@@ -486,7 +474,6 @@ private struct BudgetHomeView: View {
     }
     switch tab {
     case .budget: budgetReturnToPresentRequest += 1
-    case .calendar: calendarReturnToTodayRequest += 1
     case .transactions, .accounts, .addTransaction: break
     }
   }
@@ -589,6 +576,7 @@ private struct BudgetHomeView: View {
 
 private enum BowSheet: Identifiable {
   case newTransaction
+  case newScheduledTransaction
   case newTransactionInAccount(UUID)
   case bankSync
   /// Every transaction, in any state, opens the same sheet.
@@ -611,6 +599,7 @@ private enum BowSheet: Identifiable {
   var id: String {
     switch self {
     case .newTransaction: "newTransaction"
+    case .newScheduledTransaction: "newScheduledTransaction"
     case .newTransactionInAccount(let id): "newTransactionInAccount-\(id)"
     case .bankSync: "bankSync"
     case .transaction(let id): "transaction-\(id)"

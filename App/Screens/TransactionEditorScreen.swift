@@ -394,6 +394,7 @@ struct TransactionEditorScreen: View {
             Toggle(isOn: $isRecurring) {
               Label("Recurring", systemImage: "repeat").labelStyle(.bowTile)
             }
+            .accessibilityLabel("Recurring")
             if isRecurring {
               Picker(selection: $recurrence) {
                 ForEach(ScheduleFrequency.recurringCases) { frequency in
@@ -403,11 +404,12 @@ struct TransactionEditorScreen: View {
                 Label("Repeats", systemImage: "arrow.clockwise").labelStyle(.bowTile)
               }
               .pickerStyle(.menu)
+              .accessibilityLabel("Repeats")
             }
           } footer: {
             Group {
-              if isRecurring {
-                Text("Scheduled entries appear on the calendar and affect balances only when recorded.")
+              if timing.isFuture || isRecurring {
+                Text(timing.explanation)
               }
             }
             .font(.bowFootnote)

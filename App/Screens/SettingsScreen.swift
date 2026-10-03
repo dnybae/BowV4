@@ -107,7 +107,7 @@ struct SettingsScreen: View {
         } header: {
           Text("Preferences")
         } footer: {
-          Text("Merchant logos are fetched from logo.dev using a store’s website. No amounts or account details are sent.")
+          Text("Automatic logos share a business’s website and your IP address with logo.dev. Find logo may also send the business name, even when this is off.")
             .font(.bowFootnote)
         }
         .listRowBackground(Bow.card)

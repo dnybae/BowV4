@@ -289,6 +289,7 @@ struct BudgetCommands {
     return transaction
   }
 
+  @discardableResult
   static func addSchedule(
     kind: BudgetTransactionKind,
     account: BudgetAccount,
@@ -299,8 +300,9 @@ struct BudgetCommands {
     frequency: ScheduleFrequency,
     payee: String,
     notes: String,
-    in context: ModelContext
-  ) throws {
+    in context: ModelContext,
+    saving: Bool = true
+  ) throws -> BudgetSchedule {
     try validateEnvelopeID(envelopeID, in: context)
     try validateTransaction(kind: kind, account: account, destination: destination,
                             envelopeID: envelopeID, amountMinor: amountMinor, isBeforeStart: false)
@@ -313,9 +315,12 @@ struct BudgetCommands {
       kind: kind, transferAccountID: kind == .transfer ? destination?.id : nil
     )
     context.insert(schedule)
-    try context.save()
-    try? ScheduleReviewPlanner().refresh(in: context)
-    try? ScheduleTargetSynchronizer().refresh(in: context)
+    if saving {
+      try context.save()
+      try? ScheduleReviewPlanner().refresh(in: context)
+      try? ScheduleTargetSynchronizer().refresh(in: context)
+    }
+    return schedule
   }
 
   static func updateTransaction(
@@ -378,7 +383,9 @@ struct BudgetCommands {
     if saving { try context.save() }
   }
 
-  static func deleteTransaction(_ transaction: BudgetTransaction, in context: ModelContext) throws {
+  static func deleteTransaction(
+    _ transaction: BudgetTransaction, in context: ModelContext, saving: Bool = true
+  ) throws {
     try invalidateReconciliation(accountIDs: [transaction.accountID, transaction.transferAccountID].compactMap { $0 }, from: transaction.date, in: context)
     let id = transaction.id
     for record in try context.fetch(FetchDescriptor<SimpleFINImportRecord>(
@@ -396,7 +403,7 @@ struct BudgetCommands {
       try skipScheduledDate(scheduleID: scheduleID, on: scheduledFor, in: context)
     }
     context.delete(transaction)
-    try context.save()
+    if saving { try context.save() }
   }
 
   /// Marks one date of a schedule skipped; the schedule stays active for future dates.

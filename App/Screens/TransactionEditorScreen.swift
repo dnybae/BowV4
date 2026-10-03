@@ -37,8 +37,8 @@ struct TransactionEditorScreen: View {
   @State private var merchantDomain: String?
   @State private var notes: String
   @State private var date: Date
-  @State private var isScheduled = false
-  @State private var recurrence: ScheduleFrequency = .once
+  @State private var isRecurring = false
+  @State private var recurrence: ScheduleFrequency = .monthly
   @State private var errorMessage: String?
   @State private var showingDeleteConfirmation = false
   @State private var possibleImportedMatchIDs: [UUID] = []
@@ -75,10 +75,12 @@ struct TransactionEditorScreen: View {
     var reviewRecord: SimpleFINImportRecord?
     var pendingRecord: SimpleFINImportRecord?
     var preferredAccountID: UUID?
+    var preferredDate: Date?
     let purpose: TransactionSheetPurpose
     switch subject {
-    case .new(let accountID):
+    case .new(let accountID, let initialDate):
       preferredAccountID = accountID
+      preferredDate = initialDate
       purpose = .add
     case .existing(let existing):
       transaction = existing
@@ -134,7 +136,7 @@ struct TransactionEditorScreen: View {
     _merchantDomain = State(initialValue: transaction?.merchantDomain)
     // Notes are only ever what you type: never the bank's memo or the schedule's note.
     _notes = State(initialValue: transaction?.notes ?? "")
-    _date = State(initialValue: transaction?.date ?? scheduledDraft?.date ?? bank?.date ?? Date())
+    _date = State(initialValue: transaction?.date ?? scheduledDraft?.date ?? bank?.date ?? preferredDate ?? Date())
     // A new transaction has no bank records; the placeholder ID matches none.
     let transactionID: UUID? = transaction?.id ?? UUID()
     _importRecords = Query(filter: #Predicate<SimpleFINImportRecord> { $0.transactionID == transactionID })
@@ -218,7 +220,7 @@ struct TransactionEditorScreen: View {
 
   private var fields: EditorFields {
     EditorFields(kind: kind, accountID: accountID, destinationID: destinationID, envelopeID: envelopeID,
-                 amountMinor: amountMinor, payee: payee, notes: notes, date: date, isScheduled: isScheduled,
+                 amountMinor: amountMinor, payee: payee, notes: notes, date: date, isRecurring: isRecurring,
                  recurrence: recurrence, merchantDomain: merchantDomain,
                  linkScheduledBill: linkScheduledBill, matchedID: matchedID)
   }
@@ -232,6 +234,8 @@ struct TransactionEditorScreen: View {
     payee = fields.payee
     notes = fields.notes
     date = fields.date
+    isRecurring = fields.isRecurring
+    recurrence = fields.recurrence
     merchantDomain = fields.merchantDomain
     matchedID = fields.matchedID
   }
@@ -241,9 +245,17 @@ struct TransactionEditorScreen: View {
     return fields != initialFields
   }
 
+  private var canSetRecurrence: Bool {
+    purpose == .add || (purpose == .edit && transaction?.scheduleID == nil)
+  }
+
+  private var timing: TransactionTiming {
+    TransactionTiming(date: date, isRecurring: isRecurring, frequency: recurrence)
+  }
+
   private var primaryTitle: String {
     purpose.primaryTitle(signedAmount: signedAmountText, amountIsZero: amountMinor == 0,
-                         isScheduling: isScheduled)
+                         isScheduling: canSetRecurrence && timing.isFuture)
   }
 
   private var isPrimaryEnabled: Bool {
@@ -264,7 +276,8 @@ struct TransactionEditorScreen: View {
   }
 
   private var canSave: Bool {
-    accountID != nil && amountMinor != 0 && !(kind == .expense && envelopeID == nil && !isHistory)
+    accountID != nil && amountMinor != 0
+      && !(kind == .expense && envelopeID == nil && (!isHistory || (canSetRecurrence && isRecurring)))
       && (kind != .transfer || (destinationID != nil && selectedAccount?.kind != .credit
         && (!needsEnvelopeForTransfer || envelopeID != nil)))
   }
@@ -376,14 +389,14 @@ struct TransactionEditorScreen: View {
           }
           .listRowBackground(Bow.card)
         }
-        if purpose == .add {
+        if canSetRecurrence {
           Section {
-            Toggle(isOn: $isScheduled) {
-              Label("Schedule for later", systemImage: "repeat").labelStyle(.bowTile)
+            Toggle(isOn: $isRecurring) {
+              Label("Recurring", systemImage: "repeat").labelStyle(.bowTile)
             }
-            if isScheduled {
+            if isRecurring {
               Picker(selection: $recurrence) {
-                ForEach(ScheduleFrequency.allCases) { frequency in
+                ForEach(ScheduleFrequency.recurringCases) { frequency in
                   Text(frequency.title).tag(frequency)
                 }
               } label: {
@@ -393,7 +406,7 @@ struct TransactionEditorScreen: View {
             }
           } footer: {
             Group {
-              if isScheduled {
+              if isRecurring {
                 Text("Scheduled entries appear on the calendar and affect balances only when recorded.")
               }
             }
@@ -578,12 +591,12 @@ struct TransactionEditorScreen: View {
       }
     }
     NavigationLink {
-      BowDatePickerScreen(title: isScheduled ? "First due" : "Date", date: $date)
+      BowDatePickerScreen(title: "Date", date: $date)
     } label: {
       LabeledContent {
         Text(date.formatted(date: .abbreviated, time: .omitted))
       } label: {
-        Label(isScheduled ? "First due" : "Date", systemImage: "calendar")
+        Label("Date", systemImage: "calendar")
           .labelStyle(.bowTile)
       }
     }
@@ -750,24 +763,16 @@ struct TransactionEditorScreen: View {
     }
     let minor = amountMinor
     let destination = accounts.first { $0.id == destinationID }
-    if !isScheduled && Calendar.current.startOfDay(for: date) > Calendar.current.startOfDay(for: Date()) {
-      errorMessage = "Turn on Schedule for later to plan a future transaction."
-      return
-    }
-    if isScheduled && Calendar.current.startOfDay(for: date) < Calendar.current.startOfDay(for: Date()) {
-      errorMessage = "Choose today or a future date for a scheduled transaction."
-      return
-    }
     let linkedScheduleID = scheduledDraft?.scheduleID ?? relatedOccurrence?.scheduleID
       ?? (linkScheduledBill ? matchingSchedule?.id : nil)
     let linkedScheduledFor = scheduledDraft?.scheduledFor ?? relatedOccurrence?.scheduledFor
       ?? (linkScheduledBill && matchingSchedule != nil ? date : nil)
-    if isScheduled && purpose == .add {
+    if canSetRecurrence && timing.isFuture {
       do {
-        try BudgetCommands.addSchedule(
-          kind: kind, account: account, destination: destination,
-          envelopeID: chosenEnvelopeID, amountMinor: minor, startDate: date,
-          frequency: recurrence, payee: payee, notes: notes, in: modelContext
+        try TransactionScheduling.save(
+          transaction: transaction, kind: kind, account: account, destination: destination,
+          envelopeID: chosenEnvelopeID, amountMinor: minor, payee: payee,
+          merchantDomain: merchantDomain, notes: notes, timing: timing, in: modelContext
         )
         toasts?.show(.saved("Scheduled · \(savedSummary)"))
         dismiss()
@@ -790,7 +795,14 @@ struct TransactionEditorScreen: View {
       if !possibleImportedMatchIDs.isEmpty { return }
     }
     do {
-      if let transaction = transaction ?? importedID.flatMap({ try? BudgetTransactionLookup.byID($0, in: modelContext) }) {
+      if canSetRecurrence && isRecurring {
+        try TransactionScheduling.save(
+          transaction: transaction ?? importedID.flatMap { try? BudgetTransactionLookup.byID($0, in: modelContext) },
+          kind: kind, account: account, destination: destination,
+          envelopeID: chosenEnvelopeID, amountMinor: minor, payee: payee,
+          merchantDomain: merchantDomain, notes: notes, timing: timing, in: modelContext
+        )
+      } else if let transaction = transaction ?? importedID.flatMap({ try? BudgetTransactionLookup.byID($0, in: modelContext) }) {
         try BudgetCommands.updateTransaction(
           transaction,
           kind: kind,
@@ -1049,7 +1061,7 @@ private struct EditorFields: Equatable {
   var payee: String
   var notes: String
   var date: Date
-  var isScheduled: Bool
+  var isRecurring: Bool
   var recurrence: ScheduleFrequency
   var merchantDomain: String?
   var linkScheduledBill: Bool

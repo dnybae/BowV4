@@ -6,8 +6,6 @@ import Foundation
 /// Each schedule appears once, which keeps every recurring bill reachable from the screen.
 struct UpcomingSchedules {
   var calendar: Calendar = .current
-  /// How far ahead to look for a yearly bill's next date.
-  var horizonDays = 400
 
   func items(
     for schedules: [BudgetSchedule], skipped: [BudgetScheduleOccurrence], after now: Date = Date()
@@ -19,10 +17,15 @@ struct UpcomingSchedules {
     let today = calendar.startOfDay(for: now)
     return schedules.compactMap { schedule in
       guard schedule.isActive else { return nil }
-      for offset in 1...horizonDays {
-        guard let day = calendar.date(byAdding: .day, value: offset, to: today) else { break }
-        guard recurrence.occurs(starting: schedule.startDate, frequency: schedule.frequency, on: day),
-              !skippedDays.contains(.init(scheduleID: schedule.id, day: day)) else { continue }
+      guard var earliest = calendar.date(byAdding: .day, value: 1, to: today) else { return nil }
+      for _ in 0...skippedDays.count {
+        guard let day = recurrence.nextDate(starting: schedule.startDate, frequency: schedule.frequency,
+                                          onOrAfter: earliest) else { return nil }
+        if skippedDays.contains(.init(scheduleID: schedule.id, day: day)) {
+          guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { return nil }
+          earliest = next
+          continue
+        }
         return UpcomingSchedule(
           scheduleID: schedule.id, date: day, payee: schedule.payee, kind: schedule.kind,
           frequency: schedule.frequency,

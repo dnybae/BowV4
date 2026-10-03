@@ -31,7 +31,7 @@ enum TransactionSheetPurpose: Equatable {
     case .add:
       if isScheduling { return "Schedule \(signedAmount)" }
       return amountIsZero ? "Add Transaction" : "Add \(signedAmount)"
-    case .edit: return "Save"
+    case .edit: return isScheduling ? "Schedule \(signedAmount)" : "Save"
     case .approve: return "Approve"
     case .enterPending, .enterScheduled: return "Enter Now"
     }

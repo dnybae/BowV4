@@ -2,7 +2,7 @@ import Foundation
 
 /// What a transaction sheet opens on. Every row in every state opens the same sheet.
 enum TransactionSheetSubject {
-  case new(preferredAccountID: UUID? = nil)
+  case new(preferredAccountID: UUID? = nil, date: Date? = nil)
   case existing(BudgetTransaction)
   /// Posted at the bank and not in the budget yet.
   case bankItem(SimpleFINImportRecord)

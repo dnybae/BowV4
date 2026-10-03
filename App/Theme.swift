@@ -29,8 +29,8 @@ extension Color {
 
 enum Bow {
     // Surfaces and text
-    static let mist       = Color(light: 0xF1F3F7, dark: 0x0C0E13)   // screen background
-    static let card       = Color(light: 0xFFFFFF, dark: 0x181B22)   // cards, list groups
+    static let mist       = Color(uiColor: .systemGroupedBackground)            // screen background
+    static let card       = Color(uiColor: .secondarySystemGroupedBackground)   // cards, list groups
     static let well       = Color(light: 0xE9ECF2, dark: 0x232731)   // ring tracks, inputs, icon discs
     static let line       = Color(light: 0xE2E5EC, dark: 0x2B303B, highContrastLight: 0xB9BECA, highContrastDark: 0x4A5161)   // separators
     static let ink        = Color(light: 0x141821, dark: 0xF1F3F8)   // primary text, money
@@ -178,7 +178,6 @@ enum EnvelopeState {
     var tint: Color { switch self { case .funded: Bow.fundedTint; case .needs: Bow.needsTint; case .over: Bow.overTint; case .empty: Bow.well } }
     /// Shown inside rings when Differentiate Without Color is on.
     var glyph: String? { switch self { case .funded: "checkmark"; case .needs: "minus"; case .over: "exclamationmark"; case .empty: nil } }
-    var sky: SkyMood { switch self { case .funded: .mint; case .needs: .amber; case .over: .coral; case .empty: .dawn } }
 }
 
 // MARK: - Small ring (rows, 28pt)
@@ -250,110 +249,6 @@ extension StatusPill {
     static func scheduled(_ text: String) -> StatusPill {
         StatusPill(text: text, state: .empty, inkColor: Bow.bowInk, tintColor: Bow.bowTint)
     }
-}
-
-// MARK: - Sky background (atmosphere)
-
-enum SkyMood {
-    case dawn, mint, amber, coral
-    /// Something needs money or review.
-    static let review = SkyMood.amber
-    /// Something is over or short.
-    static let short = SkyMood.coral
-    /// Reconciling.
-    static let reconcile = SkyMood.mint
-    var top: Color {
-        switch self {
-        case .dawn:  Color(light: 0xD6E0FF, dark: 0x1D2750)
-        case .mint:  Color(light: 0xD3F0E2, dark: 0x16302A)
-        case .amber: Color(light: 0xFFE7C2, dark: 0x33291A)
-        case .coral: Color(light: 0xFFD9D3, dark: 0x3A1F1E)
-        }
-    }
-    var warm: Color { Color(light: 0xFFE1D2, dark: 0x35264F) }
-    var hill: Color {
-        switch self {
-        case .dawn:  Color(light: 0xC9D4F6, dark: 0x1A2140)
-        case .mint:  Color(light: 0xC6E6D6, dark: 0x173028)
-        case .amber: Color(light: 0xF6DDB4, dark: 0x2E2518)
-        case .coral: Color(light: 0xF5CFC9, dark: 0x331D1C)
-        }
-    }
-}
-
-/// Place behind a hero screen: `.background(alignment: .top) { SkyBackground(mood: .dawn) }`
-struct SkyBackground: View {
-    var mood: SkyMood = .dawn
-    var height: CGFloat = 520
-    var showsTrail = true
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            Bow.mist
-            LinearGradient(colors: [mood.top.opacity(0.6), Bow.mist], startPoint: .top, endPoint: .bottom)
-            RadialGradient(colors: [mood.top, mood.top.opacity(0)], center: UnitPoint(x: 0.3, y: 0), startRadius: 0, endRadius: 420)
-            RadialGradient(colors: [mood.warm.opacity(0.9), mood.warm.opacity(0)], center: UnitPoint(x: 0.85, y: 0.08), startRadius: 0, endRadius: 280)
-            if scheme == .dark { Stars().opacity(0.8) }
-            Hills(color: mood.hill).frame(height: 200).frame(maxHeight: .infinity, alignment: .bottom)
-            if showsTrail { Trail().stroke(.white.opacity(scheme == .dark ? 0.3 : 0.75), style: StrokeStyle(lineWidth: 1.2, lineCap: .round, dash: [1, 6])) }
-            LinearGradient(colors: [Bow.mist.opacity(0), Bow.mist], startPoint: .top, endPoint: .bottom)
-                .frame(height: 140).frame(maxHeight: .infinity, alignment: .bottom)
-        }
-        .frame(height: height)
-        .ignoresSafeArea(edges: .top)
-        .accessibilityHidden(true)
-    }
-
-    private struct Hills: View {
-        var color: Color
-        var body: some View {
-            GeometryReader { g in
-                let w = g.size.width, h = g.size.height
-                ZStack {
-                    Path { p in
-                        p.move(to: CGPoint(x: 0, y: h * 0.25))
-                        p.addCurve(to: CGPoint(x: w * 0.56, y: h * 0.07), control1: CGPoint(x: w * 0.18, y: 0.05 * h), control2: CGPoint(x: w * 0.38, y: 0.15 * h))
-                        p.addCurve(to: CGPoint(x: w, y: h * 0.12), control1: CGPoint(x: w * 0.75, y: 0), control2: CGPoint(x: w * 0.9, y: 0.02 * h))
-                        p.addLine(to: CGPoint(x: w, y: h)); p.addLine(to: CGPoint(x: 0, y: h)); p.closeSubpath()
-                    }.fill(color.opacity(0.55))
-                    Path { p in
-                        p.move(to: CGPoint(x: 0, y: h * 0.45))
-                        p.addCurve(to: CGPoint(x: w * 0.64, y: h * 0.3), control1: CGPoint(x: w * 0.23, y: 0.25 * h), control2: CGPoint(x: w * 0.44, y: 0.4 * h))
-                        p.addCurve(to: CGPoint(x: w, y: h * 0.25), control1: CGPoint(x: w * 0.8, y: 0.25 * h), control2: CGPoint(x: w * 0.92, y: 0.3 * h))
-                        p.addLine(to: CGPoint(x: w, y: h)); p.addLine(to: CGPoint(x: 0, y: h)); p.closeSubpath()
-                    }.fill(color.opacity(0.7))
-                }
-            }
-        }
-    }
-    private struct Trail: Shape {
-        func path(in r: CGRect) -> Path {
-            var p = Path()
-            p.move(to: CGPoint(x: -10, y: r.height - 120))
-            p.addQuadCurve(to: CGPoint(x: r.width + 10, y: r.height - 300), control: CGPoint(x: r.width * 0.5, y: r.height - 420))
-            return p
-        }
-    }
-    private struct Stars: View {
-        var body: some View {
-            Canvas { ctx, size in
-                var rng = SeededRandom(seed: 7)
-                for _ in 0..<46 {
-                    let x = Double.random(in: 0...size.width, using: &rng)
-                    let y = Double.random(in: 0...(size.height * 0.7), using: &rng)
-                    let r = [0.6, 0.8, 1.0, 1.2].randomElement(using: &rng)!
-                    ctx.fill(Path(ellipseIn: CGRect(x: x, y: y, width: r * 2, height: r * 2)), with: .color(.white.opacity(0.5)))
-                }
-            }
-        }
-    }
-}
-
-struct SeededRandom: RandomNumberGenerator {
-    private var state: UInt64
-    init(seed: UInt64) { state = seed }
-    mutating func next() -> UInt64 { state = state &* 6364136223846793005 &+ 1442695040888963407; return state }
 }
 
 // MARK: - Glow ring (hero)
@@ -435,7 +330,7 @@ extension View {
     func bowSecondaryButton(size: ControlSize = .large) -> some View {
         self.buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(size)
     }
-    /// Put on a List or Form so the Bow background (or a SkyBackground) shows through.
+    /// Put on a List or Form so the Bow background shows through.
     /// Row text defaults to `.bowHeadline`, the weight of envelope names on Budget.
     /// The font also reaches section footers, so give each footer `.font(.bowFootnote)`.
     func bowListBackground<Background: View>(@ViewBuilder _ background: () -> Background = { Bow.mist }) -> some View {
@@ -445,12 +340,7 @@ extension View {
             .scrollContentBackground(.hidden)
             .background { background().ignoresSafeArea() }
     }
-    /// Put on a List or Form (screen or sheet) so the sky shows behind it, under the native toolbar.
-    func bowSkyList(mood: SkyMood = .dawn, height: CGFloat = 520) -> some View {
-        self.bowListBackground { Bow.mist.overlay(alignment: .top) { SkyBackground(mood: mood, height: height) } }
-            .bowSoftScrollEdge()
-    }
-    /// A soft top edge, so the toolbar's scroll edge effect doesn't draw a hard line through the sky.
+    /// A soft top edge, so the toolbar's scroll edge effect fades instead of drawing a hard line.
     func bowSoftScrollEdge() -> some View {
         self.scrollEdgeEffectStyle(.soft, for: .top)
     }

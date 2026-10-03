@@ -148,7 +148,7 @@ struct ScheduleEditorScreen: View {
           BowDestructiveSection("Delete schedule") { showingDelete = true }
         }
       }
-      .bowSkyList(mood: .dawn, height: 420)
+      .bowListBackground()
       .bowEditorSheet(hasChanges: hasChanges)
       .onAppear { if initialFields == nil { initialFields = fields } }
       .navigationTitle(schedule == nil ? "New schedule" : "Schedule")

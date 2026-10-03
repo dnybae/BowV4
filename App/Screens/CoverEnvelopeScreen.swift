@@ -91,7 +91,7 @@ struct CoverEnvelopeScreen: View {
       .listRowBackground(Bow.card)
     }
     .disabled(isSaving)
-    .bowSkyList(mood: isCovered ? .mint : .coral, height: 420)
+    .bowListBackground()
     .bowAnimation(value: remaining)
     .bowAnimation(value: draft.donors.map(\.bucket))
     .bowEditorSheet(hasChanges: !draft.donors.isEmpty)

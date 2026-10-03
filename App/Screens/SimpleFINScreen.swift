@@ -181,7 +181,7 @@ struct SimpleFINScreen: View {
         .listRowBackground(Color.clear)
       }
     }
-    .bowSkyList(mood: needsAttention ? .review : .dawn, height: 460)
+    .bowListBackground()
     .navigationTitle("Bank sync")
     .navigationBarTitleDisplayMode(.inline)
     .bowAnimation(value: coordinator.isSyncing)

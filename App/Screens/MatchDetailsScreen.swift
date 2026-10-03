@@ -34,7 +34,7 @@ struct MatchDetailsScreen: View {
       }
       .listRowBackground(Bow.card)
     }
-    .bowSkyList(mood: .dawn, height: 420)
+    .bowListBackground()
     .navigationTitle("Match Details")
     .navigationBarTitleDisplayMode(.inline)
     .safeAreaInset(edge: .bottom) {

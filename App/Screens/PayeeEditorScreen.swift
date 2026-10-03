@@ -174,7 +174,7 @@ struct PayeeEditorScreen: View {
           BowDestructiveSection("Delete payee") { showingDelete = true }
         }
       }
-      .bowSkyList(mood: .dawn, height: 420)
+      .bowListBackground()
       .bowEditorSheet(hasChanges: hasChanges)
       .onAppear { if initialFields == nil { initialFields = fields } }
       .navigationTitle(entry == nil ? "New payee" : "Payee")

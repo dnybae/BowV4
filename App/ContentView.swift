@@ -263,7 +263,7 @@ private struct BudgetHomeView: View {
                   ContentUnavailableView("Balances Unavailable", systemImage: "exclamationmark.triangle",
                                          description: Text(ledgerError))
                 } else {
-                  BowOverviewSkeleton(mood: .mint, accessibilityTitle: "Calculating balances")
+                  BowOverviewSkeleton(accessibilityTitle: "Calculating balances")
                     .transition(.opacity)
                 }
               }

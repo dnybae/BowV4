@@ -121,7 +121,7 @@ struct MoneyMoveScreen: View {
         .listRowBackground(Bow.card)
       }
       .disabled(isSaving)
-      .bowSkyList(mood: .dawn, height: 420)
+      .bowListBackground()
       .bowEditorSheet(hasChanges: amountMinor != 0)
       .bowAnimation(value: isOverAvailable)
       .sensoryFeedback(.impact(weight: .light), trigger: actionFeedback)

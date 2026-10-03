@@ -89,7 +89,7 @@ struct InsightsScreen: View {
     }.sorted { $0.totalMinor > $1.totalMinor }
   }
 
-  /// "The Arrow": recent net worth flowing into the six-month estimate, drawn on a sky card.
+  /// "The Arrow": recent net worth flowing into the six-month estimate, drawn on a card.
   private var arrowCard: some View {
     let past = monthItems.suffix(3).compactMap { item in item.netWorthMinor.map { (item.month, $0) } }
     let today = past.last
@@ -163,11 +163,7 @@ struct InsightsScreen: View {
     .padding(Bow.Space.s5)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background {
-      ZStack {
-        Bow.card
-        LinearGradient(colors: [SkyMood.dawn.top, Bow.card.opacity(0)], startPoint: .top, endPoint: .bottom)
-        RadialGradient(colors: [SkyMood.dawn.warm.opacity(0.8), .clear], center: .topTrailing, startRadius: 0, endRadius: 220)
-      }
+      Bow.card
     }
     .clipShape(RoundedRectangle(cornerRadius: Bow.Radius.xl, style: .continuous))
     .shadow(color: .black.opacity(0.05), radius: 10, y: 6)
@@ -430,7 +426,7 @@ struct InsightsScreen: View {
       refreshVersion += 1
     }
     .background {
-      Bow.mist.overlay(alignment: .top) { SkyBackground(mood: .dawn, height: 420, showsTrail: false) }
+      Bow.mist
         .ignoresSafeArea()
     }
     .navigationTitle("Insights")

@@ -88,7 +88,7 @@ struct WelcomeScreen: View {
         }
       }
       .bowListBackground {
-        Bow.mist.overlay(alignment: .top) { SkyBackground(mood: .dawn, height: 700) }
+        Bow.mist
       }
       .toolbar(.hidden, for: .navigationBar)
       .bowErrorAlert("Couldn’t create budget", message: $errorMessage)

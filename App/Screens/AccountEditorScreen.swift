@@ -144,7 +144,7 @@ struct AccountEditorScreen: View {
       }
     }
     .disabled(isSaving)
-    .bowSkyList(mood: .dawn, height: 420)
+    .bowListBackground()
     .accountLogoPresentations(settings: $logoSettings, presentation: $logoPresentation,
                               lookupName: account?.institutionName ?? name.trimmingCharacters(in: .whitespacesAndNewlines),
                               institutionDomain: account?.institutionDomain)

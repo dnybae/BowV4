@@ -114,7 +114,7 @@ struct CalendarScreen: View {
         }
         selectedDayHeader
       }
-      // Hero rows sit on the sky, edge to edge with the day's card below, like Budget's stat strip.
+      // Hero rows sit on the background, edge to edge with the day's card below, like Budget's stat strip.
       .listRowBackground(Color.clear)
       .listRowSeparator(.hidden)
       .listRowInsets(EdgeInsets(top: Bow.Space.s2, leading: 0, bottom: Bow.Space.s2, trailing: 0))
@@ -122,7 +122,7 @@ struct CalendarScreen: View {
     }
     .scrollsToTopOnReselect(of: .calendar)
     .bowListBackground {
-      Bow.mist.overlay(alignment: .top) { SkyBackground(mood: .dawn) }
+      Bow.mist
     }
     .contentMargins(.top, Bow.Space.s2, for: .scrollContent)
     .listSectionSpacing(Bow.Space.s2)

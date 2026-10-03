@@ -175,7 +175,7 @@ struct SettingsScreen: View {
         .listRowBackground(Bow.card)
       }
       .labelStyle(.bowTile)
-      .bowSkyList(mood: .dawn, height: 420)
+      .bowListBackground()
       .scrollDismissesKeyboard(.interactively)
       .navigationTitle("Settings")
       .navigationBarTitleDisplayMode(.inline)

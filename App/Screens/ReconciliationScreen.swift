@@ -75,7 +75,7 @@ struct ReconciliationScreen: View {
             }
             .listRowBackground(Color.clear)
           }
-          .bowSkyList(mood: .reconcile, height: 420)
+          .bowListBackground()
           .navigationTitle("Reconcile")
           .navigationBarTitleDisplayMode(.inline)
           .toolbar {
@@ -199,7 +199,7 @@ struct ReconciliationScreen: View {
         }
         .listRowBackground(Bow.card)
       }
-      .bowSkyList(mood: .reconcile, height: 420)
+      .bowListBackground()
       .bowEditorSheet(hasChanges: hasChanges)
       .onAppear { if initialDate == nil { initialDate = statementDate } }
       .bowAnimation(value: hasLoaded)

@@ -87,7 +87,7 @@ struct AccountsScreen: View {
     }
     .scrollsToTopOnReselect(of: .accounts)
     .background {
-      Bow.mist.overlay(alignment: .top) { SkyBackground(mood: .mint) }
+      Bow.mist
         .ignoresSafeArea()
     }
     .bowSoftScrollEdge()
@@ -409,7 +409,7 @@ private struct AccountDetailScreen: View {
         }
       }
     }
-    .bowSkyList(mood: .dawn, height: 460)
+    .bowListBackground()
     .bowAnimation(value: feed.items.map(\.id))
     .bowAnimation(value: isFirstLoad)
     .navigationTitle(account.name)

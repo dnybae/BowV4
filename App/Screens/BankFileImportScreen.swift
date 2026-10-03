@@ -181,7 +181,7 @@ struct BankFileImportScreen: View {
         }
         }
       }
-      .bowSkyList(mood: .dawn, height: 420)
+      .bowListBackground()
       .bowAnimation(value: proposals.count)
       .bowAnimation(value: isPreviewing)
       .bowAnimation(value: hasSeenIntro)

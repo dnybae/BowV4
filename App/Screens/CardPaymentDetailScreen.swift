@@ -265,7 +265,7 @@ struct CardPaymentDetailScreen: View {
 
     }
     .bowListBackground {
-      Bow.mist.overlay(alignment: .top) { SkyBackground(mood: status.state.sky) }
+      Bow.mist
     }
     .bowSoftScrollEdge()
     .bowAnimation(value: feed.items.map(\.id))

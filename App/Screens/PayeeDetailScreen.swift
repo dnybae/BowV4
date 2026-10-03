@@ -258,7 +258,7 @@ struct PayeeDetailScreen: View {
         .accessibilityLabel("Loading payee")
       }
     }
-    .bowSkyList(mood: .dawn, height: 460)
+    .bowListBackground()
     .bowAnimation(value: entry?.key)
     .bowAnimation(value: feed.items.map(\.id))
     .navigationTitle("Payee")

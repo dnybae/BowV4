@@ -131,7 +131,7 @@ struct CardDebtGoalEditorScreen: View {
           BowDestructiveSection("Remove payoff goal") { removeGoal() }
         }
       }
-      .bowSkyList(mood: .dawn, height: 420)
+      .bowListBackground()
       .bowEditorSheet(hasChanges: hasChanges)
       .navigationTitle("Payoff goal")
       .navigationSubtitle(card.name)

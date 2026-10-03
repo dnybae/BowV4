@@ -123,7 +123,7 @@ struct TransactionsScreen: View {
     .bowAnimation(value: hasLoaded)
     .scrollsToTopOnReselect(of: .transactions)
     .bowListBackground {
-      Bow.mist.overlay(alignment: .top) { SkyBackground(mood: .dawn, height: 320, showsTrail: false) }
+      Bow.mist
     }
     .bowSoftScrollEdge()
     .bowMinimizesNavigationBarOnScroll()

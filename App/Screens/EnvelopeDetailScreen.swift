@@ -264,7 +264,7 @@ struct EnvelopeDetailScreen: View {
       }
     }
     .bowListBackground {
-      Bow.mist.overlay(alignment: .top) { SkyBackground(mood: status.state.sky) }
+      Bow.mist
     }
     .bowSoftScrollEdge()
     .bowAnimation(value: feed.items.map(\.id))
@@ -342,50 +342,69 @@ struct EnvelopeDetailScreen: View {
   /// Where this month's number comes from: your target, scheduled bills, and what they add up to.
   /// Every row opens the target sheet.
   private var targetSection: some View {
-    Section("Target") {
+    Section {
       let ownTarget = envelope.targetMinor ?? 0
-      if ownTarget == 0 && scheduledTotal == 0 {
-        targetRow(
-          title: isPastMonth ? "No target" : "Set a target",
-          detail: suggestedTarget.map { "You usually spend about \(BudgetMoney.formatted($0, currencyCode: currencyCode)) a month" }
-        )
+      if ownTarget > 0 {
+        if let date = envelope.targetDate {
+          let share = EnvelopeTargetPlanner().monthlyMinor(
+            targetMinor: ownTarget, targetDate: date, scheduledMinor: 0,
+            carriedInMinor: snapshot.carriedIn(for: envelope.id), month: snapshot.month
+          ) ?? 0
+          targetRow(
+            title: "My target",
+            detail: "By \(date.formatted(.dateTime.month(.abbreviated).year())) · \(BudgetMoney.formatted(share, currencyCode: currencyCode)) this month",
+            minor: ownTarget
+          )
+        } else {
+          targetRow(title: "My target", detail: "Each month", minor: ownTarget)
+        }
       } else {
-        if ownTarget > 0 {
-          if let date = envelope.targetDate {
-            let months = EnvelopeTargetPlanner().monthsLeft(from: snapshot.month, through: date)
-            targetRow(
-              title: "Goal",
-              detail: "By \(date.formatted(.dateTime.month(.wide).year())) · \(months) \(months == 1 ? "month" : "months") left",
-              minor: ownTarget
-            )
-          } else {
-            targetRow(title: "Monthly target", minor: ownTarget)
+        targetRow(
+          title: "My target",
+          detail: suggestedTarget.map { "You usually spend about \(BudgetMoney.formatted($0, currencyCode: currencyCode)) a month" },
+          value: isPastMonth ? "None" : "Not set"
+        )
+      }
+      if scheduledTotal > 0 {
+        NavigationLink {
+          ScheduledTargetBillsScreen(
+            envelopeName: envelope.name, month: snapshot.month,
+            contributions: scheduledContributions, schedules: envelopeSchedules,
+            currencyCode: currencyCode, isPastMonth: isPastMonth, onEditSchedule: onEditSchedule
+          )
+        } label: {
+          EnvelopeDetailValueRow(
+            title: "Scheduled bills target",
+            detail: "\(scheduledContributions.count) \(scheduledContributions.count == 1 ? "bill" : "bills") in \(monthName)"
+          ) {
+            MoneyText(minor: scheduledTotal, currencyCode: currencyCode)
           }
         }
-        if scheduledTotal > 0 {
-          let count = scheduledContributions.reduce(0) { $0 + $1.occurrences }
-          targetRow(
-            title: "Scheduled bills",
-            detail: "\(count) due in \(monthName)",
-            minor: scheduledTotal, showsPlusSign: ownTarget > 0
-          )
+      }
+      if let totalTarget, ownTarget > 0 && scheduledTotal > 0 {
+        EnvelopeDetailValueRow(title: "Needed this month", isEmphasized: true) {
+          MoneyText(minor: totalTarget, currencyCode: currencyCode)
         }
-        if let totalTarget, (ownTarget > 0 && scheduledTotal > 0) || envelope.targetDate != nil {
-          targetRow(title: "Needed this month", minor: totalTarget, isEmphasized: true)
-        }
+      }
+    } header: {
+      Text("Target")
+    } footer: {
+      if scheduledTotal > 0 {
+        let count = scheduledContributions.count
+        Text("\(count) scheduled \(count == 1 ? "bill adds" : "bills add") to this envelope’s target automatically\((envelope.targetMinor ?? 0) > 0 ? ", on top of yours." : ". You haven’t set a target of your own.")")
+          .font(.bowFootnote)
       }
     }
     .listRowBackground(Bow.card)
   }
 
   @ViewBuilder
-  private func targetRow(
-    title: String, detail: String? = nil, minor: Int64? = nil,
-    showsPlusSign: Bool = false, isEmphasized: Bool = false
-  ) -> some View {
-    let row = EnvelopeDetailValueRow(title: title, detail: detail, isEmphasized: isEmphasized) {
+  private func targetRow(title: String, detail: String? = nil, minor: Int64? = nil, value: String? = nil) -> some View {
+    let row = EnvelopeDetailValueRow(title: title, detail: detail) {
       if let minor {
-        MoneyText(minor: minor, currencyCode: currencyCode, showsPlusSign: showsPlusSign)
+        MoneyText(minor: minor, currencyCode: currencyCode)
+      } else if let value {
+        Text(value)
       }
     }
     if isPastMonth {

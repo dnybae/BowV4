@@ -3,7 +3,6 @@ import SwiftUI
 /// The first load of a tab (Budget, Accounts): the screen's own shapes, redacted and shimmering,
 /// instead of a spinner. A totals strip, then a few cards.
 struct BowOverviewSkeleton: View {
-  var mood: SkyMood = .dawn
   /// Read by VoiceOver, e.g. "Calculating your budget".
   var accessibilityTitle: String
 
@@ -40,7 +39,7 @@ struct BowOverviewSkeleton: View {
     }
     .scrollDisabled(true)
     .background {
-      Bow.mist.overlay(alignment: .top) { SkyBackground(mood: mood) }
+      Bow.mist
         .ignoresSafeArea()
     }
     .accessibilityElement(children: .ignore)

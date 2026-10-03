@@ -107,7 +107,7 @@ struct EnvelopeEditorScreen: View {
         case .target: targetSheet
         }
       }
-      .bowSkyList(mood: .dawn, height: 420)
+      .bowListBackground()
       .bowEditorSheet(hasChanges: hasChanges)
       .onAppear { if initialFields == nil { initialFields = fields } }
       .navigationBarTitleDisplayMode(.inline)
@@ -142,7 +142,7 @@ struct EnvelopeEditorScreen: View {
             suggestedMinor: suggestedMinor, focusOnAppear: targetAmountMinor == 0,
             onRemove: targetAmountMinor > 0 ? { clearTarget() } : nil, dismissesOnRemove: true
           )
-          .bowSkyList(mood: .dawn, height: 420)
+          .bowListBackground()
           .navigationTitle("Target")
           .navigationBarTitleDisplayMode(.inline)
         } label: {

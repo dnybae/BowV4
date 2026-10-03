@@ -100,11 +100,7 @@ struct CoverOverspendingScreen: View {
             .listRowBackground(Color.clear)
         }
       }
-      .bowListBackground {
-        Bow.mist.overlay(alignment: .top) {
-          SkyBackground(mood: overspending?.isEmpty == false ? .coral : .mint, height: 460)
-        }
-      }
+      .bowListBackground()
       .bowSoftScrollEdge()
       .bowAnimation(value: overspending?.items.map(\.envelopeID))
       .bowAnimation(value: overspending?.isEmpty)

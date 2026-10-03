@@ -125,10 +125,6 @@ struct BudgetScreen: View {
     )
   }
 
-  private var skyMood: SkyMood {
-    snapshot.readyToAssignMinor < 0 ? .coral : .dawn
-  }
-
   private var hasOpenAccount: Bool {
     accounts.contains { $0.closedAt == nil }
   }
@@ -168,15 +164,7 @@ struct BudgetScreen: View {
     .offset(x: swipeOffset)
     .scrollsToTopOnReselect(of: .budget)
     .background {
-      Bow.mist.overlay(alignment: .top) {
-        ZStack {
-          SkyBackground(mood: skyMood)
-            .id(skyMood)
-            .transition(.opacity)
-        }
-        .bowAnimation(value: skyMood)
-      }
-      .ignoresSafeArea()
+      Bow.mist.ignoresSafeArea()
     }
     .bowSoftScrollEdge()
     .navigationTitle(displayedMonth.formatted(.dateTime.month(.wide).year()))

@@ -432,7 +432,7 @@ struct TransactionEditorScreen: View {
           }
         }
       }
-      .bowSkyList(mood: .dawn, height: 420)
+      .bowListBackground()
       .bowEditorSheet(hasChanges: hasChanges)
       .bowAnimation(value: matchedID)
       // One primary action, at the bottom, riding above the keyboard. No Save in the toolbar.

@@ -120,7 +120,7 @@ struct TransactionFilterScreen: View {
         }
         .listRowBackground(Bow.card)
       }
-      .bowSkyList(mood: .dawn, height: 420)
+      .bowListBackground()
       .navigationTitle("Filter")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

@@ -38,7 +38,7 @@ struct GroupEditorScreen: View {
           BowDestructiveSection("Delete group") { showingDelete = true }
         }
       }
-      .bowSkyList(mood: .dawn, height: 420)
+      .bowListBackground()
       .bowEditorSheet(hasChanges: name != (group?.name ?? ""))
       .navigationTitle(group == nil ? "New group" : "Edit group")
       .navigationBarTitleDisplayMode(.inline)

@@ -21,6 +21,7 @@ struct CardPaymentDetailScreen: View {
   @State private var showingAccountEditor = false
   @State private var feed = TransactionFeedModel()
   @State private var hasLoadedFeed = false
+  @Query(filter: #Predicate<BudgetScheduleOccurrence> { $0.isSkipped }) private var skippedOccurrences: [BudgetScheduleOccurrence]
 
   private var owed: Int64 { max(0, -snapshot.accountBalances[card.id, default: 0]) }
   private var reserved: Int64 { max(0, snapshot.paymentAvailable[card.id, default: 0]) }
@@ -61,6 +62,42 @@ struct CardPaymentDetailScreen: View {
 
   private var cardSchedules: [BudgetSchedule] {
     schedules.filter { $0.accountID == card.id }.sorted { $0.payee < $1.payee }
+  }
+
+  /// Each recurring bill's next date; past months have nothing upcoming.
+  private var upcoming: [UpcomingSchedule] {
+    guard !isPastMonth else { return [] }
+    return UpcomingSchedules().items(for: cardSchedules, skipped: skippedOccurrences)
+  }
+
+  private var monthName: String { snapshot.month.formatted(.dateTime.month(.wide)) }
+
+  private var moneyMoves: MoneyMoveHistory {
+    MoneyMoveHistory(subject: .cardPayment(card.id), month: snapshot.month)
+  }
+
+  private var moneyMoveCount: Int { moneyMoves.count(allocations: allocations) }
+
+  /// The debt a payoff goal spreads out: what was unfunded at the start of the month, or debt
+  /// no overspent envelope explains, such as a starting balance added this month.
+  private var payoffDebt: Int64 { max(carriedDebt, uncoveredDebt) }
+
+  /// This month's amount toward the payoff goal. With a payoff date, Bow works it out.
+  private var fundEachMonth: Int64? {
+    CardPayoffPlanner().monthlyMinor(
+      debtMinor: payoffDebt, monthlyTargetMinor: card.debtMonthlyTargetMinor,
+      goalDate: card.debtGoalDate, month: snapshot.month
+    )
+  }
+
+  private var payoffDetail: String? {
+    if let date = card.debtGoalDate {
+      return "To pay off by \(date.formatted(.dateTime.month(.wide).year()))"
+    }
+    guard let monthly = card.debtMonthlyTargetMinor,
+          let month = CardPayoffPlanner().payoffMonth(debtMinor: payoffDebt, monthlyMinor: monthly, from: snapshot.month)
+    else { return nil }
+    return "Paid off around \(month.formatted(.dateTime.month(.wide).year()))"
   }
 
   private var status: EnvelopeStatus {
@@ -143,93 +180,55 @@ struct CardPaymentDetailScreen: View {
         .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: Bow.Space.s2, trailing: 0))
       }
 
-      if underfunded > 0 {
-        Section("Underfunded") {
-          BowTileValueRow(title: "Total underfunded", systemImage: "exclamationmark.circle") {
-            MoneyText(minor: underfunded, currencyCode: currencyCode)
-              .fontWeight(.semibold)
-              .foregroundStyle(Bow.ink)
-          }
-          if overspentOnCard > 0 {
-            VStack(alignment: .leading, spacing: Bow.Space.s2) {
-              BowTileValueRow(title: "Overspent envelopes", systemImage: "square.grid.2x2") {
-                MoneyText(minor: overspentOnCard, currencyCode: currencyCode)
-              }
-              Text("Card purchases went over their envelopes. Covering them funds this payment.")
-                .font(.bowFootnote)
-                .foregroundStyle(Bow.inkSoft)
-              Button("Cover overspending", action: onCoverOverspending)
-                .bowPrimaryButton(size: .regular)
-                .disabled(isPastMonth)
+      payoffSection
+
+      if overspentOnCard > 0 {
+        Section("Overspent on this card") {
+          VStack(alignment: .leading, spacing: Bow.Space.s2) {
+            EnvelopeDetailValueRow(title: "Overspent envelopes") {
+              MoneyText(minor: overspentOnCard, currencyCode: currencyCode)
             }
-            .padding(.vertical, Bow.Space.s1)
+            Text("Card purchases went over their envelopes. Covering them funds this payment.")
+              .font(.bowFootnote)
+              .foregroundStyle(Bow.inkSoft)
+            Button("Cover overspending", action: onCoverOverspending)
+              .bowPrimaryButton(size: .regular)
+              .disabled(isPastMonth)
           }
-          if uncoveredDebt > 0 {
-            VStack(alignment: .leading, spacing: Bow.Space.s2) {
-              BowTileValueRow(title: "Carried debt", systemImage: "clock.arrow.circlepath") {
-                MoneyText(minor: uncoveredDebt, currencyCode: currencyCode)
-              }
-              Text(hasPayoffGoal
-                ? "Your payoff goal tracks this debt. Fund the payment a little each month."
-                : "Debt from before this month. A payoff goal spreads it over time.")
-                .font(.bowFootnote)
-                .foregroundStyle(Bow.inkSoft)
-              if !hasPayoffGoal {
-                Button("Set a payoff goal") { showingGoalEditor = true }
-                  .bowSecondaryButton(size: .regular)
-                  .disabled(isPastMonth)
-              }
-            }
-            .padding(.vertical, Bow.Space.s1)
-          }
+          .padding(.vertical, Bow.Space.s1)
         }
         .listRowBackground(Bow.card)
       }
 
-      Section("Debt progress") {
-        BowTileValueRow(title: "Amount owed", systemImage: "creditcard") {
-          MoneyText(minor: owed, currencyCode: currencyCode)
-        }
-        ProgressView(value: debtProgress) {
-          Text("Debt paid down")
-        }
-        .accessibilityValue("\(Int(debtProgress * 100)) percent")
-        if let start = card.debtGoalStartMinor {
-          Text(owed > start
-            ? "Debt is \(BudgetMoney.formatted(owed - start, currencyCode: currencyCode)) above the goal’s starting balance."
-            : "\(BudgetMoney.formatted(start - owed, currencyCode: currencyCode)) paid down from \(BudgetMoney.formatted(start, currencyCode: currencyCode))")
-            .font(.bowFootnote)
-            .foregroundStyle(Bow.inkSoft)
-        } else {
-          Text("Set a payoff goal to track progress from today’s balance.")
-            .font(.bowFootnote)
-            .foregroundStyle(Bow.inkSoft)
-        }
-        if let monthly = card.debtMonthlyTargetMinor {
-          BowTileValueRow(title: "Fund each month", systemImage: "calendar.badge.clock") {
-            MoneyText(minor: monthly, currencyCode: currencyCode)
-          }
-        }
-        if let date = card.debtGoalDate {
-          BowTileValueRow("Target date", systemImage: "flag",
-                          value: date.formatted(date: .abbreviated, time: .omitted))
+      Section {
+        NavigationLink {
+          MoneyMoveHistoryScreen(
+            title: card.name + " payment", month: snapshot.month,
+            entries: moneyMoves.moves(allocations: allocations, envelopes: envelopes, accounts: accounts),
+            currencyCode: currencyCode
+          )
+        } label: {
+          EnvelopeDetailValueRow(
+            title: "Money moves", detail: "In \(monthName)",
+            value: moneyMoveCount == 0 ? "None" : "\(moneyMoveCount)"
+          )
         }
       }
       .listRowBackground(Bow.card)
 
-      Section("Recurring transactions") {
-        if cardSchedules.isEmpty {
-          Text("No recurring transactions").foregroundStyle(Bow.inkSoft)
-        } else {
-          ForEach(cardSchedules) { schedule in
-            Button { onEditSchedule(schedule.id) } label: {
-              ScheduleSummaryRow(schedule: schedule, currencyCode: currencyCode)
+      if !upcoming.isEmpty {
+        Section("Upcoming") {
+          ForEach(upcoming) { item in
+            Button { onEditSchedule(item.scheduleID) } label: {
+              TransactionRowView(
+                model: item.rowModel(accountName: card.name, envelopeName: nil),
+                currencyCode: currencyCode, options: .hidesAccount
+              )
             }
-            .disabled(isPastMonth)
           }
         }
+        .listRowBackground(Bow.card)
       }
-      .listRowBackground(Bow.card)
 
       if feed.items.isEmpty && (!hasLoadedFeed || feed.isLoading) {
         Section("Card activity") {
@@ -238,7 +237,7 @@ struct CardPaymentDetailScreen: View {
         .listRowBackground(Bow.card)
       } else if feed.items.isEmpty {
         Section("Card activity") {
-          Text("Nothing charged to \(card.name) this month.").font(.bowBody).foregroundStyle(Bow.inkSoft)
+          Text("Nothing charged to \(card.name) yet.").font(.bowBody).foregroundStyle(Bow.inkSoft)
         }
         .listRowBackground(Bow.card)
       } else {
@@ -264,19 +263,6 @@ struct CardPaymentDetailScreen: View {
         }
       }
 
-      let cardAllocations = allocations.filter {
-        $0.sourceCardID == card.id || $0.targetCardID == card.id
-      }.sorted { $0.date > $1.date }
-      if !cardAllocations.isEmpty {
-        Section("Payment money moves") {
-          ForEach(cardAllocations) { allocation in
-            LabeledContent(allocation.targetCardID == card.id ? "Moved in" : "Moved out") {
-              MoneyText(minor: allocation.amountMinor, currencyCode: currencyCode)
-            }
-          }
-        }
-        .listRowBackground(Bow.card)
-      }
     }
     .bowListBackground {
       Bow.mist.overlay(alignment: .top) { SkyBackground(mood: status.state.sky) }
@@ -294,12 +280,63 @@ struct CardPaymentDetailScreen: View {
     }
     .navigationBarTitleDisplayMode(.inline)
     .sheet(isPresented: $showingGoalEditor) {
-      CardDebtGoalEditorScreen(card: card, currentDebtMinor: owed, currencyCode: currencyCode)
+      CardDebtGoalEditorScreen(
+        card: card, currentDebtMinor: owed, payoffDebtMinor: payoffDebt,
+        month: snapshot.month, currencyCode: currencyCode
+      )
     }
     .sheet(isPresented: $showingAccountEditor) {
       NavigationStack {
         AccountEditorScreen(currencyCode: currencyCode, account: card, onDeleted: { dismiss() })
       }
+    }
+  }
+
+  /// Progress on the debt and what the payoff goal asks for this month. Rows open the goal.
+  private var payoffSection: some View {
+    Section("Payoff") {
+      if hasPayoffGoal {
+        if let start = card.debtGoalStartMinor {
+          VStack(alignment: .leading, spacing: Bow.Space.s2) {
+            ProgressView(value: debtProgress) {
+              Text("Debt paid down")
+                .font(.bowHeadline)
+                .foregroundStyle(Bow.ink)
+            }
+            .accessibilityValue("\(Int(debtProgress * 100)) percent")
+            Text(owed > start
+              ? "\(BudgetMoney.formatted(owed - start, currencyCode: currencyCode)) above where the goal started"
+              : "\(BudgetMoney.formatted(start - owed, currencyCode: currencyCode)) paid down from \(BudgetMoney.formatted(start, currencyCode: currencyCode))")
+              .font(.bowSubhead)
+              .monospacedDigit()
+              .foregroundStyle(Bow.inkSoft)
+          }
+          .padding(.vertical, Bow.Space.s1)
+        }
+        payoffRow(title: "Fund each month", detail: payoffDetail) {
+          if let fundEachMonth {
+            MoneyText(minor: fundEachMonth, currencyCode: currencyCode)
+          }
+        }
+      } else if owed > 0 {
+        payoffRow(title: isPastMonth ? "No payoff goal" : "Set a payoff goal",
+                  detail: "Pick a date and Bow works out the monthly amount") { EmptyView() }
+      } else {
+        EnvelopeDetailValueRow(title: "No debt on this card", detail: nil) { EmptyView() }
+      }
+    }
+    .listRowBackground(Bow.card)
+  }
+
+  @ViewBuilder
+  private func payoffRow<Value: View>(
+    title: String, detail: String?, @ViewBuilder value: @escaping () -> Value
+  ) -> some View {
+    let row = EnvelopeDetailValueRow(title: title, detail: detail, value: value)
+    if isPastMonth {
+      row
+    } else {
+      Button { showingGoalEditor = true } label: { row }
     }
   }
 }

@@ -96,8 +96,11 @@ struct EnvelopeTargetForm: View {
 
   private var planLine: String? {
     guard let monthlyShareMinor else { return nil }
+    guard monthlyShareMinor > 0 else { return "What’s already saved covers this goal." }
     let until = targetDate.formatted(.dateTime.month(.wide).year())
-    return "About \(BudgetMoney.formatted(monthlyShareMinor, currencyCode: currencyCode)) a month until \(until)."
+    let share = "About \(BudgetMoney.formatted(monthlyShareMinor, currencyCode: currencyCode)) a month until \(until)"
+    guard carriedInMinor > 0 else { return share + "." }
+    return share + ", counting the \(BudgetMoney.formatted(carriedInMinor, currencyCode: currencyCode)) already saved."
   }
 
   private var billsLine: String? {

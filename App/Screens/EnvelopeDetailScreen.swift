@@ -233,7 +233,7 @@ struct EnvelopeDetailScreen: View {
         .listRowBackground(Bow.card)
       } else if feed.items.isEmpty {
         Section("Transactions") {
-          Text("Nothing spent from \(envelope.name) in \(monthName).")
+          Text("Nothing spent from \(envelope.name) yet.")
             .font(.bowBody)
             .foregroundStyle(Bow.inkSoft)
         }

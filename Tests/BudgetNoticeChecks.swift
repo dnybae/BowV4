@@ -26,7 +26,7 @@ struct BudgetNoticeChecks {
     let deficit = notices(readyToAssign: -12_000, overspending: overspent)
     precondition(deficit.map(\.kind) == [.deficit, .overspent], "Urgent banners come first")
     precondition(deficit[0].amountMinor == 12_000 && deficit[0].tone == .critical)
-    precondition(deficit[1].amountMinor == 5_500 && deficit[1].tone == .caution)
+    precondition(deficit[1].amountMinor == 5_500 && deficit[1].tone == .critical)
     precondition(deficit[1].message.hasPrefix("In 2 envelopes"))
 
     // Overspending sits above money waiting to be assigned.
